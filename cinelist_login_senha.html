@@ -1115,30 +1115,130 @@ function openAdd(){
 }
 
 let tmdbTimer=null;
+var tmdbTimer=null, tmdbResult=null;
+const TMDB_KEY='6bceb2e92a51fd680b2cf8a2a2fbc1ff';
+const CERT_MAP={'G':'L','PG':'10','PG-13':'12','R':'16','NC-17':'18'};
+
+function normStr(s){return(s||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-zA-Z0-9 ]/g,'').trim();}
+function getCert(rd){
+  if(!rd?.results)return'';
+  for(const cc of['BR','US']){
+    const r=rd.results.find(x=>x.iso_3166_1===cc);
+    if(r){const c=r.release_dates?.find(x=>x.certification);if(c)return cc==='US'?(CERT_MAP[c.certification]||c.certification):c.certification;}
+  }return'';
+}
+
+async function searchTMDB(nome,ano){
+  const q=encodeURIComponent(normStr(nome));
+  const yp=ano?`&primary_release_year=${ano}`:'';
+  let filmes=[];
+  for(const url of[
+    `https://api.themoviedb.org/3/search/movie?api_key=${TMDB_KEY}&language=pt-BR&query=${q}${yp}`,
+    `https://api.themoviedb.org/3/search/movie?api_key=${TMDB_KEY}&language=pt-BR&query=${q}`,
+    `https://api.themoviedb.org/3/search/movie?api_key=${TMDB_KEY}&language=en-US&query=${q}`
+  ]){
+    if(filmes.length)break;
+    const d=await(await fetch(url)).json();
+    filmes=d.results||[];
+  }
+  if(!filmes.length)return null;
+  if(ano){const by=filmes.filter(f=>f.release_date?.slice(0,4)===String(ano));if(by.length)filmes=by;}
+  const info=await(await fetch(`https://api.themoviedb.org/3/movie/${filmes[0].id}?api_key=${TMDB_KEY}&language=pt-BR&append_to_response=release_dates`)).json();
+  const rt=info.runtime||0,h=Math.floor(rt/60),m=rt%60;
+  return{
+    titulo:info.title||nome, ano:info.release_date?.slice(0,4)||ano||'',
+    poster:info.poster_path?'https://image.tmdb.org/t/p/w500'+info.poster_path:'',
+    sinopse:info.overview||'', categorias:(info.genres||[]).map(g=>g.name),
+    classificacao:getCert(info.release_dates),
+    duracao_str:rt?`${h}h ${m}min`:'', duracao_min:rt,
+    duracao_hhmm:rt?`${h}:${String(m).padStart(2,'0')}`:''
+  };
+}
+
 function onAddNomeInput(){
   clearTimeout(tmdbTimer);
   const nome=document.getElementById('addNome').value.trim();
-  if(nome.length<3){document.getElementById('tmdbPrev').classList.remove('show');return;}
-  tmdbTimer=setTimeout(()=>{
-    document.getElementById('tmdbPrev').classList.add('show');
-    document.getElementById('tmdbTitle').textContent=nome;
-    document.getElementById('tmdbMeta').innerHTML='ℹ️ Configure a chave TMDB para busca automática.<br>Preencha Ano e Duração manualmente.';
-    document.getElementById('tmdbThumb').src='';
-  },700);
+  const prev=document.getElementById('tmdbPrev');
+  if(nome.length<2){prev.classList.remove('show');tmdbResult=null;return;}
+  document.getElementById('tmdbTitle').textContent='🔍 Buscando...';
+  document.getElementById('tmdbMeta').textContent='';
+  document.getElementById('tmdbThumb').src='';
+  prev.classList.add('show');
+  tmdbTimer=setTimeout(async()=>{
+    const ano=document.getElementById('addAno').value.trim();
+    try{
+      const res=await searchTMDB(nome,ano);
+      if(res){
+        tmdbResult=res;
+        document.getElementById('tmdbThumb').src=res.poster;
+        document.getElementById('tmdbTitle').textContent=res.titulo+(res.ano?` (${res.ano})`:'');
+        document.getElementById('tmdbMeta').innerHTML=`🎬 ${res.categorias.join(', ')||'—'}<br>⏱️ ${res.duracao_str||'—'} &nbsp;|&nbsp; 🔞 ${res.classificacao||'—'}`;
+        if(res.ano)document.getElementById('addAno').value=res.ano;
+        if(res.duracao_hhmm)document.getElementById('addDur').value=res.duracao_hhmm;
+      }else{
+        tmdbResult=null;
+        document.getElementById('tmdbTitle').textContent=nome;
+        document.getElementById('tmdbMeta').innerHTML='⚠️ Não encontrado. Preencha manualmente.';
+      }
+    }catch(e){
+      document.getElementById('tmdbMeta').innerHTML='⚠️ Erro na busca.';
+    }
+  },800);
 }
 
-function saveFilme(){
+async function saveFilme(){
   const nome=document.getElementById('addNome').value.trim();
   const ano=document.getElementById('addAno').value.trim();
   const dur=document.getElementById('addDur').value.trim();
-  if(!nome||!ano||!dur){alert('Preencha Nome, Ano e Duração!');return;}
-  alert(`✅ "${nome}" (${ano}) pronto para salvar!
-
-Conecte ao Supabase para persistência real.`);
-  closeModal('addModal');
+  if(!nome||!ano||!dur){showToast('⚠️ Preencha Nome, Ano e Duração!');return;}
+  
+  const btn=document.getElementById('saveFilmeBtn');
+  if(btn){btn.textContent='Salvando...';btn.disabled=true;}
+  
+  // Se não tem resultado TMDB ainda, tenta buscar
+  let td = tmdbResult;
+  if(!td && nome.length>=2){
+    try{ td = await searchTMDB(nome, ano); }catch(e){}
+  }
+  
+  // Parse duração
+  const parts=dur.split(':');
+  const durMin=parts.length===2?parseInt(parts[0])*60+parseInt(parts[1]):0;
+  const h=Math.floor(durMin/60),m=durMin%60;
+  const durStr=durMin?`${h}h ${m}min`:dur;
+  
+  const filme={
+    nome, ano:parseInt(ano)||null,
+    duracao_str:durStr, duracao_min:durMin,
+    poster:td?.poster||null,
+    sinopse:td?.sinopse||null,
+    categorias:td?.categorias||[],
+    classificacao:td?.classificacao||null,
+    inserido_por:CU,
+    data_cadastro:new Date().toISOString().slice(0,10),
+    data_ts:new Date().toISOString()
+  };
+  
+  try{
+    const {data,error}=await supa.from('filmes').insert([filme]).select().single();
+    if(error)throw error;
+    
+    // Add to local data
+    const f={...filme, id:data.id, avaliacoes:{}, media:null, num_avaliacoes:0, is_recent:true};
+    FILMES.unshift(f);
+    FILMES_MAP[data.id]=f;
+    RAW.filmes.unshift(f);
+    
+    closeAddFilme();
+    showToast(`✅ "${nome}" adicionado!`);
+    renderHome();
+  }catch(e){
+    showToast('❌ Erro ao salvar: '+e.message);
+  }finally{
+    if(btn){btn.textContent='Salvar';btn.disabled=false;}
+  }
 }
 
-// ── USER MENU ──
 function buildUD(){
   const el = document.getElementById('udList');
   if(!el) return;
