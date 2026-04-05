@@ -1207,15 +1207,23 @@ async function saveFilme(){
   const h=Math.floor(durMin/60),m=durMin%60;
   const durStr=durMin?`${h}h ${m}min`:dur;
   
+  // Generate UUID for id
+  const newId = 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
+    const r = Math.random()*16|0, v = c=='x'?r:(r&0x3|0x8); return v.toString(16);
+  });
+  
   const filme={
-    nome, ano:parseInt(ano)||null,
-    duracao_str:durStr, duracao_min:durMin,
-    poster:td?.poster||null,
-    sinopse:td?.sinopse||null,
-    categorias:td?.categorias||[],
-    classificacao:td?.classificacao||null,
-    inserido_por:CU,
-    data_cadastro:new Date().toISOString().slice(0,10)
+    id: newId,
+    nome, 
+    ano: parseInt(ano)||null,
+    duracao_str: durStr, 
+    duracao_min: durMin||null,
+    poster: td?.poster||null,
+    sinopse: td?.sinopse||null,
+    categorias: td?.categorias||[],
+    classificacao: td?.classificacao||null,
+    inserido_por: CU,
+    data_cadastro: new Date().toISOString().slice(0,10)
   };
   
   try{
@@ -1223,7 +1231,7 @@ async function saveFilme(){
     if(error)throw error;
     
     // Add to local data
-    const f={...filme, id:data.id, avaliacoes:{}, media:null, num_avaliacoes:0, is_recent:true, data_ts:new Date().toISOString()};
+    const f={...filme, id:data.id||newId, avaliacoes:{}, media:null, num_avaliacoes:0, is_recent:true, data_ts:new Date().toISOString()};
     FILMES.unshift(f);
     FILMES_MAP[data.id]=f;
     RAW.filmes.unshift(f);
