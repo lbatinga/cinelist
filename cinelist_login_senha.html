@@ -1844,15 +1844,6 @@ async function saveRatingToSupabase(filmeId, nota, vai, data, comentario){
 const _origSaveRating = typeof saveRating !== 'undefined' ? saveRating : null;
 
 // Replace logout option in user dropdown
-function buildUD(){
-  document.getElementById('udList').innerHTML = `
-    <div style="padding:6px 10px 2px;font-size:12px;color:#fff;font-weight:600">${USERS[CU]?.nome||''}</div>
-    <div style="padding:2px 10px 8px;font-size:11px;color:#666">${currentSession?.user?.email||''}</div>
-    <div style="height:1px;background:#2a2a2a;margin:4px 0"></div>
-    <div class="ud-item" onclick="openProfile()">✏️ Editar perfil</div>
-    <div class="ud-item" onclick="logout()" style="color:#e05555">↩️ Sair</div>
-  `;
-}
 
 // INIT — call initAuth instead of buildUD+renderHome
 
