@@ -1663,24 +1663,28 @@ async function initAuth(){
   }
 }
 
-async function loginGoogle(){
-  showAuthLoading();
-  await supa.auth.signInWithOAuth({
-    provider: 'google',
-    options: { redirectTo: window.location.href }
-  });
+async function loginEmailSenha(){
+  const email = document.getElementById('loginEmail').value.trim();
+  const senha = document.getElementById('loginSenha').value;
+  const errEl = document.getElementById('authError');
+  if(errEl) errEl.style.display = 'none';
+  if(!email || !senha) {
+    if(errEl){ errEl.textContent = 'Preencha e-mail e senha.'; errEl.style.display = 'block'; }
+    return;
+  }
+  const btn = document.querySelector('.auth-btn-google');
+  if(btn){ btn.textContent = 'Entrando...'; btn.disabled = true; }
+  const { data, error } = await supa.auth.signInWithPassword({ email, password: senha });
+  if(btn){ btn.textContent = 'Entrar'; btn.disabled = false; }
+  if(error) {
+    if(errEl){ errEl.textContent = 'E-mail ou senha incorretos.'; errEl.style.display = 'block'; }
+    return;
+  }
+  if(data.session) await onLogin(data.session);
 }
+async function loginGoogle(){ loginEmailSenha(); }
 
-async function loginMicrosoft(){
-  showAuthLoading();
-  await supa.auth.signInWithOAuth({
-    provider: 'azure',
-    options: {
-      scopes: 'email',
-      redirectTo: window.location.href
-    }
-  });
-}
+async function loginMicrosoft(){ loginEmailSenha(); }
 
 async function logout(){
   await supa.auth.signOut();
