@@ -1215,8 +1215,7 @@ async function saveFilme(){
     categorias:td?.categorias||[],
     classificacao:td?.classificacao||null,
     inserido_por:CU,
-    data_cadastro:new Date().toISOString().slice(0,10),
-    data_ts:new Date().toISOString()
+    data_cadastro:new Date().toISOString().slice(0,10)
   };
   
   try{
@@ -1224,7 +1223,7 @@ async function saveFilme(){
     if(error)throw error;
     
     // Add to local data
-    const f={...filme, id:data.id, avaliacoes:{}, media:null, num_avaliacoes:0, is_recent:true};
+    const f={...filme, id:data.id, avaliacoes:{}, media:null, num_avaliacoes:0, is_recent:true, data_ts:new Date().toISOString()};
     FILMES.unshift(f);
     FILMES_MAP[data.id]=f;
     RAW.filmes.unshift(f);
