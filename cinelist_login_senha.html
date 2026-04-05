@@ -1270,7 +1270,7 @@ function buildUD(){
     <div style="height:1px;background:#2a2a2a;margin:4px 0"></div>
     <div class="ud-item" onclick="openProfile();document.getElementById('userDropdown').classList.remove('open')">✏️ Editar perfil</div>
     <div class="ud-item" onclick="openChangePassword();document.getElementById('userDropdown').classList.remove('open')">🔑 Alterar senha</div>
-    ${email === 'lwbarbosab@gmail.com' ? `<div class="ud-item" style="color:#f5c518" onclick="openAdmin();document.getElementById('userDropdown').classList.remove('open')">🛠️ Painel Admin</div>` : ''}
+    ${email === 'lwbarbosab@gmail.com' ? '<div class="ud-item" style="color:#f5c518" onclick="openAdmin();document.getElementById(\'userDropdown\').classList.remove(\'open\')">🛠️ Painel Admin</div>' : ''}
     <div class="ud-item" onclick="logout()" style="color:#e05555">↩️ Sair</div>
   `;
 }
