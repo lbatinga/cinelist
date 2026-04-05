@@ -933,57 +933,46 @@ function setPendSort(val){ pendSortKey=val; renderPendentes(); }
 function renderPendentes(selId){
   if(!CU){showNeedLogin('viewPendentes');return;}
   const s=STATS[CU];
-  if(!s){showNeedLogin('viewPendentes');return;}
   let list=s.pendentes.map(id=>FM[id]).filter(Boolean);
   if(searchQ) list=list.filter(f=>f.nome.toLowerCase().includes(searchQ));
-  applyPendSort(list);
+  list.sort((a,b)=>{
+    if((b.media||0)!==(a.media||0)) return (b.media||0)-(a.media||0);
+    if(b.num_avaliacoes!==a.num_avaliacoes) return b.num_avaliacoes-a.num_avaliacoes;
+    return (a.data_ts||0)-(b.data_ts||0);
+  });
   navList=list;
   const sid=selId||(list[0]?.id);
-
-  const sortOpts=[
-    {v:'nota',l:'★ Maior nota'},{v:'nota_asc',l:'★ Menor nota'},
-    {v:'avals',l:'↑ Mais avaliados'},{v:'nome',l:'A-Z Nome'},
-    {v:'ano_desc',l:'Mais recente'},{v:'ano_asc',l:'Mais antigo'}
-  ];
-  const optHtml=sortOpts.map(o=>'<option value="'+o.v+'"'+(pendSortKey===o.v?' selected':'')+'>'+o.l+'</option>').join('');
-
-  const rows=list.map(f=>{
-    const notaHtml=f.media
-      ?('<span style="color:'+nC(f.media)+';font-weight:800">'+fmt(f.media)+'</span>')
-      :'<span style="color:var(--muted2)">—</span>';
-    const numAv=Object.values(f.avaliacoes).filter(a=>a.nota!==null).length;
-    const cls=f.id===sid?'selected':'';
-    return '<tr class="'+cls+'" onclick="openPendPanel(\''+f.id+'\')">'
-      +'<td class="td-nota">'+notaHtml+'</td>'
-      +'<td style="color:var(--muted2);font-size:11px">&rarr;</td>'
-      +'<td class="td-name">'+esc(f.nome)+'</td>'
-      +'<td class="td-muted">'+f.ano+'</td>'
-      +'<td class="td-muted">'+f.duracao_str+'</td>'
-      +'<td class="td-muted">'+esc(USERS[f.inserido_por]&&USERS[f.inserido_por].nome||f.inserido_por)+'</td>'
-      +'<td class="td-muted">'+numAv+'</td>'
-      +'</tr>';
-  }).join('');
-
-  document.getElementById('viewPendentes').innerHTML=
-    '<div class="detail-layout">'
-    +'<div class="detail-list">'
-    +'<div class="tpage" style="padding-bottom:0">'
-    +'<div class="tpage-header">'
-    +'<div class="tpage-title">Meus Pendentes <span style="color:var(--muted);font-size:13px;font-weight:400">'+list.length+'</span></div>'
-    +'<select id="pendSortSel" onchange="setPendSort(this.value)" style="background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:5px 10px;border-radius:8px;font-size:12px;cursor:pointer;font-family:inherit">'+optHtml+'</select>'
-    +'</div></div>'
-    +'<table><thead><tr>'
-    +'<th style="width:60px">Nota</th><th style="width:28px"></th>'
-    +'<th>Nome</th><th>Ano</th><th>Duração</th><th>Por</th><th>Avals</th>'
-    +'</tr></thead><tbody>'+rows+'</tbody></table>'
-    +'</div>'
-    +'<div class="detail-panel" id="pendDetailPanel"></div>'
-    +'</div>';
-
-  try{
-    const panel=document.getElementById('pendDetailPanel');
-    panel.innerHTML=sid?filmDetailHTML(sid):'<div class="dp-empty">Selecione um filme</div>';
-  }catch(e){console.error('pendDetailPanel:',e);}
+  
+  document.getElementById('viewPendentes').innerHTML=`
+    <div class="detail-layout">
+      <div class="detail-list">
+        <div class="tpage" style="padding-bottom:0">
+          <div class="tpage-header">
+            <div class="tpage-title">Meus Pendentes <span style="color:var(--muted);font-size:13px;font-weight:400">${list.length}</span></div>
+          </div>
+        </div>
+        <table>
+          <thead><tr><th style="width:60px">Nota</th><th style="width:28px"></th><th>Nome</th><th>Ano</th><th>Duração</th><th>Por</th><th>Avals</th></tr></thead>
+          <tbody>
+          ${list.map(f=>{
+            const nota=f.media?`<span style="color:${nC(f.media)}">${fmt(f.media)}</span>`:'<span style="color:var(--muted2)">—</span>';
+            const numAv=Object.values(f.avaliacoes).filter(a=>a.nota!==null).length;
+            return `<tr class="${f.id===sid?'selected':''}" onclick="openPendPanel('${f.id}')">
+              <td class="td-nota">${nota}</td>
+              <td style="color:var(--muted2);font-size:11px">↗</td>
+              <td class="td-name">${esc(f.nome)}</td>
+              <td class="td-muted">${f.ano}</td>
+              <td class="td-muted">${f.duracao_str}</td>
+              <td class="td-muted">${esc(USERS[f.inserido_por]?.nome||f.inserido_por)}</td>
+              <td class="td-muted">${numAv}</td>
+            </tr>`;
+          }).join('')}
+          </tbody>
+        </table>
+      </div>
+      <div class="detail-panel" id="pendDetailPanel">${sid?filmDetailHTML(sid):'<div class="dp-empty">Selecione um filme</div>'}</div>
+    </div>
+  `;
 }
 function openPendPanel(id){
   document.querySelectorAll('#viewPendentes tr').forEach(r=>r.classList.remove('selected'));
