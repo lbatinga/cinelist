@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+ <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
 <meta charset="UTF-8">
@@ -328,7 +328,7 @@ tr.selected td{background:rgba(229,9,20,.05)}
 /* ── AUTH SCREEN ── */
 .auth-screen{position:fixed;inset:0;z-index:1000;background:#0a0a0a;display:flex;align-items:center;justify-content:center;padding:20px}
 .auth-box{background:#181818;border:1px solid rgba(255,255,255,.1);border-radius:20px;padding:48px 40px;max-width:400px;width:100%;text-align:center}
-.auth-logo{font-size:42px;font-weight:900;color:#e50914;letter-spacing:-2px;font-style:italic;margin-bottom:8px}
+.auth-logo{display:flex;justify-content:center;margin-bottom:8px}
 .auth-tagline{font-size:14px;color:#666;margin-bottom:40px}
 .auth-btn{width:100%;display:flex;align-items:center;justify-content:center;gap:12px;padding:13px 20px;border-radius:10px;font-size:15px;font-weight:600;cursor:pointer;border:none;font-family:inherit;transition:all .2s;margin-bottom:12px}
 .auth-btn-google{background:#fff;color:#000}
@@ -374,7 +374,23 @@ tr.selected td{background:rgba(229,9,20,.05)}
 <!-- TOPBAR -->
 <!-- STARTUP LOADER -->
 <div id="startLoader" style="position:fixed;inset:0;z-index:2000;background:#0a0a0a;display:none;align-items:center;justify-content:center;flex-direction:column;gap:16px">
-  <div style="font-size:36px;font-weight:900;color:#e50914;letter-spacing:-2px;font-style:italic">CINELIST</div>
+  <div style="display:flex;justify-content:center;margin-bottom:4px"><svg width="180" height="54" viewBox="0 0 180 54" xmlns="http://www.w3.org/2000/svg" style="display:block">
+  <rect x="2" y="22" width="40" height="28" rx="2" fill="none" stroke="#fff" stroke-width="1.8"/>
+  <line x1="9" y1="32" x2="37" y2="32" stroke="#fff" stroke-width="0.8" stroke-opacity="0.35"/>
+  <line x1="9" y1="40" x2="37" y2="40" stroke="#fff" stroke-width="0.8" stroke-opacity="0.35"/>
+  <g transform="rotate(-28, 2, 22)">
+    <rect x="2" y="12" width="40" height="11" rx="2" fill="#1a1a1a" stroke="#fff" stroke-width="1.8"/>
+    <clipPath id="fcll"><rect x="2" y="12" width="40" height="11" rx="2"/></clipPath>
+    <g clip-path="url(#fcll)">
+      <rect x="0"  y="12" width="6" height="11" fill="#fff" fill-opacity="0.75"/>
+      <rect x="11" y="12" width="6" height="11" fill="#fff" fill-opacity="0.75"/>
+      <rect x="22" y="12" width="6" height="11" fill="#fff" fill-opacity="0.75"/>
+      <rect x="33" y="12" width="6" height="11" fill="#fff" fill-opacity="0.75"/>
+    </g>
+  </g>
+  <circle cx="2" cy="22" r="2.5" fill="#fff" fill-opacity="0.6"/>
+  <text x="52" y="39" font-family="Georgia,serif" font-size="30" font-weight="400" fill="#ffffff" letter-spacing="0.5">Cine<tspan font-style="italic" fill="#cccccc">List</tspan></text>
+</svg></div>
   <div style="width:36px;height:36px;border:3px solid #333;border-top-color:#e50914;border-radius:50%;animation:spin .8s linear infinite"></div>
   <div id="loaderMsg" style="font-size:12px;color:#444;margin-top:8px">Carregando...</div>
 </div>
@@ -640,10 +656,11 @@ const aC = uid=>AC[UK.indexOf(uid)%AC.length];
 const ini = name=>name.split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase();
 const nC = n=>{
   if(!n) return '#666';
+  if(n>=9)   return '#00bcd4'; // azul ciano — ótimo
   if(n>=7.5) return '#46d369'; // verde — bom
   if(n>=6)   return '#f5c518'; // amarelo — ok
   if(n>=4)   return '#ff7043'; // laranja — fraco
-  return '#5c3317';             // marrom escuro — ruim
+  return '#c0392b';             // vermelho escuro — ruim
 };
 const fmt = n=>n!=null?n.toFixed(2).replace('.',','):'—';
 const INACTIVE_MONTHS = 2;
@@ -795,7 +812,7 @@ function pCard(f){
     ${f.media?`<div class="poster-badge">${fmt(f.media)}</div>`:''}
     <div class="poster-class">${f.classificacao}</div>
     <div class="poster-overlay"></div>
-    <div class="poster-info"><div class="poster-title">${esc(f.nome)}</div>${f.media?`<div class="poster-nota">★ ${fmt(f.media)}</div>`:''}</div>
+    <div class="poster-info"><div class="poster-title">${esc(f.nome)}</div>${f.media?`<div class="poster-nota" style="color:${nC(f.media)}">★ ${fmt(f.media)}</div>`:''}</div>
   </div>`;
 }
 
@@ -900,7 +917,7 @@ ${f.sinopse?f.sinopse.slice(0,150)+(f.sinopse.length>150?'...':''):''}
     <div class="dp-body">
       <div class="dp-title">${esc(f.nome)}</div>
       <div class="dp-meta">
-        ${f.media?`<span class="dp-score">★ ${fmt(f.media)}</span>`:''}
+        ${f.media?`<span class="dp-score" style="color:${nC(f.media)}">★ ${fmt(f.media)}</span>`:''}
         <span class="dp-meta-item">${f.ano}</span>
         <span class="dp-meta-item">${f.duracao_str}</span>
         <span class="dp-class">${f.classificacao}</span>
@@ -929,7 +946,7 @@ ${f.sinopse?f.sinopse.slice(0,150)+(f.sinopse.length>150?'...':''):''}
           ${avList.map(([uid,av])=>`<div class="dp-rating-row">
             <div class="dp-r-av" style="background:${aC(uid)}">${ini(USERS[uid]?.nome||'?')}</div>
             <div class="dp-r-name">${esc(USERS[uid]?.nome||uid)}</div>
-            <div class="dp-r-nota">★ ${fmt(av.nota)}</div>
+            <div class="dp-r-nota" style="color:${nC(av.nota)}">★ ${fmt(av.nota)}</div>
           </div>`).join('')}
         </div>`:''}
       <div class="dp-footer">
@@ -1529,7 +1546,7 @@ function rankAnoHTML(){
               <div class="fr-title">${esc(f.nome)}</div>
               <div class="fr-sub">${f.categorias.slice(0,2).join(', ')} · ${f.num_avaliacoes} avals</div>
             </div>
-            <div class="fr-nota">${fmt(f.media)}</div>
+            <div class="fr-nota" style="color:${nC(f.media)}">${fmt(f.media)}</div>
           </div>`).join('') : `<div style="color:var(--muted);font-size:13px;padding:20px 0">Nenhum filme avaliado em ${rankYear}.</div>`}
       </div>
     </div>
@@ -1580,7 +1597,7 @@ function rankFilmesHTML(){
           <div style="font-size:9px;color:var(--muted2);text-align:right;margin-bottom:3px">${fmt(f.media)}/10</div>
           <div class="fr-bar-track"><div class="fr-bar-fill" style="width:${f.media*10}%"></div></div>
         </div>
-        <div class="fr-nota">${fmt(f.media)}</div>
+        <div class="fr-nota" style="color:${nC(f.media)}">${fmt(f.media)}</div>
       </div>`).join('')}
   `;
 }
@@ -1641,7 +1658,7 @@ function rankGeneroHTML(){
               <div class="fr-title">${esc(f.nome)}</div>
               <div class="fr-sub">${f.ano} · ${f.num_avaliacoes} avals</div>
             </div>
-            <div class="fr-nota">${fmt(f.media)}</div>
+            <div class="fr-nota" style="color:${nC(f.media)}">${fmt(f.media)}</div>
           </div>`).join('')}
       </div>
     </div>
@@ -1960,7 +1977,23 @@ async function onLogin(session){
   const box = document.getElementById('authBox');
   if(box) box.innerHTML = `
     <div class="auth-loading">
-      <div class="auth-logo">CINELIST</div>
+      <div class="auth-logo"><svg width="180" height="54" viewBox="0 0 180 54" xmlns="http://www.w3.org/2000/svg" style="display:block">
+  <rect x="2" y="22" width="40" height="28" rx="2" fill="none" stroke="#fff" stroke-width="1.8"/>
+  <line x1="9" y1="32" x2="37" y2="32" stroke="#fff" stroke-width="0.8" stroke-opacity="0.35"/>
+  <line x1="9" y1="40" x2="37" y2="40" stroke="#fff" stroke-width="0.8" stroke-opacity="0.35"/>
+  <g transform="rotate(-28, 2, 22)">
+    <rect x="2" y="12" width="40" height="11" rx="2" fill="#1a1a1a" stroke="#fff" stroke-width="1.8"/>
+    <clipPath id="fcll"><rect x="2" y="12" width="40" height="11" rx="2"/></clipPath>
+    <g clip-path="url(#fcll)">
+      <rect x="0"  y="12" width="6" height="11" fill="#fff" fill-opacity="0.75"/>
+      <rect x="11" y="12" width="6" height="11" fill="#fff" fill-opacity="0.75"/>
+      <rect x="22" y="12" width="6" height="11" fill="#fff" fill-opacity="0.75"/>
+      <rect x="33" y="12" width="6" height="11" fill="#fff" fill-opacity="0.75"/>
+    </g>
+  </g>
+  <circle cx="2" cy="22" r="2.5" fill="#fff" fill-opacity="0.6"/>
+  <text x="52" y="39" font-family="Georgia,serif" font-size="30" font-weight="400" fill="#ffffff" letter-spacing="0.5">Cine<tspan font-style="italic" fill="#cccccc">List</tspan></text>
+</svg></div>
       <div class="auth-spinner"></div>
       <div style="color:#888;font-size:13px">Entrando como ${email}...</div>
     </div>
@@ -2006,7 +2039,23 @@ function showAuthScreen(){
   if(loader) loader.style.display = 'none';
   document.getElementById('authScreen').style.display = 'flex';
   document.getElementById('authBox').innerHTML = `
-    <div class="auth-logo">CINELIST</div>
+    <div class="auth-logo"><svg width="180" height="54" viewBox="0 0 180 54" xmlns="http://www.w3.org/2000/svg" style="display:block">
+  <rect x="2" y="22" width="40" height="28" rx="2" fill="none" stroke="#fff" stroke-width="1.8"/>
+  <line x1="9" y1="32" x2="37" y2="32" stroke="#fff" stroke-width="0.8" stroke-opacity="0.35"/>
+  <line x1="9" y1="40" x2="37" y2="40" stroke="#fff" stroke-width="0.8" stroke-opacity="0.35"/>
+  <g transform="rotate(-28, 2, 22)">
+    <rect x="2" y="12" width="40" height="11" rx="2" fill="#1a1a1a" stroke="#fff" stroke-width="1.8"/>
+    <clipPath id="fcll"><rect x="2" y="12" width="40" height="11" rx="2"/></clipPath>
+    <g clip-path="url(#fcll)">
+      <rect x="0"  y="12" width="6" height="11" fill="#fff" fill-opacity="0.75"/>
+      <rect x="11" y="12" width="6" height="11" fill="#fff" fill-opacity="0.75"/>
+      <rect x="22" y="12" width="6" height="11" fill="#fff" fill-opacity="0.75"/>
+      <rect x="33" y="12" width="6" height="11" fill="#fff" fill-opacity="0.75"/>
+    </g>
+  </g>
+  <circle cx="2" cy="22" r="2.5" fill="#fff" fill-opacity="0.6"/>
+  <text x="52" y="39" font-family="Georgia,serif" font-size="30" font-weight="400" fill="#ffffff" letter-spacing="0.5">Cine<tspan font-style="italic" fill="#cccccc">List</tspan></text>
+</svg></div>
     <div class="auth-tagline">O catálogo de filmes da tropa 🎬</div>
     <div id="authError" style="display:none;background:rgba(229,9,20,.15);border:1px solid var(--red);color:#ff6b6b;padding:10px 14px;border-radius:8px;font-size:13px;margin-bottom:12px;text-align:left"></div>
     <input class="form-input" id="loginEmail" type="email" placeholder="Seu e-mail" style="margin-bottom:10px;display:block;width:100%;background:#2a2a2a;border:1px solid #333;color:#fff;padding:12px 14px;border-radius:8px;font-family:inherit;font-size:14px;outline:none">
@@ -2022,7 +2071,23 @@ function showAuthLoading(){
   const box = document.getElementById('authBox');
   if(box) box.innerHTML = `
     <div class="auth-loading">
-      <div class="auth-logo">CINELIST</div>
+      <div class="auth-logo"><svg width="180" height="54" viewBox="0 0 180 54" xmlns="http://www.w3.org/2000/svg" style="display:block">
+  <rect x="2" y="22" width="40" height="28" rx="2" fill="none" stroke="#fff" stroke-width="1.8"/>
+  <line x1="9" y1="32" x2="37" y2="32" stroke="#fff" stroke-width="0.8" stroke-opacity="0.35"/>
+  <line x1="9" y1="40" x2="37" y2="40" stroke="#fff" stroke-width="0.8" stroke-opacity="0.35"/>
+  <g transform="rotate(-28, 2, 22)">
+    <rect x="2" y="12" width="40" height="11" rx="2" fill="#1a1a1a" stroke="#fff" stroke-width="1.8"/>
+    <clipPath id="fcll"><rect x="2" y="12" width="40" height="11" rx="2"/></clipPath>
+    <g clip-path="url(#fcll)">
+      <rect x="0"  y="12" width="6" height="11" fill="#fff" fill-opacity="0.75"/>
+      <rect x="11" y="12" width="6" height="11" fill="#fff" fill-opacity="0.75"/>
+      <rect x="22" y="12" width="6" height="11" fill="#fff" fill-opacity="0.75"/>
+      <rect x="33" y="12" width="6" height="11" fill="#fff" fill-opacity="0.75"/>
+    </g>
+  </g>
+  <circle cx="2" cy="22" r="2.5" fill="#fff" fill-opacity="0.6"/>
+  <text x="52" y="39" font-family="Georgia,serif" font-size="30" font-weight="400" fill="#ffffff" letter-spacing="0.5">Cine<tspan font-style="italic" fill="#cccccc">List</tspan></text>
+</svg></div>
       <div class="auth-spinner"></div>
       <div style="color:#666;font-size:14px">Redirecionando para o Google...</div>
     </div>
@@ -2031,7 +2096,23 @@ function showAuthLoading(){
 
 function showAuthError(email){
   document.getElementById('authBox').innerHTML = `
-    <div class="auth-logo">CINELIST</div>
+    <div class="auth-logo"><svg width="180" height="54" viewBox="0 0 180 54" xmlns="http://www.w3.org/2000/svg" style="display:block">
+  <rect x="2" y="22" width="40" height="28" rx="2" fill="none" stroke="#fff" stroke-width="1.8"/>
+  <line x1="9" y1="32" x2="37" y2="32" stroke="#fff" stroke-width="0.8" stroke-opacity="0.35"/>
+  <line x1="9" y1="40" x2="37" y2="40" stroke="#fff" stroke-width="0.8" stroke-opacity="0.35"/>
+  <g transform="rotate(-28, 2, 22)">
+    <rect x="2" y="12" width="40" height="11" rx="2" fill="#1a1a1a" stroke="#fff" stroke-width="1.8"/>
+    <clipPath id="fcll"><rect x="2" y="12" width="40" height="11" rx="2"/></clipPath>
+    <g clip-path="url(#fcll)">
+      <rect x="0"  y="12" width="6" height="11" fill="#fff" fill-opacity="0.75"/>
+      <rect x="11" y="12" width="6" height="11" fill="#fff" fill-opacity="0.75"/>
+      <rect x="22" y="12" width="6" height="11" fill="#fff" fill-opacity="0.75"/>
+      <rect x="33" y="12" width="6" height="11" fill="#fff" fill-opacity="0.75"/>
+    </g>
+  </g>
+  <circle cx="2" cy="22" r="2.5" fill="#fff" fill-opacity="0.6"/>
+  <text x="52" y="39" font-family="Georgia,serif" font-size="30" font-weight="400" fill="#ffffff" letter-spacing="0.5">Cine<tspan font-style="italic" fill="#cccccc">List</tspan></text>
+</svg></div>
     <div style="color:#e05555;font-size:14px;margin-bottom:16px">⚠️ E-mail não encontrado:<br><strong style="color:#fff">${email}</strong></div>
     <div style="color:#666;font-size:13px;margin-bottom:24px">Apenas membros cadastrados têm acesso. Fale com o administrador.</div>
     <button class="auth-btn auth-btn-ms" onclick="logout()" style="width:auto;padding:10px 20px">← Tentar outro e-mail</button>
@@ -2362,7 +2443,23 @@ async function deleteFilmeAdmin(id, btn){
 <!-- AUTH SCREEN -->
 <div class="auth-screen" id="authScreen">
   <div class="auth-box" id="authBox">
-    <div class="auth-logo">CINELIST</div>
+    <div class="auth-logo"><svg width="180" height="54" viewBox="0 0 180 54" xmlns="http://www.w3.org/2000/svg" style="display:block">
+  <rect x="2" y="22" width="40" height="28" rx="2" fill="none" stroke="#fff" stroke-width="1.8"/>
+  <line x1="9" y1="32" x2="37" y2="32" stroke="#fff" stroke-width="0.8" stroke-opacity="0.35"/>
+  <line x1="9" y1="40" x2="37" y2="40" stroke="#fff" stroke-width="0.8" stroke-opacity="0.35"/>
+  <g transform="rotate(-28, 2, 22)">
+    <rect x="2" y="12" width="40" height="11" rx="2" fill="#1a1a1a" stroke="#fff" stroke-width="1.8"/>
+    <clipPath id="fcll"><rect x="2" y="12" width="40" height="11" rx="2"/></clipPath>
+    <g clip-path="url(#fcll)">
+      <rect x="0"  y="12" width="6" height="11" fill="#fff" fill-opacity="0.75"/>
+      <rect x="11" y="12" width="6" height="11" fill="#fff" fill-opacity="0.75"/>
+      <rect x="22" y="12" width="6" height="11" fill="#fff" fill-opacity="0.75"/>
+      <rect x="33" y="12" width="6" height="11" fill="#fff" fill-opacity="0.75"/>
+    </g>
+  </g>
+  <circle cx="2" cy="22" r="2.5" fill="#fff" fill-opacity="0.6"/>
+  <text x="52" y="39" font-family="Georgia,serif" font-size="30" font-weight="400" fill="#ffffff" letter-spacing="0.5">Cine<tspan font-style="italic" fill="#cccccc">List</tspan></text>
+</svg></div>
     <div class="auth-tagline">O catálogo de filmes da tropa 🎬</div>
     <div id="authError" style="display:none;background:rgba(229,9,20,.15);border:1px solid var(--red);color:#ff6b6b;padding:10px 14px;border-radius:8px;font-size:13px;margin-bottom:12px;text-align:left"></div>
     <input class="form-input" id="loginEmail" type="email" placeholder="Seu e-mail" style="margin-bottom:10px;display:block;width:100%;background:#2a2a2a;border:1px solid #333;color:#fff;padding:12px 14px;border-radius:8px;font-family:inherit;font-size:14px;outline:none">
