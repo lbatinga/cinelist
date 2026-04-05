@@ -1875,8 +1875,14 @@ function openProfile(){
   document.getElementById('pmBio').value = p.bio || '';
   const cp = document.getElementById('colorPicker');
   const cur = p.color || aC(CU);
-  cp.innerHTML = PALETTE.map(c => `<div class="color-opt ${c===cur?'selected':''}" style="background:${c}" onclick="document.querySelectorAll('.color-opt').forEach(b=>b.classList.remove('selected'));this.classList.add('selected')"></div>`).join('');
+  cp.innerHTML = PALETTE.map(c => `<div class="color-opt ${c===cur?'selected':''}" style="background:${c}" onclick="document.querySelectorAll('.color-opt').forEach(b=>b.classList.remove('selected'));this.classList.add('selected');updateAvatarPreviewColor('${c}')"></div>`).join('');
   document.getElementById('profileModal').classList.add('open');
+  setTimeout(updateAvatarPreview, 50);
+}
+
+function updateAvatarPreviewColor(color) {
+  const prev = document.getElementById('pmAvatarPreview');
+  if(prev && !prev._photo) { prev.style.background = color; }
 }
 
 function closeProfile(){ document.getElementById('profileModal').classList.remove('open'); }
@@ -1884,12 +1890,14 @@ function closeProfile(){ document.getElementById('profileModal').classList.remov
 function saveProfile(){
   if(!CU) return;
   const color = document.querySelector('.color-opt.selected')?.style.background || aC(CU);
+  const prev = document.getElementById('pmAvatarPreview');
+  const photo = prev?._photo || profileData[CU]?.photo || null;
   profileData[CU] = {
     apelido: document.getElementById('pmApelido').value.trim(),
     bday: document.getElementById('pmBday').value,
     favFilme: document.getElementById('pmFavFilme').value.trim(),
     bio: document.getElementById('pmBio').value.trim(),
-    color
+    color, photo
   };
   saveProfiles();
   updateTopbarAvatar();
@@ -1900,13 +1908,19 @@ function saveProfile(){
 function updateTopbarAvatar(){
   if(!CU) return;
   const p = getProfile(CU);
-  const color = p.color || aC(CU);
-  const name = p.apelido || USERS[CU]?.nome || '?';
   const av = document.getElementById('userAvatar');
   if(!av) return;
-  av.style.background = color;
-  av.style.color = '#000';
-  av.textContent = ini(name);
+  if(p.photo) {
+    av.style.background = 'transparent';
+    av.style.padding = '0';
+    av.innerHTML = `<img src="${p.photo}" style="width:36px;height:36px;border-radius:50%;object-fit:cover">`;
+  } else {
+    const color = p.color || aC(CU);
+    const name = p.apelido || USERS[CU]?.nome || '?';
+    av.style.background = color;
+    av.innerHTML = '';
+    av.textContent = ini(name);
+  }
 }
 
 function showToast(msg){
@@ -1947,6 +1961,46 @@ async function savePassword(){
   else { okEl.textContent = '✅ Senha alterada com sucesso!'; okEl.style.display = 'block'; setTimeout(()=>closePwModal(), 2000); }
 }
 
+
+// ── PHOTO PROFILE ──
+function handlePhotoUpload(event) {
+  const file = event.target.files[0];
+  if(!file) return;
+  if(file.size > 500000) { showToast('⚠️ Foto muito grande! Use menos de 500KB.'); return; }
+  const reader = new FileReader();
+  reader.onload = function(e) {
+    const b64 = e.target.result;
+    document.getElementById('pmAvatarPreview').innerHTML = `<img src="${b64}" style="width:100%;height:100%;object-fit:cover">`;
+    document.getElementById('pmAvatarPreview')._photo = b64;
+  };
+  reader.readAsDataURL(file);
+}
+
+function removePhoto() {
+  const prev = document.getElementById('pmAvatarPreview');
+  prev._photo = null;
+  const p = getProfile(CU);
+  const color = document.querySelector('.color-opt.selected')?.style.background || aC(CU);
+  prev.innerHTML = ini(USERS[CU]?.nome || '?');
+  prev.style.background = color;
+}
+
+function updateAvatarPreview() {
+  const prev = document.getElementById('pmAvatarPreview');
+  if(!prev) return;
+  const p = getProfile(CU);
+  if(p.photo) {
+    prev.innerHTML = `<img src="${p.photo}" style="width:100%;height:100%;object-fit:cover">`;
+    prev._photo = p.photo;
+    prev.style.background = 'transparent';
+  } else {
+    const color = p.color || aC(CU);
+    prev.style.background = color;
+    prev.innerHTML = ini(USERS[CU]?.nome || '?');
+    prev._photo = null;
+  }
+}
+
 </script>
 
 <!-- AUTH SCREEN -->
@@ -1973,6 +2027,17 @@ async function savePassword(){
       <button class="pm-close" onclick="closeProfile()">×</button>
     </div>
     <div class="pm-body">
+      <div class="pm-field" style="display:flex;align-items:center;gap:16px">
+        <div id="pmAvatarPreview" style="width:64px;height:64px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:24px;font-weight:800;flex-shrink:0;cursor:pointer;overflow:hidden;border:2px solid #333" onclick="document.getElementById('pmPhotoInput').click()">
+        </div>
+        <div>
+          <div style="font-size:13px;font-weight:600;margin-bottom:4px">Foto de Perfil</div>
+          <div style="font-size:11px;color:#888;margin-bottom:8px">Clique no avatar para trocar</div>
+          <input type="file" id="pmPhotoInput" accept="image/*" style="display:none" onchange="handlePhotoUpload(event)">
+          <button onclick="document.getElementById('pmPhotoInput').click()" style="background:#2a2a2a;border:1px solid #444;color:#fff;padding:6px 12px;border-radius:6px;cursor:pointer;font-size:12px">📷 Escolher foto</button>
+          <button onclick="removePhoto()" style="background:transparent;border:none;color:#888;padding:6px 8px;cursor:pointer;font-size:12px">✕ Remover</button>
+        </div>
+      </div>
       <div class="pm-field">
         <label class="pm-label">Apelido</label>
         <input class="pm-input" id="pmApelido" placeholder="Como quer ser chamado?">
