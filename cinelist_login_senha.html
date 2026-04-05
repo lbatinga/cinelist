@@ -1270,6 +1270,7 @@ function buildUD(){
     <div style="height:1px;background:#2a2a2a;margin:4px 0"></div>
     <div class="ud-item" onclick="openProfile();document.getElementById('userDropdown').classList.remove('open')">✏️ Editar perfil</div>
     <div class="ud-item" onclick="openChangePassword();document.getElementById('userDropdown').classList.remove('open')">🔑 Alterar senha</div>
+    ${email === 'lwbarbosab@gmail.com' ? `<div class="ud-item" style="color:#f5c518" onclick="openAdmin();document.getElementById('userDropdown').classList.remove('open')">🛠️ Painel Admin</div>` : ''}
     <div class="ud-item" onclick="logout()" style="color:#e05555">↩️ Sair</div>
   `;
 }
@@ -2138,6 +2139,89 @@ function checkBirthdays(){
     });
   } catch(e) {}
 }
+
+
+// ===== ADMIN PANEL =====
+const ADMIN_EMAIL = 'lwbarbosab@gmail.com';
+
+function openAdmin(){
+  if(currentSession?.user?.email !== ADMIN_EMAIL){ showToast('⛔ Acesso negado.'); return; }
+  document.getElementById('adminModal').classList.add('open');
+  renderAdminPanel();
+}
+
+function closeAdmin(){
+  document.getElementById('adminModal').classList.remove('open');
+}
+
+function renderAdminPanel(){
+  const body = document.getElementById('adminBody');
+
+  // Find duplicates
+  const grupos = {};
+  FILMES.forEach(f => {
+    const key = f.nome.trim().toLowerCase() + '|' + (f.ano || '');
+    if(!grupos[key]) grupos[key] = [];
+    grupos[key].push(f);
+  });
+  const duplicatas = Object.values(grupos).filter(g => g.length > 1);
+
+  if(duplicatas.length === 0){
+    body.innerHTML = '<div style="color:#46d369;text-align:center;padding:30px;font-size:15px">✅ Nenhum filme duplicado encontrado!</div>';
+    return;
+  }
+
+  let html = `<div style="color:#f5c518;font-size:13px;margin-bottom:16px;font-weight:700">${duplicatas.length} grupo(s) de duplicatas encontrados</div>`;
+
+  duplicatas.forEach(grupo => {
+    // Sort: keep oldest (first inserted), mark rest as duplicates
+    const sorted = [...grupo].sort((a,b) => new Date(a.data_cadastro||0) - new Date(b.data_cadastro||0));
+    const original = sorted[0];
+    const duplicados = sorted.slice(1);
+
+    html += `<div style="background:#1a1a1a;border:1px solid #2a2a2a;border-radius:10px;padding:14px;margin-bottom:12px">
+      <div style="font-size:14px;font-weight:800;color:#fff;margin-bottom:10px">🎬 ${esc(original.nome)} (${original.ano||'—'})</div>
+      <div style="font-size:12px;color:#46d369;margin-bottom:8px">✅ MANTER — Cadastrado em ${original.data_cadastro||'?'} por ${esc(original.inserido_por||'?')}</div>`;
+
+    duplicados.forEach(d => {
+      const temAvaliacao = Object.keys(d.avaliacoes||{}).length > 0;
+      html += `<div style="display:flex;align-items:center;justify-content:space-between;background:#111;border:1px solid #333;border-radius:8px;padding:10px 12px;margin-top:6px">
+        <div>
+          <span style="font-size:12px;color:#e05555;font-weight:700">❌ DUPLICATA</span>
+          <span style="font-size:11px;color:#888;margin-left:8px">Cadastrado em ${d.data_cadastro||'?'} por ${esc(d.inserido_por||'?')}</span>
+          ${temAvaliacao ? '<span style="font-size:11px;color:#f5c518;margin-left:6px">⚠️ tem avaliação</span>' : ''}
+        </div>
+        <button onclick="deleteFilmeAdmin('${d.id}', this)" style="background:#e50914;color:#fff;border:none;border-radius:6px;padding:5px 12px;cursor:pointer;font-size:12px;font-weight:700">Excluir</button>
+      </div>`;
+    });
+
+    html += `</div>`;
+  });
+
+  body.innerHTML = html;
+}
+
+async function deleteFilmeAdmin(id, btn){
+  if(!confirm('Tem certeza que deseja excluir este filme? Esta ação não pode ser desfeita.')) return;
+  btn.textContent = '...';
+  btn.disabled = true;
+  try {
+    const {error} = await supa.from('filmes').delete().eq('id', id);
+    if(error) throw error;
+    // Remove from local data
+    const idx = FILMES.findIndex(f => f.id === id);
+    if(idx > -1) FILMES.splice(idx, 1);
+    delete FILMES_MAP[id];
+    RAW.filmes = RAW.filmes.filter(f => f.id !== id);
+    renderHome();
+    showToast('🗑️ Filme excluído!');
+    renderAdminPanel();
+  } catch(e) {
+    showToast('❌ Erro: ' + e.message);
+    btn.textContent = 'Excluir';
+    btn.disabled = false;
+  }
+}
 </script>
 
 <!-- AUTH SCREEN -->
@@ -2225,6 +2309,22 @@ function checkBirthdays(){
     <div class="pm-footer">
       <button class="pm-cancel" onclick="closePwModal()">Cancelar</button>
       <button class="pm-save" id="pwSaveBtn" onclick="savePassword()">Salvar</button>
+    </div>
+  </div>
+</div>
+
+<!-- ADMIN MODAL -->
+<div class="profile-overlay" id="adminModal" onclick="if(event.target===this)closeAdmin()">
+  <div class="profile-modal" style="max-width:680px;width:100%">
+    <div class="pm-header">
+      <div class="pm-title">🛠️ Painel Admin</div>
+      <button class="pm-close" onclick="closeAdmin()">×</button>
+    </div>
+    <div class="pm-body" id="adminBody" style="max-height:70vh;overflow-y:auto">
+      <div style="color:#888;font-size:13px;text-align:center;padding:20px">Carregando...</div>
+    </div>
+    <div class="pm-footer">
+      <button class="pm-cancel" onclick="closeAdmin()">Fechar</button>
     </div>
   </div>
 </div>
