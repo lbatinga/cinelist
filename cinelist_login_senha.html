@@ -34,7 +34,7 @@ body{background:var(--bg);color:var(--text);font-family:'Inter',sans-serif;displ
   transition:background .3s;
 }
 .topbar.scrolled{background:rgba(20,20,20,.97);backdrop-filter:blur(8px)}
-.logo{font-size:24px;font-weight:900;color:var(--red);letter-spacing:-1px;font-style:italic;cursor:pointer;white-space:nowrap;flex-shrink:0}
+.logo{cursor:pointer;display:flex;align-items:center;flex-shrink:0;line-height:1}
 .nav-links{display:flex;gap:2px}
 .nav-link{padding:6px 10px;font-size:13px;color:var(--muted);cursor:pointer;border-radius:6px;transition:color .15s;font-weight:500;white-space:nowrap}
 .nav-link:hover{color:var(--text)}
@@ -380,7 +380,33 @@ tr.selected td{background:rgba(229,9,20,.05)}
 </div>
 
 <nav class="topbar" id="topbar">
-  <div class="logo" onclick="navigate('home')">CINELIST</div>
+  <div class="logo" onclick="navigate('home')" title="CineList">
+    <svg width="130" height="38" viewBox="0 0 130 38" xmlns="http://www.w3.org/2000/svg" style="display:block">
+      <!-- Clapperboard body -->
+      <rect x="2" y="16" width="32" height="22" rx="2" fill="none" stroke="#fff" stroke-width="1.5"/>
+      <line x1="8" y1="24" x2="30" y2="24" stroke="#fff" stroke-width="0.7" stroke-opacity="0.35"/>
+      <line x1="8" y1="30" x2="30" y2="30" stroke="#fff" stroke-width="0.7" stroke-opacity="0.35"/>
+      <!-- Flap open ~28deg, pivot at left -->
+      <g transform="rotate(-28, 2, 16)">
+        <rect x="2" y="9" width="32" height="8" rx="2" fill="#1a1a1a" stroke="#fff" stroke-width="1.5"/>
+        <clipPath id="fc"><rect x="2" y="9" width="32" height="8" rx="2"/></clipPath>
+        <g clip-path="url(#fc)">
+          <rect x="0"  y="9" width="5"  height="8" fill="#fff" fill-opacity="0.75"/>
+          <rect x="9"  y="9" width="5"  height="8" fill="#fff" fill-opacity="0.75"/>
+          <rect x="18" y="9" width="5"  height="8" fill="#fff" fill-opacity="0.75"/>
+          <rect x="27" y="9" width="5"  height="8" fill="#fff" fill-opacity="0.75"/>
+        </g>
+      </g>
+      <!-- Hinge pin -->
+      <circle cx="2" cy="16" r="2" fill="#fff" fill-opacity="0.6"/>
+      <!-- CineList text -->
+      <text x="40" y="28"
+        font-family="Georgia, serif"
+        font-size="22" font-weight="400"
+        fill="#ffffff"
+        letter-spacing="0.5">Cine<tspan font-style="italic" fill="#cccccc">List</tspan></text>
+    </svg>
+  </div>
   <div class="nav-links">
     <div class="nav-link active" id="nav-home" onclick="navigate('home')">Início</div>
     <div class="nav-link" id="nav-filmes" onclick="navigate('filmes')">Filmes</div>
@@ -613,13 +639,11 @@ const UK = Object.keys(USERS);
 const aC = uid=>AC[UK.indexOf(uid)%AC.length];
 const ini = name=>name.split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase();
 const nC = n=>{
-  if(!n) return '#777';
-  if(n>=9)  return '#FFD700'; // ouro
-  if(n>=8)  return '#46d369'; // verde
-  if(n>=7)  return '#8bc34a'; // verde claro
-  if(n>=6)  return '#f5c518'; // amarelo
-  if(n>=5)  return '#ff9800'; // laranja
-  return '#e05555';            // vermelho
+  if(!n) return '#666';
+  if(n>=7.5) return '#46d369'; // verde — bom
+  if(n>=6)   return '#f5c518'; // amarelo — ok
+  if(n>=4)   return '#ff7043'; // laranja — fraco
+  return '#5c3317';             // marrom escuro — ruim
 };
 const fmt = n=>n!=null?n.toFixed(2).replace('.',','):'—';
 const INACTIVE_MONTHS = 2;
