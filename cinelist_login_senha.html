@@ -1236,7 +1236,7 @@ async function saveFilme(){
     FILMES_MAP[data.id]=f;
     RAW.filmes.unshift(f);
     
-    closeAddFilme();
+    closeModal();
     showToast(`✅ "${nome}" adicionado!`);
     renderHome();
   }catch(e){
