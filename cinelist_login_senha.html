@@ -240,6 +240,24 @@ tr.selected td{background:rgba(229,9,20,.05)}
   .rank-stats{gap:10px}
   .poster-card{width:110px}
   .poster-img,.poster-no-img{width:110px;height:165px}
+  /* Table: hide less important columns on mobile */
+  table thead th:nth-child(4),
+  table thead th:nth-child(5),
+  table thead th:nth-child(6),
+  table thead th:nth-child(7),
+  table tbody td:nth-child(4),
+  table tbody td:nth-child(5),
+  table tbody td:nth-child(6),
+  table tbody td:nth-child(7){display:none}
+  table tbody tr{padding:4px 0}
+  table tbody td{padding:12px 8px}
+  .td-name{font-size:14px;max-width:200px}
+  .td-nota{font-size:15px}
+  /* Detail panel mobile */
+  .dp-actions{gap:8px}
+  .dp-btn{padding:10px 6px;font-size:11px;min-width:60px}
+  /* Touch-friendly rows */
+  table tbody tr{cursor:pointer;-webkit-tap-highlight-color:rgba(255,255,255,.08)}
 }
 @media(min-width:769px){
   .detail-layout{height:calc(100vh - 60px)}
@@ -786,6 +804,12 @@ function openFilmeInPanel(id){
   document.getElementById('filmDetailPanel').innerHTML=filmDetailHTML(id);
   const idx=navList.findIndex(f=>f.id===id);
   document.getElementById('filmDetailPanel').scrollTop=0;
+  // Mobile: scroll detail panel into view
+  if(window.innerWidth < 769){
+    setTimeout(()=>{
+      document.getElementById('filmDetailPanel').scrollIntoView({behavior:'smooth', block:'start'});
+    }, 50);
+  }
 }
 
 function filmDetailHTML(id){
@@ -920,6 +944,12 @@ function openPendPanel(id){
   event.currentTarget.classList.add('selected');
   document.getElementById('pendDetailPanel').innerHTML=filmDetailHTML(id);
   document.getElementById('pendDetailPanel').scrollTop=0;
+  // Mobile: scroll detail panel into view
+  if(window.innerWidth < 769){
+    setTimeout(()=>{
+      document.getElementById('pendDetailPanel').scrollIntoView({behavior:'smooth', block:'start'});
+    }, 50);
+  }
 }
 
 // ── AVALIAÇÕES ──
