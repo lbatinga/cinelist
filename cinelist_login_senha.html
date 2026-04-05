@@ -258,7 +258,29 @@ tr.selected td{background:rgba(229,9,20,.05)}
   .dp-btn{padding:10px 6px;font-size:11px;min-width:60px}
   /* Touch-friendly rows */
   table tbody tr{cursor:pointer;-webkit-tap-highlight-color:rgba(255,255,255,.08)}
+  /* Hide static detail panel on mobile */
+  .detail-panel{display:none}
 }
+
+/* Mobile film modal */
+#mobileFilmeModal{
+  display:none;position:fixed;inset:0;z-index:800;
+  background:#0d0d0d;overflow-y:auto;
+  -webkit-overflow-scrolling:touch;
+}
+#mobileFilmeModal.open{display:block}
+.mfm-close{
+  position:sticky;top:0;z-index:10;
+  display:flex;align-items:center;gap:10px;
+  padding:12px 16px;background:rgba(13,13,13,.92);
+  backdrop-filter:blur(8px);border-bottom:1px solid #222;
+}
+.mfm-close-btn{
+  background:#222;border:none;color:#fff;width:34px;height:34px;
+  border-radius:50%;font-size:20px;cursor:pointer;
+  display:flex;align-items:center;justify-content:center;flex-shrink:0;
+}
+.mfm-close-title{font-size:14px;font-weight:700;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 @media(min-width:769px){
   .detail-layout{height:calc(100vh - 60px)}
 }
@@ -801,15 +823,12 @@ function renderFilmes(selectedId, forceGenre){
 function openFilmeInPanel(id){
   document.querySelectorAll('#viewFilmes tr').forEach(r=>r.classList.remove('selected'));
   event.currentTarget.classList.add('selected');
-  document.getElementById('filmDetailPanel').innerHTML=filmDetailHTML(id);
-  const idx=navList.findIndex(f=>f.id===id);
-  document.getElementById('filmDetailPanel').scrollTop=0;
-  // Mobile: scroll detail panel into view
   if(window.innerWidth < 769){
-    setTimeout(()=>{
-      document.getElementById('filmDetailPanel').scrollIntoView({behavior:'smooth', block:'start'});
-    }, 50);
+    openMobileFilmeModal(id);
+    return;
   }
+  document.getElementById('filmDetailPanel').innerHTML=filmDetailHTML(id);
+  document.getElementById('filmDetailPanel').scrollTop=0;
 }
 
 function filmDetailHTML(id){
@@ -942,14 +961,12 @@ function renderPendentes(selId){
 function openPendPanel(id){
   document.querySelectorAll('#viewPendentes tr').forEach(r=>r.classList.remove('selected'));
   event.currentTarget.classList.add('selected');
+  if(window.innerWidth < 769){
+    openMobileFilmeModal(id);
+    return;
+  }
   document.getElementById('pendDetailPanel').innerHTML=filmDetailHTML(id);
   document.getElementById('pendDetailPanel').scrollTop=0;
-  // Mobile: scroll detail panel into view
-  if(window.innerWidth < 769){
-    setTimeout(()=>{
-      document.getElementById('pendDetailPanel').scrollIntoView({behavior:'smooth', block:'start'});
-    }, 50);
-  }
 }
 
 // ── AVALIAÇÕES ──
@@ -2171,6 +2188,29 @@ function checkBirthdays(){
 }
 
 
+// ===== MOBILE FILME MODAL =====
+function openMobileFilmeModal(id){
+  const f = FM[id]; if(!f) return;
+  document.getElementById('mfmTitle').textContent = f.nome;
+  document.getElementById('mfmContent').innerHTML = filmDetailHTML(id);
+  document.getElementById('mobileFilmeModal').classList.add('open');
+  document.getElementById('mobileFilmeModal').scrollTop = 0;
+  document.body.style.overflow = 'hidden';
+}
+
+function closeMobileFilmeModal(){
+  document.getElementById('mobileFilmeModal').classList.remove('open');
+  document.body.style.overflow = '';
+}
+
+// Close mobile modal on back button (Android)
+window.addEventListener('popstate', () => {
+  if(document.getElementById('mobileFilmeModal').classList.contains('open')){
+    closeMobileFilmeModal();
+  }
+});
+
+
 // ===== ADMIN PANEL =====
 const ADMIN_EMAIL = 'lwbarbosab@gmail.com';
 
@@ -2342,6 +2382,16 @@ async function deleteFilmeAdmin(id, btn){
     </div>
   </div>
 </div>
+
+<!-- MOBILE FILME MODAL -->
+<div id="mobileFilmeModal">
+  <div class="mfm-close">
+    <button class="mfm-close-btn" onclick="closeMobileFilmeModal()">‹</button>
+    <div class="mfm-close-title" id="mfmTitle"></div>
+  </div>
+  <div id="mfmContent"></div>
+</div>
+
 
 <!-- ADMIN MODAL -->
 <div class="profile-overlay" id="adminModal" onclick="if(event.target===this)closeAdmin()">
