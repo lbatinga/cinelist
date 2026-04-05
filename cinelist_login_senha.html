@@ -1192,6 +1192,17 @@ async function saveFilme(){
   const dur=document.getElementById('addDur').value.trim();
   if(!nome||!ano||!dur){showToast('⚠️ Preencha Nome, Ano e Duração!');return;}
   
+  // Verificar duplicata
+  const anoInt = parseInt(ano)||null;
+  const duplicado = FILMES.find(f =>
+    f.nome.trim().toLowerCase() === nome.toLowerCase() &&
+    (f.ano === anoInt || !anoInt)
+  );
+  if(duplicado){
+    showToast('⚠️ "' + nome + '" já está cadastrado!');
+    return;
+  }
+
   const btn=document.getElementById('saveFilmeBtn');
   if(btn){btn.textContent='Salvando...';btn.disabled=true;}
   
@@ -1237,8 +1248,10 @@ async function saveFilme(){
     RAW.filmes.unshift(f);
     
     closeModal('addModal');
-    showToast(`✅ "${nome}" adicionado!`);
     renderHome();
+    showToast(`✅ "${nome}" adicionado! Avalie agora 👇`);
+    // Abrir modal de avaliação automaticamente
+    setTimeout(() => openRate(data.id || newId), 300);
   }catch(e){
     showToast('❌ Erro ao salvar: '+e.message);
   }finally{
