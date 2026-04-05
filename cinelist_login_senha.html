@@ -2101,6 +2101,23 @@ function updateAvatarPreview() {
   }
 }
 
+
+function checkBirthdays(){
+  try {
+    const today = new Date();
+    const dd = String(today.getDate()).padStart(2,'0');
+    const mm = String(today.getMonth()+1).padStart(2,'0');
+    Object.entries(profileData||{}).forEach(([uid, p]) => {
+      if(!p.bday) return;
+      const parts = p.bday.split('-');
+      if(parts.length < 3) return;
+      if(parts[1] === mm && parts[2] === dd && uid !== CU) {
+        const nome = USERS[uid]?.nome || uid;
+        showToast('🎂 Hoje é aniversário de ' + nome + '!');
+      }
+    });
+  } catch(e) {}
+}
 </script>
 
 <!-- AUTH SCREEN -->
