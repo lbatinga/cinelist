@@ -1,4 +1,4 @@
- <!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="pt-BR">
 <head>
 <meta charset="UTF-8">
@@ -240,46 +240,18 @@ tr.selected td{background:rgba(229,9,20,.05)}
   .rank-stats{gap:10px}
   .poster-card{width:110px}
   .poster-img,.poster-no-img{width:110px;height:165px}
-  /* Table: hide less important columns on mobile */
-  table thead th:nth-child(4),
-  table thead th:nth-child(5),
-  table thead th:nth-child(6),
-  table thead th:nth-child(7),
-  table tbody td:nth-child(4),
-  table tbody td:nth-child(5),
-  table tbody td:nth-child(6),
-  table tbody td:nth-child(7){display:none}
-  table tbody tr{padding:4px 0}
+  table thead th:nth-child(4),table thead th:nth-child(5),table thead th:nth-child(6),table thead th:nth-child(7),
+  table tbody td:nth-child(4),table tbody td:nth-child(5),table tbody td:nth-child(6),table tbody td:nth-child(7){display:none}
   table tbody td{padding:12px 8px}
   .td-name{font-size:14px;max-width:200px}
-  .td-nota{font-size:15px}
-  /* Detail panel mobile */
-  .dp-actions{gap:8px}
-  .dp-btn{padding:10px 6px;font-size:11px;min-width:60px}
-  /* Touch-friendly rows */
-  table tbody tr{cursor:pointer;-webkit-tap-highlight-color:rgba(255,255,255,.08)}
-  /* Hide static detail panel on mobile */
   .detail-panel{display:none}
+  table tbody tr{cursor:pointer;-webkit-tap-highlight-color:rgba(255,255,255,.08)}
 }
 
-/* Mobile film modal */
-#mobileFilmeModal{
-  display:none;position:fixed;inset:0;z-index:800;
-  background:#0d0d0d;overflow-y:auto;
-  -webkit-overflow-scrolling:touch;
-}
+#mobileFilmeModal{display:none;position:fixed;inset:0;z-index:800;background:#0d0d0d;overflow-y:auto;-webkit-overflow-scrolling:touch}
 #mobileFilmeModal.open{display:block}
-.mfm-close{
-  position:sticky;top:0;z-index:10;
-  display:flex;align-items:center;gap:10px;
-  padding:12px 16px;background:rgba(13,13,13,.92);
-  backdrop-filter:blur(8px);border-bottom:1px solid #222;
-}
-.mfm-close-btn{
-  background:#222;border:none;color:#fff;width:34px;height:34px;
-  border-radius:50%;font-size:20px;cursor:pointer;
-  display:flex;align-items:center;justify-content:center;flex-shrink:0;
-}
+.mfm-close{position:sticky;top:0;z-index:10;display:flex;align-items:center;gap:10px;padding:12px 16px;background:rgba(13,13,13,.92);backdrop-filter:blur(8px);border-bottom:1px solid #222}
+.mfm-close-btn{background:#222;border:none;color:#fff;width:34px;height:34px;border-radius:50%;font-size:20px;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0}
 .mfm-close-title{font-size:14px;font-weight:700;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 @media(min-width:769px){
   .detail-layout{height:calc(100vh - 60px)}
@@ -374,22 +346,19 @@ tr.selected td{background:rgba(229,9,20,.05)}
 <!-- TOPBAR -->
 <!-- STARTUP LOADER -->
 <div id="startLoader" style="position:fixed;inset:0;z-index:2000;background:#0a0a0a;display:none;align-items:center;justify-content:center;flex-direction:column;gap:16px">
-  <div style="display:flex;justify-content:center;margin-bottom:4px"><svg width="180" height="54" viewBox="0 0 180 54" xmlns="http://www.w3.org/2000/svg" style="display:block">
-  <rect x="2" y="22" width="40" height="28" rx="2" fill="none" stroke="#fff" stroke-width="1.8"/>
-  <line x1="9" y1="32" x2="37" y2="32" stroke="#fff" stroke-width="0.8" stroke-opacity="0.35"/>
-  <line x1="9" y1="40" x2="37" y2="40" stroke="#fff" stroke-width="0.8" stroke-opacity="0.35"/>
-  <g transform="rotate(-28, 2, 22)">
-    <rect x="2" y="12" width="40" height="11" rx="2" fill="#1a1a1a" stroke="#fff" stroke-width="1.8"/>
-    <clipPath id="fcll"><rect x="2" y="12" width="40" height="11" rx="2"/></clipPath>
-    <g clip-path="url(#fcll)">
-      <rect x="0"  y="12" width="6" height="11" fill="#fff" fill-opacity="0.75"/>
-      <rect x="11" y="12" width="6" height="11" fill="#fff" fill-opacity="0.75"/>
-      <rect x="22" y="12" width="6" height="11" fill="#fff" fill-opacity="0.75"/>
-      <rect x="33" y="12" width="6" height="11" fill="#fff" fill-opacity="0.75"/>
-    </g>
+  <div style="display:flex;justify-content:center;margin-bottom:4px"><svg width="160" height="48" viewBox="0 0 160 48" xmlns="http://www.w3.org/2000/svg">
+  <rect x="2" y="20" width="36" height="26" rx="2" fill="none" stroke="#fff" stroke-width="1.6"/>
+  <line x1="8" y1="29" x2="33" y2="29" stroke="#fff" stroke-width="0.7" stroke-opacity="0.35"/>
+  <line x1="8" y1="36" x2="33" y2="36" stroke="#fff" stroke-width="0.7" stroke-opacity="0.35"/>
+  <g transform="rotate(-26, 2, 20)">
+    <rect x="2" y="11" width="36" height="10" rx="2" fill="#111" stroke="#fff" stroke-width="1.6"/>
+    <rect x="1"  y="11" width="5" height="10" fill="#fff" fill-opacity="0.72"/>
+    <rect x="10" y="11" width="5" height="10" fill="#fff" fill-opacity="0.72"/>
+    <rect x="19" y="11" width="5" height="10" fill="#fff" fill-opacity="0.72"/>
+    <rect x="28" y="11" width="5" height="10" fill="#fff" fill-opacity="0.72"/>
   </g>
-  <circle cx="2" cy="22" r="2.5" fill="#fff" fill-opacity="0.6"/>
-  <text x="52" y="39" font-family="Georgia,serif" font-size="30" font-weight="400" fill="#ffffff" letter-spacing="0.5">Cine<tspan font-style="italic" fill="#cccccc">List</tspan></text>
+  <circle cx="2" cy="20" r="2.2" fill="#fff" fill-opacity="0.55"/>
+  <text x="46" y="35" font-family="Georgia,serif" font-size="28" font-weight="400" fill="#fff" letter-spacing="0.4">Cine<tspan font-style="italic" fill="#ccc">List</tspan></text>
 </svg></div>
   <div style="width:36px;height:36px;border:3px solid #333;border-top-color:#e50914;border-radius:50%;animation:spin .8s linear infinite"></div>
   <div id="loaderMsg" style="font-size:12px;color:#444;margin-top:8px">Carregando...</div>
@@ -397,30 +366,19 @@ tr.selected td{background:rgba(229,9,20,.05)}
 
 <nav class="topbar" id="topbar">
   <div class="logo" onclick="navigate('home')" title="CineList">
-    <svg width="130" height="38" viewBox="0 0 130 38" xmlns="http://www.w3.org/2000/svg" style="display:block">
-      <!-- Clapperboard body -->
-      <rect x="2" y="16" width="32" height="22" rx="2" fill="none" stroke="#fff" stroke-width="1.5"/>
-      <line x1="8" y1="24" x2="30" y2="24" stroke="#fff" stroke-width="0.7" stroke-opacity="0.35"/>
-      <line x1="8" y1="30" x2="30" y2="30" stroke="#fff" stroke-width="0.7" stroke-opacity="0.35"/>
-      <!-- Flap open ~28deg, pivot at left -->
-      <g transform="rotate(-28, 2, 16)">
-        <rect x="2" y="9" width="32" height="8" rx="2" fill="#1a1a1a" stroke="#fff" stroke-width="1.5"/>
-        <clipPath id="fc"><rect x="2" y="9" width="32" height="8" rx="2"/></clipPath>
-        <g clip-path="url(#fc)">
-          <rect x="0"  y="9" width="5"  height="8" fill="#fff" fill-opacity="0.75"/>
-          <rect x="9"  y="9" width="5"  height="8" fill="#fff" fill-opacity="0.75"/>
-          <rect x="18" y="9" width="5"  height="8" fill="#fff" fill-opacity="0.75"/>
-          <rect x="27" y="9" width="5"  height="8" fill="#fff" fill-opacity="0.75"/>
-        </g>
+    <svg width="128" height="36" viewBox="0 0 128 36" xmlns="http://www.w3.org/2000/svg">
+      <rect x="2" y="14" width="28" height="20" rx="2" fill="none" stroke="#fff" stroke-width="1.4"/>
+      <line x1="7" y1="21" x2="26" y2="21" stroke="#fff" stroke-width="0.6" stroke-opacity="0.35"/>
+      <line x1="7" y1="27" x2="26" y2="27" stroke="#fff" stroke-width="0.6" stroke-opacity="0.35"/>
+      <g transform="rotate(-26, 2, 14)">
+        <rect x="2" y="7" width="28" height="8" rx="2" fill="#111" stroke="#fff" stroke-width="1.4"/>
+        <rect x="1"  y="7" width="4" height="8" fill="#fff" fill-opacity="0.72" clip-path="url(#ct)"/>
+        <rect x="8"  y="7" width="4" height="8" fill="#fff" fill-opacity="0.72" clip-path="url(#ct)"/>
+        <rect x="15" y="7" width="4" height="8" fill="#fff" fill-opacity="0.72" clip-path="url(#ct)"/>
+        <rect x="22" y="7" width="4" height="8" fill="#fff" fill-opacity="0.72" clip-path="url(#ct)"/>
       </g>
-      <!-- Hinge pin -->
-      <circle cx="2" cy="16" r="2" fill="#fff" fill-opacity="0.6"/>
-      <!-- CineList text -->
-      <text x="40" y="28"
-        font-family="Georgia, serif"
-        font-size="22" font-weight="400"
-        fill="#ffffff"
-        letter-spacing="0.5">Cine<tspan font-style="italic" fill="#cccccc">List</tspan></text>
+      <circle cx="2" cy="14" r="1.8" fill="#fff" fill-opacity="0.55"/>
+      <text x="36" y="26" font-family="Georgia,serif" font-size="21" font-weight="400" fill="#fff" letter-spacing="0.3">Cine<tspan font-style="italic" fill="#ccc">List</tspan></text>
     </svg>
   </div>
   <div class="nav-links">
@@ -872,10 +830,7 @@ function renderFilmes(selectedId, forceGenre){
 function openFilmeInPanel(id){
   document.querySelectorAll('#viewFilmes tr').forEach(r=>r.classList.remove('selected'));
   event.currentTarget.classList.add('selected');
-  if(window.innerWidth < 769){
-    openMobileFilmeModal(id);
-    return;
-  }
+  if(window.innerWidth < 769){ openMobileFilmeModal(id); return; }
   document.getElementById('filmDetailPanel').innerHTML=filmDetailHTML(id);
   document.getElementById('filmDetailPanel').scrollTop=0;
 }
@@ -895,17 +850,7 @@ function filmDetailHTML(id){
   const topAvs=Object.entries(f.avaliacoes).filter(([,a])=>a.nota!==null).sort(([,a],[,b])=>b.nota-a.nota).slice(0,3);
   const avStr=topAvs.map(([uid,av])=>`  • ${USERS[uid]?.nome||uid}: ${fmt(av.nota)}`).join('\n');
   const appUrl='https://lbatinga.github.io/cinelist/cinelist_login_senha.html';
-  const wpp=encodeURIComponent(`🎬 *CineList da Tropa*
-
-*${f.nome}* (${f.ano||'?'})
-⏱ ${f.duracao_str||'—'} · ${f.classificacao||'Livre'}
-🎭 ${f.categorias.slice(0,3).join(', ')||'—'}
-
-${f.media?`⭐ Nota média: *${fmt(f.media)}* (${avCount} avaliação${avCount!==1?'s':''})\n${avStr}`:'📝 Ainda sem avaliações'}
-
-${f.sinopse?f.sinopse.slice(0,150)+(f.sinopse.length>150?'...':''):''}
-
-🔗 Veja no app: ${appUrl}`);
+  const wpp=encodeURIComponent(`🎬 *CineList da Tropa*\n\n*${f.nome}* (${f.ano||'?'})\n⏱ ${f.duracao_str||'—'} · ${f.classificacao||'Livre'}\n🎭 ${f.categorias.slice(0,3).join(', ')||'—'}\n\n${f.media?`⭐ Nota média: *${fmt(f.media)}* (${avCount} avaliação${avCount!==1?'s':''})\n${avStr}`:'📝 Ainda sem avaliações'}\n\n${f.sinopse?f.sinopse.slice(0,150)+(f.sinopse.length>150?'...':''):''}\n\n🔗 Veja no app: ${appUrl}`);
   return `
     <div class="dp-backdrop" style="background-image:url('${esc(f.poster)}')">
       <div class="dp-backdrop-grad"></div>
@@ -974,21 +919,16 @@ function openFilme(id){
 }
 
 // ── PENDENTES ──
+let pendSortKey='nota';
 function applyPendSort(list){
-  if(pendSortKey==='nota')     list.sort((a,b)=>(b.media||0)-(a.media||0));
+  if(pendSortKey==='nota')      list.sort((a,b)=>(b.media||0)-(a.media||0));
   else if(pendSortKey==='nota_asc') list.sort((a,b)=>(a.media||0)-(b.media||0));
   else if(pendSortKey==='avals')    list.sort((a,b)=>b.num_avaliacoes-a.num_avaliacoes);
   else if(pendSortKey==='nome')     list.sort((a,b)=>a.nome.localeCompare(b.nome));
   else if(pendSortKey==='ano_desc') list.sort((a,b)=>(b.ano||0)-(a.ano||0));
   else if(pendSortKey==='ano_asc')  list.sort((a,b)=>(a.ano||0)-(b.ano||0));
 }
-
-function setPendSort(val){
-  pendSortKey=val;
-  renderPendentes();
-}
-
-let pendSortKey = 'nota';
+function setPendSort(val){ pendSortKey=val; renderPendentes(); }
 
 function renderPendentes(selId){
   if(!CU){showNeedLogin('viewPendentes');return;}
@@ -1042,10 +982,7 @@ function renderPendentes(selId){
 function openPendPanel(id){
   document.querySelectorAll('#viewPendentes tr').forEach(r=>r.classList.remove('selected'));
   event.currentTarget.classList.add('selected');
-  if(window.innerWidth < 769){
-    openMobileFilmeModal(id);
-    return;
-  }
+  if(window.innerWidth < 769){ openMobileFilmeModal(id); return; }
   document.getElementById('pendDetailPanel').innerHTML=filmDetailHTML(id);
   document.getElementById('pendDetailPanel').scrollTop=0;
 }
@@ -1803,7 +1740,7 @@ function rankStatsHTML(){
             <tbody>
             ${members.sort((a,b)=>b.quant-a.quant).map(m=>`<tr style="${!isActive(m)?'opacity:.55':''}">
               <td style="text-align:left;font-weight:700">${esc(m.nome)}</td>
-              <td><span style="font-size:10px;font-weight:700;padding:2px 7px;border-radius:10px;background:${isActive(m)?'rgba(70,211,105,.15)':'rgba(60,60,60,.3)'};color:${isActive(m)?'var(--green)':'#888'}">${isActive(m)?'●':'○'}</span></td>
+              <td><span style="font-size:10px;font-weight:700;padding:2px 7px;border-radius:10px;background:${isActive(m)?'rgba(70,211,105,.15)':'rgba(100,100,100,.2)'};color:${isActive(m)?'var(--green)':'var(--muted)'}">${isActive(m)?'●':'○'}</span></td>
               <td style="color:var(--green)">${m.quant}</td>
               <td style="color:var(--yellow)">${m.media?fmt(m.media):'—'}</td>
               <td style="color:var(--muted)">${m.pendentes.length}</td>
@@ -1977,22 +1914,19 @@ async function onLogin(session){
   const box = document.getElementById('authBox');
   if(box) box.innerHTML = `
     <div class="auth-loading">
-      <div class="auth-logo"><svg width="180" height="54" viewBox="0 0 180 54" xmlns="http://www.w3.org/2000/svg" style="display:block">
-  <rect x="2" y="22" width="40" height="28" rx="2" fill="none" stroke="#fff" stroke-width="1.8"/>
-  <line x1="9" y1="32" x2="37" y2="32" stroke="#fff" stroke-width="0.8" stroke-opacity="0.35"/>
-  <line x1="9" y1="40" x2="37" y2="40" stroke="#fff" stroke-width="0.8" stroke-opacity="0.35"/>
-  <g transform="rotate(-28, 2, 22)">
-    <rect x="2" y="12" width="40" height="11" rx="2" fill="#1a1a1a" stroke="#fff" stroke-width="1.8"/>
-    <clipPath id="fcll"><rect x="2" y="12" width="40" height="11" rx="2"/></clipPath>
-    <g clip-path="url(#fcll)">
-      <rect x="0"  y="12" width="6" height="11" fill="#fff" fill-opacity="0.75"/>
-      <rect x="11" y="12" width="6" height="11" fill="#fff" fill-opacity="0.75"/>
-      <rect x="22" y="12" width="6" height="11" fill="#fff" fill-opacity="0.75"/>
-      <rect x="33" y="12" width="6" height="11" fill="#fff" fill-opacity="0.75"/>
-    </g>
+      <div class="auth-logo"><svg width="160" height="48" viewBox="0 0 160 48" xmlns="http://www.w3.org/2000/svg">
+  <rect x="2" y="20" width="36" height="26" rx="2" fill="none" stroke="#fff" stroke-width="1.6"/>
+  <line x1="8" y1="29" x2="33" y2="29" stroke="#fff" stroke-width="0.7" stroke-opacity="0.35"/>
+  <line x1="8" y1="36" x2="33" y2="36" stroke="#fff" stroke-width="0.7" stroke-opacity="0.35"/>
+  <g transform="rotate(-26, 2, 20)">
+    <rect x="2" y="11" width="36" height="10" rx="2" fill="#111" stroke="#fff" stroke-width="1.6"/>
+    <rect x="1"  y="11" width="5" height="10" fill="#fff" fill-opacity="0.72"/>
+    <rect x="10" y="11" width="5" height="10" fill="#fff" fill-opacity="0.72"/>
+    <rect x="19" y="11" width="5" height="10" fill="#fff" fill-opacity="0.72"/>
+    <rect x="28" y="11" width="5" height="10" fill="#fff" fill-opacity="0.72"/>
   </g>
-  <circle cx="2" cy="22" r="2.5" fill="#fff" fill-opacity="0.6"/>
-  <text x="52" y="39" font-family="Georgia,serif" font-size="30" font-weight="400" fill="#ffffff" letter-spacing="0.5">Cine<tspan font-style="italic" fill="#cccccc">List</tspan></text>
+  <circle cx="2" cy="20" r="2.2" fill="#fff" fill-opacity="0.55"/>
+  <text x="46" y="35" font-family="Georgia,serif" font-size="28" font-weight="400" fill="#fff" letter-spacing="0.4">Cine<tspan font-style="italic" fill="#ccc">List</tspan></text>
 </svg></div>
       <div class="auth-spinner"></div>
       <div style="color:#888;font-size:13px">Entrando como ${email}...</div>
@@ -2039,22 +1973,19 @@ function showAuthScreen(){
   if(loader) loader.style.display = 'none';
   document.getElementById('authScreen').style.display = 'flex';
   document.getElementById('authBox').innerHTML = `
-    <div class="auth-logo"><svg width="180" height="54" viewBox="0 0 180 54" xmlns="http://www.w3.org/2000/svg" style="display:block">
-  <rect x="2" y="22" width="40" height="28" rx="2" fill="none" stroke="#fff" stroke-width="1.8"/>
-  <line x1="9" y1="32" x2="37" y2="32" stroke="#fff" stroke-width="0.8" stroke-opacity="0.35"/>
-  <line x1="9" y1="40" x2="37" y2="40" stroke="#fff" stroke-width="0.8" stroke-opacity="0.35"/>
-  <g transform="rotate(-28, 2, 22)">
-    <rect x="2" y="12" width="40" height="11" rx="2" fill="#1a1a1a" stroke="#fff" stroke-width="1.8"/>
-    <clipPath id="fcll"><rect x="2" y="12" width="40" height="11" rx="2"/></clipPath>
-    <g clip-path="url(#fcll)">
-      <rect x="0"  y="12" width="6" height="11" fill="#fff" fill-opacity="0.75"/>
-      <rect x="11" y="12" width="6" height="11" fill="#fff" fill-opacity="0.75"/>
-      <rect x="22" y="12" width="6" height="11" fill="#fff" fill-opacity="0.75"/>
-      <rect x="33" y="12" width="6" height="11" fill="#fff" fill-opacity="0.75"/>
-    </g>
+    <div class="auth-logo"><svg width="160" height="48" viewBox="0 0 160 48" xmlns="http://www.w3.org/2000/svg">
+  <rect x="2" y="20" width="36" height="26" rx="2" fill="none" stroke="#fff" stroke-width="1.6"/>
+  <line x1="8" y1="29" x2="33" y2="29" stroke="#fff" stroke-width="0.7" stroke-opacity="0.35"/>
+  <line x1="8" y1="36" x2="33" y2="36" stroke="#fff" stroke-width="0.7" stroke-opacity="0.35"/>
+  <g transform="rotate(-26, 2, 20)">
+    <rect x="2" y="11" width="36" height="10" rx="2" fill="#111" stroke="#fff" stroke-width="1.6"/>
+    <rect x="1"  y="11" width="5" height="10" fill="#fff" fill-opacity="0.72"/>
+    <rect x="10" y="11" width="5" height="10" fill="#fff" fill-opacity="0.72"/>
+    <rect x="19" y="11" width="5" height="10" fill="#fff" fill-opacity="0.72"/>
+    <rect x="28" y="11" width="5" height="10" fill="#fff" fill-opacity="0.72"/>
   </g>
-  <circle cx="2" cy="22" r="2.5" fill="#fff" fill-opacity="0.6"/>
-  <text x="52" y="39" font-family="Georgia,serif" font-size="30" font-weight="400" fill="#ffffff" letter-spacing="0.5">Cine<tspan font-style="italic" fill="#cccccc">List</tspan></text>
+  <circle cx="2" cy="20" r="2.2" fill="#fff" fill-opacity="0.55"/>
+  <text x="46" y="35" font-family="Georgia,serif" font-size="28" font-weight="400" fill="#fff" letter-spacing="0.4">Cine<tspan font-style="italic" fill="#ccc">List</tspan></text>
 </svg></div>
     <div class="auth-tagline">O catálogo de filmes da tropa 🎬</div>
     <div id="authError" style="display:none;background:rgba(229,9,20,.15);border:1px solid var(--red);color:#ff6b6b;padding:10px 14px;border-radius:8px;font-size:13px;margin-bottom:12px;text-align:left"></div>
@@ -2071,22 +2002,19 @@ function showAuthLoading(){
   const box = document.getElementById('authBox');
   if(box) box.innerHTML = `
     <div class="auth-loading">
-      <div class="auth-logo"><svg width="180" height="54" viewBox="0 0 180 54" xmlns="http://www.w3.org/2000/svg" style="display:block">
-  <rect x="2" y="22" width="40" height="28" rx="2" fill="none" stroke="#fff" stroke-width="1.8"/>
-  <line x1="9" y1="32" x2="37" y2="32" stroke="#fff" stroke-width="0.8" stroke-opacity="0.35"/>
-  <line x1="9" y1="40" x2="37" y2="40" stroke="#fff" stroke-width="0.8" stroke-opacity="0.35"/>
-  <g transform="rotate(-28, 2, 22)">
-    <rect x="2" y="12" width="40" height="11" rx="2" fill="#1a1a1a" stroke="#fff" stroke-width="1.8"/>
-    <clipPath id="fcll"><rect x="2" y="12" width="40" height="11" rx="2"/></clipPath>
-    <g clip-path="url(#fcll)">
-      <rect x="0"  y="12" width="6" height="11" fill="#fff" fill-opacity="0.75"/>
-      <rect x="11" y="12" width="6" height="11" fill="#fff" fill-opacity="0.75"/>
-      <rect x="22" y="12" width="6" height="11" fill="#fff" fill-opacity="0.75"/>
-      <rect x="33" y="12" width="6" height="11" fill="#fff" fill-opacity="0.75"/>
-    </g>
+      <div class="auth-logo"><svg width="160" height="48" viewBox="0 0 160 48" xmlns="http://www.w3.org/2000/svg">
+  <rect x="2" y="20" width="36" height="26" rx="2" fill="none" stroke="#fff" stroke-width="1.6"/>
+  <line x1="8" y1="29" x2="33" y2="29" stroke="#fff" stroke-width="0.7" stroke-opacity="0.35"/>
+  <line x1="8" y1="36" x2="33" y2="36" stroke="#fff" stroke-width="0.7" stroke-opacity="0.35"/>
+  <g transform="rotate(-26, 2, 20)">
+    <rect x="2" y="11" width="36" height="10" rx="2" fill="#111" stroke="#fff" stroke-width="1.6"/>
+    <rect x="1"  y="11" width="5" height="10" fill="#fff" fill-opacity="0.72"/>
+    <rect x="10" y="11" width="5" height="10" fill="#fff" fill-opacity="0.72"/>
+    <rect x="19" y="11" width="5" height="10" fill="#fff" fill-opacity="0.72"/>
+    <rect x="28" y="11" width="5" height="10" fill="#fff" fill-opacity="0.72"/>
   </g>
-  <circle cx="2" cy="22" r="2.5" fill="#fff" fill-opacity="0.6"/>
-  <text x="52" y="39" font-family="Georgia,serif" font-size="30" font-weight="400" fill="#ffffff" letter-spacing="0.5">Cine<tspan font-style="italic" fill="#cccccc">List</tspan></text>
+  <circle cx="2" cy="20" r="2.2" fill="#fff" fill-opacity="0.55"/>
+  <text x="46" y="35" font-family="Georgia,serif" font-size="28" font-weight="400" fill="#fff" letter-spacing="0.4">Cine<tspan font-style="italic" fill="#ccc">List</tspan></text>
 </svg></div>
       <div class="auth-spinner"></div>
       <div style="color:#666;font-size:14px">Redirecionando para o Google...</div>
@@ -2096,22 +2024,19 @@ function showAuthLoading(){
 
 function showAuthError(email){
   document.getElementById('authBox').innerHTML = `
-    <div class="auth-logo"><svg width="180" height="54" viewBox="0 0 180 54" xmlns="http://www.w3.org/2000/svg" style="display:block">
-  <rect x="2" y="22" width="40" height="28" rx="2" fill="none" stroke="#fff" stroke-width="1.8"/>
-  <line x1="9" y1="32" x2="37" y2="32" stroke="#fff" stroke-width="0.8" stroke-opacity="0.35"/>
-  <line x1="9" y1="40" x2="37" y2="40" stroke="#fff" stroke-width="0.8" stroke-opacity="0.35"/>
-  <g transform="rotate(-28, 2, 22)">
-    <rect x="2" y="12" width="40" height="11" rx="2" fill="#1a1a1a" stroke="#fff" stroke-width="1.8"/>
-    <clipPath id="fcll"><rect x="2" y="12" width="40" height="11" rx="2"/></clipPath>
-    <g clip-path="url(#fcll)">
-      <rect x="0"  y="12" width="6" height="11" fill="#fff" fill-opacity="0.75"/>
-      <rect x="11" y="12" width="6" height="11" fill="#fff" fill-opacity="0.75"/>
-      <rect x="22" y="12" width="6" height="11" fill="#fff" fill-opacity="0.75"/>
-      <rect x="33" y="12" width="6" height="11" fill="#fff" fill-opacity="0.75"/>
-    </g>
+    <div class="auth-logo"><svg width="160" height="48" viewBox="0 0 160 48" xmlns="http://www.w3.org/2000/svg">
+  <rect x="2" y="20" width="36" height="26" rx="2" fill="none" stroke="#fff" stroke-width="1.6"/>
+  <line x1="8" y1="29" x2="33" y2="29" stroke="#fff" stroke-width="0.7" stroke-opacity="0.35"/>
+  <line x1="8" y1="36" x2="33" y2="36" stroke="#fff" stroke-width="0.7" stroke-opacity="0.35"/>
+  <g transform="rotate(-26, 2, 20)">
+    <rect x="2" y="11" width="36" height="10" rx="2" fill="#111" stroke="#fff" stroke-width="1.6"/>
+    <rect x="1"  y="11" width="5" height="10" fill="#fff" fill-opacity="0.72"/>
+    <rect x="10" y="11" width="5" height="10" fill="#fff" fill-opacity="0.72"/>
+    <rect x="19" y="11" width="5" height="10" fill="#fff" fill-opacity="0.72"/>
+    <rect x="28" y="11" width="5" height="10" fill="#fff" fill-opacity="0.72"/>
   </g>
-  <circle cx="2" cy="22" r="2.5" fill="#fff" fill-opacity="0.6"/>
-  <text x="52" y="39" font-family="Georgia,serif" font-size="30" font-weight="400" fill="#ffffff" letter-spacing="0.5">Cine<tspan font-style="italic" fill="#cccccc">List</tspan></text>
+  <circle cx="2" cy="20" r="2.2" fill="#fff" fill-opacity="0.55"/>
+  <text x="46" y="35" font-family="Georgia,serif" font-size="28" font-weight="400" fill="#fff" letter-spacing="0.4">Cine<tspan font-style="italic" fill="#ccc">List</tspan></text>
 </svg></div>
     <div style="color:#e05555;font-size:14px;margin-bottom:16px">⚠️ E-mail não encontrado:<br><strong style="color:#fff">${email}</strong></div>
     <div style="color:#666;font-size:13px;margin-bottom:24px">Apenas membros cadastrados têm acesso. Fale com o administrador.</div>
@@ -2334,29 +2259,6 @@ function checkBirthdays(){
 }
 
 
-// ===== MOBILE FILME MODAL =====
-function openMobileFilmeModal(id){
-  const f = FM[id]; if(!f) return;
-  document.getElementById('mfmTitle').textContent = f.nome;
-  document.getElementById('mfmContent').innerHTML = filmDetailHTML(id);
-  document.getElementById('mobileFilmeModal').classList.add('open');
-  document.getElementById('mobileFilmeModal').scrollTop = 0;
-  document.body.style.overflow = 'hidden';
-}
-
-function closeMobileFilmeModal(){
-  document.getElementById('mobileFilmeModal').classList.remove('open');
-  document.body.style.overflow = '';
-}
-
-// Close mobile modal on back button (Android)
-window.addEventListener('popstate', () => {
-  if(document.getElementById('mobileFilmeModal').classList.contains('open')){
-    closeMobileFilmeModal();
-  }
-});
-
-
 // ===== ADMIN PANEL =====
 const ADMIN_EMAIL = 'lwbarbosab@gmail.com';
 
@@ -2438,27 +2340,89 @@ async function deleteFilmeAdmin(id, btn){
     btn.disabled = false;
   }
 }
+
+// ===== MOBILE FILME MODAL =====
+function openMobileFilmeModal(id){
+  const f=FM[id]; if(!f) return;
+  document.getElementById('mfmTitle').textContent=f.nome;
+  document.getElementById('mfmContent').innerHTML=filmDetailHTML(id);
+  document.getElementById('mobileFilmeModal').classList.add('open');
+  document.getElementById('mobileFilmeModal').scrollTop=0;
+  document.body.style.overflow='hidden';
+}
+function closeMobileFilmeModal(){
+  document.getElementById('mobileFilmeModal').classList.remove('open');
+  document.body.style.overflow='';
+}
+window.addEventListener('popstate',()=>{
+  if(document.getElementById('mobileFilmeModal').classList.contains('open')) closeMobileFilmeModal();
+});
+
+// ===== ADMIN PANEL =====
+const ADMIN_EMAIL='lwbarbosab@gmail.com';
+function openAdmin(){
+  if(currentSession?.user?.email!==ADMIN_EMAIL){showToast('⛔ Acesso negado.');return;}
+  document.getElementById('adminModal').classList.add('open');
+  renderAdminPanel();
+}
+function closeAdmin(){ document.getElementById('adminModal').classList.remove('open'); }
+function renderAdminPanel(){
+  const body=document.getElementById('adminBody');
+  const grupos={};
+  FILMES.forEach(f=>{
+    const key=f.nome.trim().toLowerCase()+'|'+(f.ano||'');
+    if(!grupos[key]) grupos[key]=[];
+    grupos[key].push(f);
+  });
+  const dups=Object.values(grupos).filter(g=>g.length>1);
+  if(!dups.length){body.innerHTML='<div style="color:#46d369;text-align:center;padding:30px;font-size:15px">✅ Nenhum filme duplicado!</div>';return;}
+  let html=`<div style="color:#f5c518;font-size:13px;margin-bottom:16px;font-weight:700">${dups.length} grupo(s) de duplicatas</div>`;
+  dups.forEach(grupo=>{
+    const sorted=[...grupo].sort((a,b)=>new Date(a.data_cadastro||0)-new Date(b.data_cadastro||0));
+    const orig=sorted[0]; const rest=sorted.slice(1);
+    html+=`<div style="background:#1a1a1a;border:1px solid #2a2a2a;border-radius:10px;padding:14px;margin-bottom:12px">
+      <div style="font-size:14px;font-weight:800;color:#fff;margin-bottom:10px">🎬 ${esc(orig.nome)} (${orig.ano||'—'})</div>
+      <div style="font-size:12px;color:#46d369;margin-bottom:8px">✅ MANTER — ${orig.data_cadastro||'?'} por ${esc(orig.inserido_por||'?')}</div>`;
+    rest.forEach(d=>{
+      html+=`<div style="display:flex;align-items:center;justify-content:space-between;background:#111;border:1px solid #333;border-radius:8px;padding:10px 12px;margin-top:6px">
+        <div><span style="font-size:12px;color:#e05555;font-weight:700">❌ DUPLICATA</span> <span style="font-size:11px;color:#888;margin-left:6px">${d.data_cadastro||'?'} por ${esc(d.inserido_por||'?')}</span></div>
+        <button onclick="deleteFilmeAdmin('${d.id}',this)" style="background:#e50914;color:#fff;border:none;border-radius:6px;padding:5px 12px;cursor:pointer;font-size:12px;font-weight:700">Excluir</button>
+      </div>`;
+    });
+    html+='</div>';
+  });
+  body.innerHTML=html;
+}
+async function deleteFilmeAdmin(id,btn){
+  if(!confirm('Excluir este filme?')) return;
+  btn.textContent='...'; btn.disabled=true;
+  try{
+    const {error}=await supa.from('filmes').delete().eq('id',id);
+    if(error) throw error;
+    const idx=FILMES.findIndex(f=>f.id===id);
+    if(idx>-1) FILMES.splice(idx,1);
+    delete FILMES_MAP[id]; RAW.filmes=RAW.filmes.filter(f=>f.id!==id);
+    renderHome(); showToast('🗑️ Filme excluído!'); renderAdminPanel();
+  }catch(e){ showToast('❌ Erro: '+e.message); btn.textContent='Excluir'; btn.disabled=false; }
+}
 </script>
 
 <!-- AUTH SCREEN -->
 <div class="auth-screen" id="authScreen">
   <div class="auth-box" id="authBox">
-    <div class="auth-logo"><svg width="180" height="54" viewBox="0 0 180 54" xmlns="http://www.w3.org/2000/svg" style="display:block">
-  <rect x="2" y="22" width="40" height="28" rx="2" fill="none" stroke="#fff" stroke-width="1.8"/>
-  <line x1="9" y1="32" x2="37" y2="32" stroke="#fff" stroke-width="0.8" stroke-opacity="0.35"/>
-  <line x1="9" y1="40" x2="37" y2="40" stroke="#fff" stroke-width="0.8" stroke-opacity="0.35"/>
-  <g transform="rotate(-28, 2, 22)">
-    <rect x="2" y="12" width="40" height="11" rx="2" fill="#1a1a1a" stroke="#fff" stroke-width="1.8"/>
-    <clipPath id="fcll"><rect x="2" y="12" width="40" height="11" rx="2"/></clipPath>
-    <g clip-path="url(#fcll)">
-      <rect x="0"  y="12" width="6" height="11" fill="#fff" fill-opacity="0.75"/>
-      <rect x="11" y="12" width="6" height="11" fill="#fff" fill-opacity="0.75"/>
-      <rect x="22" y="12" width="6" height="11" fill="#fff" fill-opacity="0.75"/>
-      <rect x="33" y="12" width="6" height="11" fill="#fff" fill-opacity="0.75"/>
-    </g>
+    <div class="auth-logo"><svg width="160" height="48" viewBox="0 0 160 48" xmlns="http://www.w3.org/2000/svg">
+  <rect x="2" y="20" width="36" height="26" rx="2" fill="none" stroke="#fff" stroke-width="1.6"/>
+  <line x1="8" y1="29" x2="33" y2="29" stroke="#fff" stroke-width="0.7" stroke-opacity="0.35"/>
+  <line x1="8" y1="36" x2="33" y2="36" stroke="#fff" stroke-width="0.7" stroke-opacity="0.35"/>
+  <g transform="rotate(-26, 2, 20)">
+    <rect x="2" y="11" width="36" height="10" rx="2" fill="#111" stroke="#fff" stroke-width="1.6"/>
+    <rect x="1"  y="11" width="5" height="10" fill="#fff" fill-opacity="0.72"/>
+    <rect x="10" y="11" width="5" height="10" fill="#fff" fill-opacity="0.72"/>
+    <rect x="19" y="11" width="5" height="10" fill="#fff" fill-opacity="0.72"/>
+    <rect x="28" y="11" width="5" height="10" fill="#fff" fill-opacity="0.72"/>
   </g>
-  <circle cx="2" cy="22" r="2.5" fill="#fff" fill-opacity="0.6"/>
-  <text x="52" y="39" font-family="Georgia,serif" font-size="30" font-weight="400" fill="#ffffff" letter-spacing="0.5">Cine<tspan font-style="italic" fill="#cccccc">List</tspan></text>
+  <circle cx="2" cy="20" r="2.2" fill="#fff" fill-opacity="0.55"/>
+  <text x="46" y="35" font-family="Georgia,serif" font-size="28" font-weight="400" fill="#fff" letter-spacing="0.4">Cine<tspan font-style="italic" fill="#ccc">List</tspan></text>
 </svg></div>
     <div class="auth-tagline">O catálogo de filmes da tropa 🎬</div>
     <div id="authError" style="display:none;background:rgba(229,9,20,.15);border:1px solid var(--red);color:#ff6b6b;padding:10px 14px;border-radius:8px;font-size:13px;margin-bottom:12px;text-align:left"></div>
@@ -2545,16 +2509,6 @@ async function deleteFilmeAdmin(id, btn){
   </div>
 </div>
 
-<!-- MOBILE FILME MODAL -->
-<div id="mobileFilmeModal">
-  <div class="mfm-close">
-    <button class="mfm-close-btn" onclick="closeMobileFilmeModal()">‹</button>
-    <div class="mfm-close-title" id="mfmTitle"></div>
-  </div>
-  <div id="mfmContent"></div>
-</div>
-
-
 <!-- ADMIN MODAL -->
 <div class="profile-overlay" id="adminModal" onclick="if(event.target===this)closeAdmin()">
   <div class="profile-modal" style="max-width:680px;width:100%">
@@ -2570,6 +2524,25 @@ async function deleteFilmeAdmin(id, btn){
     </div>
   </div>
 </div>
+
+<!-- ADMIN MODAL -->
+<div class="profile-overlay" id="adminModal" onclick="if(event.target===this)closeAdmin()">
+  <div class="profile-modal" style="max-width:680px;width:100%">
+    <div class="pm-header"><div class="pm-title">🛠️ Painel Admin</div><button class="pm-close" onclick="closeAdmin()">×</button></div>
+    <div class="pm-body" id="adminBody" style="max-height:70vh;overflow-y:auto"><div style="color:#888;text-align:center;padding:20px">Carregando...</div></div>
+    <div class="pm-footer"><button class="pm-cancel" onclick="closeAdmin()">Fechar</button></div>
+  </div>
+</div>
+
+<!-- MOBILE FILME MODAL -->
+<div id="mobileFilmeModal">
+  <div class="mfm-close">
+    <button class="mfm-close-btn" onclick="closeMobileFilmeModal()">‹</button>
+    <div class="mfm-close-title" id="mfmTitle"></div>
+  </div>
+  <div id="mfmContent"></div>
+</div>
+
 
 </body>
 </html>
