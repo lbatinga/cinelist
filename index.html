@@ -8,6 +8,7 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="CineList">
 <title>CineList</title>
+  <link rel="manifest" href="manifest.json">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
 <style>
@@ -849,7 +850,7 @@ function filmDetailHTML(id){
   const avCount=Object.values(f.avaliacoes).filter(a=>a.nota!==null).length;
   const topAvs=Object.entries(f.avaliacoes).filter(([,a])=>a.nota!==null).sort(([,a],[,b])=>b.nota-a.nota).slice(0,3);
   const avStr=topAvs.map(([uid,av])=>`  • ${USERS[uid]?.nome||uid}: ${fmt(av.nota)}`).join('\n');
-  const appUrl='https://lbatinga.github.io/cinelist/cinelist_login_senha.html';
+  const appUrl='https://lbatinga.github.io/cinelist/';
   const wpp=encodeURIComponent(`🎬 *CineList da Tropa*\n\n*${f.nome}* (${f.ano||'?'})\n⏱ ${f.duracao_str||'—'} · ${f.classificacao||'Livre'}\n🎭 ${f.categorias.slice(0,3).join(', ')||'—'}\n\n${f.media?`⭐ Nota média: *${fmt(f.media)}* (${avCount} avaliação${avCount!==1?'s':''})\n${avStr}`:'📝 Ainda sem avaliações'}\n\n${f.sinopse?f.sinopse.slice(0,150)+(f.sinopse.length>150?'...':''):''}\n\n🔗 Veja no app: ${appUrl}`);
   return `
     <div class="dp-backdrop" style="background-image:url('${esc(f.poster)}')">
@@ -2491,6 +2492,16 @@ window.addEventListener('popstate',()=>{
   <div id="mfmContent"></div>
 </div>
 
+
+<script>
+if('serviceWorker' in navigator){
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('./sw.js')
+      .then(r => console.log('SW registrado:', r.scope))
+      .catch(e => console.log('SW erro:', e));
+  });
+}
+</script>
 
 </body>
 </html>
