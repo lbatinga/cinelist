@@ -306,6 +306,27 @@ tr.selected td{background:rgba(229,9,20,.05)}
 
 
 .form-input:focus { border-color: var(--red) !important; }
+
+/* ── PROFILE & PASSWORD MODALS ── */
+.profile-overlay{display:none;position:fixed;inset:0;z-index:700;background:rgba(0,0,0,.85);align-items:center;justify-content:center;padding:20px;backdrop-filter:blur(6px)}
+.profile-overlay.open{display:flex}
+.profile-modal{background:#181818;border-radius:16px;width:100%;max-width:480px;max-height:90vh;overflow-y:auto;border:1px solid rgba(255,255,255,.1);animation:mIn .22s ease}
+.pm-header{padding:24px 24px 0;display:flex;align-items:center;justify-content:space-between}
+.pm-title{font-size:20px;font-weight:800}
+.pm-close{background:var(--surface2);border:1px solid rgba(255,255,255,.1);color:#fff;width:32px;height:32px;border-radius:50%;cursor:pointer;font-size:18px;display:flex;align-items:center;justify-content:center}
+.pm-close:hover{background:#333}
+.pm-body{padding:20px 24px}
+.pm-field{margin-bottom:16px}
+.pm-label{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:#888;margin-bottom:7px;display:block}
+.pm-input{width:100%;background:#2a2a2a;border:1px solid #333;color:#fff;padding:10px 14px;border-radius:8px;font-family:inherit;font-size:14px;outline:none}
+.pm-input:focus{border-color:var(--red)}
+.pm-footer{padding:0 24px 24px;display:flex;gap:10px;justify-content:flex-end}
+.pm-save{background:var(--red);color:#fff;border:none;padding:10px 24px;border-radius:8px;cursor:pointer;font-family:inherit;font-size:14px;font-weight:800}
+.pm-cancel{background:#2a2a2a;color:#fff;border:1px solid #333;padding:10px 18px;border-radius:8px;cursor:pointer;font-family:inherit;font-size:14px}
+.color-picker{display:flex;gap:8px;flex-wrap:wrap}
+.color-opt{width:28px;height:28px;border-radius:50%;cursor:pointer;border:3px solid transparent;transition:border-color .15s}
+.color-opt.selected{border-color:#fff}
+
 </style>
 </head>
 <body>
@@ -1119,12 +1140,18 @@ Conecte ao Supabase para persistência real.`);
 
 // ── USER MENU ──
 function buildUD(){
-  document.getElementById('udList').innerHTML=Object.entries(USERS).map(([uid,u])=>`
-    <div class="ud-item ${CU===uid?'current':''}" onclick="selectUser('${uid}')">
-      <div class="ud-av" style="background:${aC(uid)}">${ini(u.nome)}</div>
-      <div class="ud-name">${esc(u.nome)}</div>
-      ${CU===uid?'<span class="ud-check">✓</span>':''}
-    </div>`).join('');
+  const el = document.getElementById('udList');
+  if(!el) return;
+  const email = currentSession?.user?.email || '';
+  const nome = USERS[CU]?.nome || '';
+  el.innerHTML = `
+    <div style="padding:6px 10px 2px;font-size:13px;color:#fff;font-weight:600">${esc(nome)}</div>
+    <div style="padding:2px 10px 10px;font-size:11px;color:#666">${email}</div>
+    <div style="height:1px;background:#2a2a2a;margin:4px 0"></div>
+    <div class="ud-item" onclick="openProfile();document.getElementById('userDropdown').classList.remove('open')">✏️ Editar perfil</div>
+    <div class="ud-item" onclick="openChangePassword();document.getElementById('userDropdown').classList.remove('open')">🔑 Alterar senha</div>
+    <div class="ud-item" onclick="logout()" style="color:#e05555">↩️ Sair</div>
+  `;
 }
 
 function toggleUserMenu(){document.getElementById('userDropdown').classList.toggle('open');}
@@ -1726,7 +1753,7 @@ async function onLogin(session){
     
     loadFilmsFromSupabase().then(() => {
       try {
-        if(typeof loadProfiles === "function") loadProfiles();
+        loadProfiles();
         applyUserToUI();
         buildUD();
         renderHome();
@@ -1829,6 +1856,106 @@ function buildUD(){
 
 // INIT — call initAuth instead of buildUD+renderHome
 
+
+// ── PROFILE ──
+const PALETTE = ['#e50914', '#e67e22', '#f5c518', '#2ecc71', '#1abc9c', '#3498db', '#9b59b6', '#e91e63', '#00bcd4', '#ff5722', '#8bc34a', '#607d8b', '#ff9800', '#673ab7', '#009688'];
+var profileData = {};
+var profilePhoto = {};
+
+function loadProfiles(){
+  try {
+    const s = localStorage.getItem('cinelist_profiles');
+    if(s) profileData = JSON.parse(s);
+  } catch(e) {}
+}
+
+function saveProfiles(){
+  try { localStorage.setItem('cinelist_profiles', JSON.stringify(profileData)); } catch(e) {}
+}
+
+function getProfile(uid){ return profileData[uid] || {}; }
+
+function openProfile(){
+  if(!CU) return;
+  const p = getProfile(CU);
+  document.getElementById('pmApelido').value = p.apelido || '';
+  document.getElementById('pmBday').value = p.bday || '';
+  document.getElementById('pmFavFilme').value = p.favFilme || '';
+  document.getElementById('pmBio').value = p.bio || '';
+  const cp = document.getElementById('colorPicker');
+  const cur = p.color || aC(CU);
+  cp.innerHTML = PALETTE.map(c => `<div class="color-opt ${c===cur?'selected':''}" style="background:${c}" onclick="document.querySelectorAll('.color-opt').forEach(b=>b.classList.remove('selected'));this.classList.add('selected')"></div>`).join('');
+  document.getElementById('profileModal').classList.add('open');
+}
+
+function closeProfile(){ document.getElementById('profileModal').classList.remove('open'); }
+
+function saveProfile(){
+  if(!CU) return;
+  const color = document.querySelector('.color-opt.selected')?.style.background || aC(CU);
+  profileData[CU] = {
+    apelido: document.getElementById('pmApelido').value.trim(),
+    bday: document.getElementById('pmBday').value,
+    favFilme: document.getElementById('pmFavFilme').value.trim(),
+    bio: document.getElementById('pmBio').value.trim(),
+    color
+  };
+  saveProfiles();
+  updateTopbarAvatar();
+  closeProfile();
+  showToast('✅ Perfil salvo!');
+}
+
+function updateTopbarAvatar(){
+  if(!CU) return;
+  const p = getProfile(CU);
+  const color = p.color || aC(CU);
+  const name = p.apelido || USERS[CU]?.nome || '?';
+  const av = document.getElementById('userAvatar');
+  if(!av) return;
+  av.style.background = color;
+  av.style.color = '#000';
+  av.textContent = ini(name);
+}
+
+function showToast(msg){
+  const t = document.createElement('div');
+  t.style.cssText = 'position:fixed;bottom:80px;left:50%;transform:translateX(-50%);background:#181818;border:1px solid #333;color:#fff;font-size:13px;font-weight:600;padding:10px 20px;border-radius:30px;z-index:900;white-space:nowrap';
+  t.textContent = msg;
+  document.body.appendChild(t);
+  setTimeout(()=>t.remove(), 2500);
+}
+
+// ── CHANGE PASSWORD ──
+function openChangePassword(){
+  document.getElementById('pwNova').value = '';
+  document.getElementById('pwConfirm').value = '';
+  document.getElementById('pwError').style.display = 'none';
+  document.getElementById('pwSuccess').style.display = 'none';
+  document.getElementById('pwModal').classList.add('open');
+}
+
+function closePwModal(){ document.getElementById('pwModal').classList.remove('open'); }
+
+async function savePassword(){
+  const nova = document.getElementById('pwNova').value;
+  const conf = document.getElementById('pwConfirm').value;
+  const errEl = document.getElementById('pwError');
+  const okEl = document.getElementById('pwSuccess');
+  const btn = document.getElementById('pwSaveBtn');
+  errEl.style.display = 'none'; okEl.style.display = 'none';
+  
+  if(nova.length < 6) { errEl.textContent = 'Senha deve ter pelo menos 6 caracteres.'; errEl.style.display = 'block'; return; }
+  if(nova !== conf) { errEl.textContent = 'As senhas não coincidem.'; errEl.style.display = 'block'; return; }
+  
+  btn.textContent = 'Salvando...'; btn.disabled = true;
+  const { error } = await supa.auth.updateUser({ password: nova });
+  btn.textContent = 'Salvar'; btn.disabled = false;
+  
+  if(error) { errEl.textContent = 'Erro: ' + error.message; errEl.style.display = 'block'; }
+  else { okEl.textContent = '✅ Senha alterada com sucesso!'; okEl.style.display = 'block'; setTimeout(()=>closePwModal(), 2000); }
+}
+
 </script>
 
 <!-- AUTH SCREEN -->
@@ -1843,6 +1970,69 @@ function buildUD(){
       Entrar
     </button>
     <div class="auth-footer">Apenas membros cadastrados têm acesso.</div>
+  </div>
+</div>
+
+
+<!-- PROFILE MODAL -->
+<div class="profile-overlay" id="profileModal" onclick="if(event.target===this)closeProfile()">
+  <div class="profile-modal">
+    <div class="pm-header">
+      <div class="pm-title">Meu Perfil</div>
+      <button class="pm-close" onclick="closeProfile()">×</button>
+    </div>
+    <div class="pm-body">
+      <div class="pm-field">
+        <label class="pm-label">Apelido</label>
+        <input class="pm-input" id="pmApelido" placeholder="Como quer ser chamado?">
+      </div>
+      <div class="pm-field">
+        <label class="pm-label">🎂 Data de Aniversário</label>
+        <input class="pm-input" id="pmBday" type="date">
+      </div>
+      <div class="pm-field">
+        <label class="pm-label">🎬 Filme favorito</label>
+        <input class="pm-input" id="pmFavFilme" placeholder="Fora do catálogo...">
+      </div>
+      <div class="pm-field">
+        <label class="pm-label">📝 Bio</label>
+        <input class="pm-input" id="pmBio" placeholder="Uma frase sobre seu gosto...">
+      </div>
+      <div class="pm-field">
+        <label class="pm-label">🎨 Cor do avatar</label>
+        <div class="color-picker" id="colorPicker"></div>
+      </div>
+    </div>
+    <div class="pm-footer">
+      <button class="pm-cancel" onclick="closeProfile()">Cancelar</button>
+      <button class="pm-save" onclick="saveProfile()">Salvar</button>
+    </div>
+  </div>
+</div>
+
+<!-- CHANGE PASSWORD MODAL -->
+<div class="profile-overlay" id="pwModal" onclick="if(event.target===this)closePwModal()">
+  <div class="profile-modal">
+    <div class="pm-header">
+      <div class="pm-title">Alterar Senha</div>
+      <button class="pm-close" onclick="closePwModal()">×</button>
+    </div>
+    <div class="pm-body">
+      <div id="pwError" style="display:none;background:rgba(229,9,20,.15);border:1px solid #e50914;color:#ff6b6b;padding:10px 14px;border-radius:8px;font-size:13px;margin-bottom:12px"></div>
+      <div id="pwSuccess" style="display:none;background:rgba(70,211,105,.1);border:1px solid #46d369;color:#46d369;padding:10px 14px;border-radius:8px;font-size:13px;margin-bottom:12px"></div>
+      <div class="pm-field">
+        <label class="pm-label">Nova Senha</label>
+        <input class="pm-input" id="pwNova" type="password" placeholder="Mínimo 6 caracteres">
+      </div>
+      <div class="pm-field">
+        <label class="pm-label">Confirmar Nova Senha</label>
+        <input class="pm-input" id="pwConfirm" type="password" placeholder="Repita a senha">
+      </div>
+    </div>
+    <div class="pm-footer">
+      <button class="pm-cancel" onclick="closePwModal()">Cancelar</button>
+      <button class="pm-save" id="pwSaveBtn" onclick="savePassword()">Salvar</button>
+    </div>
   </div>
 </div>
 
