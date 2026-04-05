@@ -612,7 +612,15 @@ const AC = ['#e50914','#e67e22','#3498db','#9b59b6','#1abc9c','#2ecc71','#e91e63
 const UK = Object.keys(USERS);
 const aC = uid=>AC[UK.indexOf(uid)%AC.length];
 const ini = name=>name.split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase();
-const nC = n=>!n?'#777':n>=7?'#46d369':n>=6?'#f5c518':'#e05555';
+const nC = n=>{
+  if(!n) return '#777';
+  if(n>=9)  return '#FFD700'; // ouro
+  if(n>=8)  return '#46d369'; // verde
+  if(n>=7)  return '#8bc34a'; // verde claro
+  if(n>=6)  return '#f5c518'; // amarelo
+  if(n>=5)  return '#ff9800'; // laranja
+  return '#e05555';            // vermelho
+};
 const fmt = n=>n!=null?n.toFixed(2).replace('.',','):'—';
 const INACTIVE_MONTHS = 2;
 function monthsSince(dateStr){
@@ -842,9 +850,21 @@ function filmDetailHTML(id){
     .sort(([,a],[,b])=>b.nota-a.nota);
   const trailerQ=encodeURIComponent(f.nome+' trailer '+f.ano);
   const whereQ=encodeURIComponent('onde assistir '+f.nome);
-  const wpp=encodeURIComponent(`🎬 *${f.nome}* (${f.ano})
-★ ${f.media?fmt(f.media):'—'}
-${f.categorias.join(', ')}`);
+  const avCount=Object.values(f.avaliacoes).filter(a=>a.nota!==null).length;
+  const topAvs=Object.entries(f.avaliacoes).filter(([,a])=>a.nota!==null).sort(([,a],[,b])=>b.nota-a.nota).slice(0,3);
+  const avStr=topAvs.map(([uid,av])=>`  • ${USERS[uid]?.nome||uid}: ${fmt(av.nota)}`).join('\n');
+  const appUrl='https://lbatinga.github.io/cinelist/cinelist_login_senha.html';
+  const wpp=encodeURIComponent(`🎬 *CineList da Tropa*
+
+*${f.nome}* (${f.ano||'?'})
+⏱ ${f.duracao_str||'—'} · ${f.classificacao||'Livre'}
+🎭 ${f.categorias.slice(0,3).join(', ')||'—'}
+
+${f.media?`⭐ Nota média: *${fmt(f.media)}* (${avCount} avaliação${avCount!==1?'s':''})\n${avStr}`:'📝 Ainda sem avaliações'}
+
+${f.sinopse?f.sinopse.slice(0,150)+(f.sinopse.length>150?'...':''):''}
+
+🔗 Veja no app: ${appUrl}`);
   return `
     <div class="dp-backdrop" style="background-image:url('${esc(f.poster)}')">
       <div class="dp-backdrop-grad"></div>
@@ -913,25 +933,45 @@ function openFilme(id){
 }
 
 // ── PENDENTES ──
+function applyPendSort(list){
+  if(pendSortKey==='nota')     list.sort((a,b)=>(b.media||0)-(a.media||0));
+  else if(pendSortKey==='nota_asc') list.sort((a,b)=>(a.media||0)-(b.media||0));
+  else if(pendSortKey==='avals')    list.sort((a,b)=>b.num_avaliacoes-a.num_avaliacoes);
+  else if(pendSortKey==='nome')     list.sort((a,b)=>a.nome.localeCompare(b.nome));
+  else if(pendSortKey==='ano_desc') list.sort((a,b)=>(b.ano||0)-(a.ano||0));
+  else if(pendSortKey==='ano_asc')  list.sort((a,b)=>(a.ano||0)-(b.ano||0));
+}
+
+function setPendSort(val){
+  pendSortKey=val;
+  renderPendentes();
+}
+
+let pendSortKey = 'nota';
+
 function renderPendentes(selId){
   if(!CU){showNeedLogin('viewPendentes');return;}
   const s=STATS[CU];
   let list=s.pendentes.map(id=>FM[id]).filter(Boolean);
   if(searchQ) list=list.filter(f=>f.nome.toLowerCase().includes(searchQ));
-  list.sort((a,b)=>{
-    if((b.media||0)!==(a.media||0)) return (b.media||0)-(a.media||0);
-    if(b.num_avaliacoes!==a.num_avaliacoes) return b.num_avaliacoes-a.num_avaliacoes;
-    return (a.data_ts||0)-(b.data_ts||0);
-  });
+  applyPendSort(list);
   navList=list;
   const sid=selId||(list[0]?.id);
-  
+
   document.getElementById('viewPendentes').innerHTML=`
     <div class="detail-layout">
       <div class="detail-list">
         <div class="tpage" style="padding-bottom:0">
           <div class="tpage-header">
             <div class="tpage-title">Meus Pendentes <span style="color:var(--muted);font-size:13px;font-weight:400">${list.length}</span></div>
+            <select id="pendSortSel" onchange="setPendSort(this.value)" style="background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:5px 10px;border-radius:8px;font-size:12px;cursor:pointer;font-family:inherit">
+              <option value="nota" ${pendSortKey==='nota'?'selected':''}>★ Maior nota</option>
+              <option value="nota_asc" ${pendSortKey==='nota_asc'?'selected':''}>★ Menor nota</option>
+              <option value="avals" ${pendSortKey==='avals'?'selected':''}>↑ Mais avaliados</option>
+              <option value="nome" ${pendSortKey==='nome'?'selected':''}>A–Z Nome</option>
+              <option value="ano_desc" ${pendSortKey==='ano_desc'?'selected':''}>📅 Mais recente</option>
+              <option value="ano_asc" ${pendSortKey==='ano_asc'?'selected':''}>📅 Mais antigo</option>
+            </select>
           </div>
         </div>
         <table>
@@ -1014,6 +1054,7 @@ function openAvPanel(id){
 function renderRecentes(){
   let list=RECENT_IDS.map(id=>FM[id]).filter(Boolean);
   if(searchQ) list=list.filter(f=>f.nome.toLowerCase().includes(searchQ));
+  list.sort((a,b)=>(b.media||0)-(a.media||0));
   navList=list;
   const el=document.getElementById('viewRecentes');
   if(!list.length){
@@ -1721,7 +1762,7 @@ function rankStatsHTML(){
             <tbody>
             ${members.sort((a,b)=>b.quant-a.quant).map(m=>`<tr style="${!isActive(m)?'opacity:.55':''}">
               <td style="text-align:left;font-weight:700">${esc(m.nome)}</td>
-              <td><span style="font-size:10px;font-weight:700;padding:2px 7px;border-radius:10px;background:${isActive(m)?'rgba(70,211,105,.15)':'rgba(100,100,100,.2)'};color:${isActive(m)?'var(--green)':'var(--muted)'}">${isActive(m)?'●':'○'}</span></td>
+              <td><span style="font-size:10px;font-weight:700;padding:2px 7px;border-radius:10px;background:${isActive(m)?'rgba(70,211,105,.15)':'rgba(60,60,60,.3)'};color:${isActive(m)?'var(--green)':'#888'}">${isActive(m)?'●':'○'}</span></td>
               <td style="color:var(--green)">${m.quant}</td>
               <td style="color:var(--yellow)">${m.media?fmt(m.media):'—'}</td>
               <td style="color:var(--muted)">${m.pendentes.length}</td>
