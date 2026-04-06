@@ -1946,6 +1946,8 @@ async function onLogin(session){
     CU = usuario.legacy_id;
     history.replaceState(null, '', window.location.pathname);
     hideAuthScreen();
+    window.CU_EMAIL = email;
+    window.dispatchEvent(new Event('cinelist:login'));
     
     loadFilmsFromSupabase().then(() => {
       try {
@@ -2493,12 +2495,94 @@ window.addEventListener('popstate',()=>{
 </div>
 
 
+<script type="module">
+// ===== FIREBASE FCM =====
+import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js';
+import { getMessaging, getToken, onMessage } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-messaging.js';
+
+const firebaseConfig = {
+  apiKey: "AIzaSyBj3dOMt3v6zw3SHAGdnBEWB_BuDYVBBD0",
+  authDomain: "cinelist-new.firebaseapp.com",
+  projectId: "cinelist-new",
+  storageBucket: "cinelist-new.firebasestorage.app",
+  messagingSenderId: "101304466431",
+  appId: "1:101304466431:web:22b0367c1845ee8404c5ca"
+};
+
+const VAPID_KEY = "BFxhuP8nULdLvH6IwV7OwIXxyAjTaFB68lfPCNLjAaF9Vff1G58NOC0cvXiPlcX2u6TskdwGAgqJ4oC88-ApeWo";
+const SUPABASE_URL = "https://gxwbxrnoqhkjwqfzmdpz.supabase.co";
+const SUPABASE_KEY = document.querySelector('script[src*="supabase"]') ? null : null; // usamos o supa já inicializado
+
+window.fbApp = initializeApp(firebaseConfig);
+window.fbMessaging = getMessaging(window.fbApp);
+
+async function registerFCM() {
+  try {
+    // Registra SW
+    const swReg = await navigator.serviceWorker.register('./sw.js');
+    
+    // Pede permissão
+    const perm = await Notification.requestPermission();
+    if (perm !== 'granted') return;
+
+    // Pega token FCM
+    const token = await getToken(window.fbMessaging, {
+      vapidKey: VAPID_KEY,
+      serviceWorkerRegistration: swReg
+    });
+
+    if (token) {
+      console.log('FCM token:', token);
+      // Salva token no Supabase vinculado ao usuário
+      window._fcmToken = token;
+      await saveFCMToken(token);
+    }
+  } catch(e) {
+    console.warn('FCM registro falhou:', e);
+  }
+}
+
+async function saveFCMToken(token) {
+  try {
+    const uid = window.CU_EMAIL || '';
+    if (!uid) return;
+    // Usa o cliente Supabase já inicializado globalmente
+    await window.supa.from('fcm_tokens').upsert({
+      email: uid,
+      token: token,
+      updated_at: new Date().toISOString()
+    }, { onConflict: 'email' });
+    console.log('Token FCM salvo!');
+  } catch(e) {
+    console.warn('Erro ao salvar token:', e);
+  }
+}
+
+// Notificação em foreground (app aberto)
+onMessage(window.fbMessaging, (payload) => {
+  console.log('Mensagem recebida:', payload);
+  const { title, body } = payload.notification || {};
+  if (title) {
+    // Mostra como toast no app
+    if (window.showToast) window.showToast('🔔 ' + title + (body ? ': ' + body : ''));
+  }
+});
+
+// Registra ao fazer login
+window.addEventListener('cinelist:login', () => {
+  if ('serviceWorker' in navigator && 'Notification' in window) {
+    registerFCM();
+  }
+});
+</script>
+
 <script>
-if('serviceWorker' in navigator){
+// Service Worker registration
+if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
     navigator.serviceWorker.register('./sw.js')
       .then(r => console.log('SW registrado:', r.scope))
-      .catch(e => console.log('SW erro:', e));
+      .catch(e => console.warn('SW erro:', e));
   });
 }
 </script>
