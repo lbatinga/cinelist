@@ -1436,8 +1436,10 @@ async function cadastrarBiometria(){
 // Verifica disponibilidade e mostra botão
 async function initBiometricButton(){
   const available = await checkBiometricAvailable();
-  const btn = document.getElementById('biometricBtn');
-  if(available && btn) btn.style.display = 'flex';
+  const wrap = document.getElementById('bioWrap');
+  if(available && wrap){
+    wrap.innerHTML = `<button onclick="loginBiometrico()" style="width:100%;background:#2a2a2a;border:1px solid #444;color:#fff;padding:12px;border-radius:10px;font-family:inherit;font-size:14px;font-weight:600;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;margin-bottom:12px"><span style="font-size:18px">🔐</span> Entrar com biometria</button>`;
+  }
 }
 
 // INIT
@@ -2069,7 +2071,7 @@ function showAuthScreen(){
     </button>
     <div style="margin-top:12px" id="bioWrap"></div>
     <div class="auth-footer">Apenas membros cadastrados têm acesso.</div>
-  \`;
+  `;
   initBiometricButton();
 }
 
