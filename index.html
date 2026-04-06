@@ -1567,7 +1567,7 @@ async function initBiometricButton(){
 }
 
 // INIT
-initAuth();
+showAuthScreen();
 
 // ── RANKING V2 ──
 let rankTab = 'geral', rankYear = RAW.anos[0]||'2025', rankGenre = RAW.all_genres[0]||'Ação';
@@ -2052,38 +2052,11 @@ const SUPA_KEY = SUPA_KEY2;
 
 // AUTH
 async function initAuth(){
-  // Always listen for auth changes first (catches OAuth callbacks)
-  supa.auth.onAuthStateChange(async (event, session) => {
-    if(event === 'SIGNED_IN' && session) await onLogin(session);
+  // Apenas detecta logout
+  supa.auth.onAuthStateChange((event, session) => {
     if(event === 'SIGNED_OUT') showAuthScreen();
   });
-
-  try {
-    // Check for existing/returning session
-    const { data: { session } } = await supa.auth.getSession();
-    
-    if(session) {
-      await onLogin(session);
-      return;
-    }
-    
-    // If URL has OAuth tokens, wait for onAuthStateChange to fire
-    const hash = window.location.hash;
-    if(hash && hash.includes('access_token')) {
-      setTimeout(() => {
-        const loader = document.getElementById('startLoader');
-        if(loader && loader.style.display !== 'none') showAuthScreen();
-      }, 4000);
-      return;
-    }
-    
-    // No session = show login
-    showAuthScreen();
-    
-  } catch(e) {
-    console.error('initAuth error:', e);
-    showAuthScreen();
-  }
+  showAuthScreen();
 }
 
 async function loginEmailSenha(){
