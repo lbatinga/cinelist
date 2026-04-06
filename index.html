@@ -1399,46 +1399,60 @@ document.getElementById('addModal').addEventListener('click',e=>{if(e.target===d
 
 
 // ═══════════════════════════════════════════
-// BIOMETRIA (WebAuthn / Passkey via Supabase)
+// BIOMETRIA via Credential Management API
+// O navegador salva email+senha e usa biometria do dispositivo para desbloquear
 // ═══════════════════════════════════════════
 async function checkBiometricAvailable(){
   try {
-    if(!window.PublicKeyCredential) return false;
-    const available = await PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable();
-    return available;
+    return !!(window.PasswordCredential || window.FederatedCredential);
   } catch(e) { return false; }
 }
 
 async function loginBiometrico(){
   try {
-    showToast('⏳ Aguardando biometria...');
-    const { data, error } = await supa.auth.signInWithPasskey();
-    if(error) throw error;
-    if(data?.session) await onLogin(data.session);
+    const cred = await navigator.credentials.get({
+      password: true,
+      mediation: 'required' // força confirmação biométrica
+    });
+    if(!cred) { showToast('❌ Nenhuma credencial salva.'); return; }
+    
+    document.getElementById('loginEmail').value = cred.id;
+    document.getElementById('loginSenha').value = cred.password;
+    showToast('⏳ Entrando...');
+    await loginEmailSenha();
   } catch(e) {
-    showToast('❌ Erro na biometria: ' + e.message);
+    showToast('❌ Biometria cancelada ou não disponível.');
+  }
+}
+
+async function salvarCredencialNavegador(email, senha){
+  try {
+    if(!window.PasswordCredential) return;
+    const cred = new PasswordCredential({ id: email, password: senha, name: email });
+    await navigator.credentials.store(cred);
+    console.log('Credencial salva no navegador');
+  } catch(e) {
+    console.warn('Não foi possível salvar credencial:', e);
   }
 }
 
 async function cadastrarBiometria(){
-  try {
-    if(!currentSession) { showToast('⚠️ Faça login primeiro!'); return; }
-    showToast('⏳ Cadastrando biometria...');
-    const { data, error } = await supa.auth.enroll({ factorType: 'passkey' });
-    if(error) throw error;
-    showToast('✅ Biometria cadastrada!');
-    buildUD();
-  } catch(e) {
-    showToast('❌ Erro: ' + e.message);
-  }
+  showToast('💡 A biometria usa as credenciais salvas no navegador. Faça login normalmente e o navegador vai oferecer salvar — aceite para habilitar o login biométrico!');
 }
 
-// Verifica disponibilidade e mostra botão
 async function initBiometricButton(){
   const available = await checkBiometricAvailable();
   const wrap = document.getElementById('bioWrap');
   if(available && wrap){
-    wrap.innerHTML = `<button onclick="loginBiometrico()" style="width:100%;background:#2a2a2a;border:1px solid #444;color:#fff;padding:12px;border-radius:10px;font-family:inherit;font-size:14px;font-weight:600;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;margin-bottom:12px"><span style="font-size:18px">🔐</span> Entrar com biometria</button>`;
+    // Verifica se há credencial salva
+    try {
+      const cred = await navigator.credentials.get({ password: true, mediation: 'silent' });
+      if(cred){
+        wrap.innerHTML = `<button onclick="loginBiometrico()" style="width:100%;background:#2a2a2a;border:1px solid #444;color:#fff;padding:12px;border-radius:10px;font-family:inherit;font-size:14px;font-weight:600;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;margin-bottom:12px"><span style="font-size:18px">🔐</span> Entrar com biometria</button>`;
+      }
+    } catch(e) {
+      // Sem credencial salva — não mostra o botão
+    }
   }
 }
 
@@ -1969,7 +1983,10 @@ async function loginEmailSenha(){
     if(errEl){ errEl.textContent = 'E-mail ou senha incorretos.'; errEl.style.display = 'block'; }
     return;
   }
-  if(data.session) await onLogin(data.session);
+  if(data.session){
+    await salvarCredencialNavegador(email, senha);
+    await onLogin(data.session);
+  }
 }
 async function loginGoogle(){ loginEmailSenha(); }
 
