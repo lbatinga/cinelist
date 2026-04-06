@@ -599,6 +599,10 @@ async function loadFilmsFromSupabase() {
     RECENT_IDS = getRecentIds();
     RAW.recent_ids = RECENT_IDS;
     
+    // Calcula estatísticas dinâmicas
+    document.getElementById('loaderMsg').textContent = 'Calculando estatísticas...';
+    calcUserStats();
+    
     document.getElementById('loaderMsg').textContent = 'Pronto!';
     console.log(`✅ Loaded ${RAW.filmes.length} films, ${allAvaliacoes.length} ratings, ${RECENT_IDS.length} recentes`);
     return true;
@@ -606,6 +610,110 @@ async function loadFilmsFromSupabase() {
     console.error('Error loading films:', e);
     return false;
   }
+}
+
+
+// ═══════════════════════════════════════════
+// CÁLCULO DINÂMICO DE ESTATÍSTICAS
+// ═══════════════════════════════════════════
+function calcUserStats(){
+  const uids = Object.keys(USERS).filter(u => u !== 'USER-001');
+  
+  // Mapa de filmes inseridos por usuário
+  const insertedBy = {};
+  FILMES.forEach(f => {
+    const uid = f.inserido_por;
+    if(!insertedBy[uid]) insertedBy[uid] = [];
+    insertedBy[uid].push(f.id);
+  });
+
+  uids.forEach(uid => {
+    const s = STATS[uid];
+    if(!s) return;
+
+    // Avaliações deste usuário
+    const minhasAvs = FILMES
+      .filter(f => f.avaliacoes[uid] && f.avaliacoes[uid].nota !== null)
+      .map(f => ({ ...f.avaliacoes[uid], id: f.id, nome: f.nome, poster: f.poster, categorias: f.categorias, ano: f.ano }));
+
+    // Quant e media
+    s.quant = minhasAvs.length;
+    s.media = minhasAvs.length
+      ? Math.round(100 * minhasAvs.reduce((a,b) => a + b.nota, 0) / minhasAvs.length) / 100
+      : null;
+
+    // Inseridos
+    s.inseridos = insertedBy[uid] || [];
+
+    // Pendentes = filmes sem avaliação deste user (excluindo nao_quer)
+    const avSet = new Set(minhasAvs.map(a => a.id));
+    const naoQuerSet = new Set(s.nao_quer || []);
+    s.pendentes = FILMES
+      .filter(f => !avSet.has(f.id) && !naoQuerSet.has(f.id))
+      .map(f => f.id);
+
+    // Ultima avaliação (mais recente)
+    const datas = minhasAvs
+      .filter(a => a.data)
+      .map(a => {
+        const p = a.data.split('/');
+        return p.length === 3 ? new Date(parseInt(p[2]), parseInt(p[1])-1, parseInt(p[0])) : null;
+      }).filter(Boolean);
+    if(datas.length){
+      const maxD = new Date(Math.max(...datas));
+      s.ultima_av = `${String(maxD.getDate()).padStart(2,'0')}/${String(maxD.getMonth()+1).padStart(2,'0')}/${maxD.getFullYear()}`;
+    }
+
+    // Top5 e Bot5
+    const sorted = [...minhasAvs].sort((a,b) => b.nota - a.nota);
+    s.top5_dyn = sorted.slice(0,5).map(a => ({ id:a.id, nome:a.nome, nota:a.nota, poster:a.poster }));
+    s.bot5_dyn = sorted.slice(-5).reverse().map(a => ({ id:a.id, nome:a.nome, nota:a.nota, poster:a.poster }));
+
+    // By year
+    s.by_year = {};
+    minhasAvs.forEach(a => {
+      const ano = a.data ? a.data.split('/')[2] : null;
+      if(ano){ s.by_year[ano] = (s.by_year[ano]||0) + 1; }
+    });
+
+    // By genre e genre_avg
+    s.by_genre = {}; s.genre_avg = {};
+    const genreNotas = {};
+    minhasAvs.forEach(a => {
+      (a.categorias||[]).forEach(g => {
+        s.by_genre[g] = (s.by_genre[g]||0) + 1;
+        if(!genreNotas[g]) genreNotas[g] = [];
+        genreNotas[g].push(a.nota);
+      });
+    });
+    Object.entries(genreNotas).forEach(([g, notas]) => {
+      s.genre_avg[g] = Math.round(100 * notas.reduce((a,b)=>a+b,0) / notas.length) / 100;
+    });
+
+    // Fav genre
+    if(Object.keys(s.by_genre).length){
+      s.fav_genre = Object.entries(s.by_genre).sort((a,b)=>b[1]-a[1])[0][0];
+      s.fav_genre_avg = s.genre_avg[s.fav_genre] || null;
+    }
+  });
+
+  // ── Estatísticas globais dinâmicas ──
+  const gs = RAW.global_stats;
+  gs.total_filmes = FILMES.length;
+  gs.total_avaliacoes = FILMES.reduce((s,f) => s + f.num_avaliacoes, 0);
+  const todasNotas = FILMES.flatMap(f => Object.values(f.avaliacoes).map(a=>a.nota).filter(n=>n!==null));
+  gs.avg_nota = todasNotas.length ? Math.round(100 * todasNotas.reduce((a,b)=>a+b,0)/todasNotas.length)/100 : 0;
+  
+  // Genre counts global
+  gs.genre_counts = {};
+  FILMES.forEach(f => f.categorias.forEach(g => { gs.genre_counts[g] = (gs.genre_counts[g]||0) + 1; }));
+  gs.top_genre = Object.entries(gs.genre_counts).sort((a,b)=>b[1]-a[1])[0]?.[0] || 'Ação';
+
+  // Total tempo de catálogo
+  const totalMin = FILMES.reduce((s,f) => s + (f.duracao_min||0), 0);
+  gs.total_catalog_days = Math.round(totalMin / 1440);
+
+  console.log(`✅ Stats calculadas: ${gs.total_filmes} filmes, ${gs.total_avaliacoes} avaliações`);
 }
 
 var FM = FILMES_MAP; // alias
@@ -730,7 +838,7 @@ function heroSlideContent(i){
   return `
     <div class="hero-title">${esc(f.nome)}</div>
     <div class="hero-meta">
-      <span class="hero-score">★ ${fmt(f.media)}</span>
+      <span class="hero-score" style="color:${nC(f.media)}">★ ${fmt(f.media)}</span>
       <span>${f.ano}</span><span>${f.duracao_str}</span>
       <span style="font-size:10px;font-weight:700;padding:2px 7px;border-radius:3px;border:1px solid #666;color:#aaa">${f.classificacao}</span>
     </div>
@@ -1600,7 +1708,7 @@ function openUserYearDetail(uid, year){
         ${f.poster?`<img src="${esc(f.poster)}" style="width:100%;aspect-ratio:2/3;object-fit:cover" loading="lazy" onerror="this.style.display='none'">`:''}
         <div style="padding:5px 7px">
           <div style="font-size:10px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(f.nome)}</div>
-          <div style="font-size:13px;font-weight:800;color:var(--green)">★ ${fmt(f.avaliacoes[uid].nota)}</div>
+          <div style="font-size:13px;font-weight:800;color:${nC(f.avaliacoes[uid].nota)}">★ ${fmt(f.avaliacoes[uid].nota)}</div>
         </div>
       </div>`).join('')}
     </div>
@@ -1671,7 +1779,7 @@ function rankGeneroHTML(){
             </div>
             <div style="text-align:right;flex-shrink:0">
               <div style="font-size:18px;font-weight:900;color:var(--green)">${m.cnt}</div>
-              ${m.avg?`<div style="font-size:10px;color:var(--muted)">média ${m.avg}</div>`:''}
+              ${m.avg?`<div style="font-size:10px;color:${nC(m.avg)}">média ${m.avg}</div>`:''}
             </div>
           </div>`;
         }).join('')}
@@ -1724,6 +1832,16 @@ function rankStatsHTML(){
 
   // Personal stats
   const personal = CU && RAW.user_personal?.[CU];
+      const ps_dyn = CU && STATS[CU];
+      // Usa top5/bot5 dinâmicos se disponíveis
+      if(ps_dyn && ps_dyn.top5_dyn) {
+        if(!personal) {} else {
+          personal.top5 = ps_dyn.top5_dyn;
+          personal.bot5 = ps_dyn.bot5_dyn;
+          personal.fav_genre = ps_dyn.fav_genre || personal.fav_genre;
+          personal.fav_genre_avg = ps_dyn.fav_genre_avg || personal.fav_genre_avg;
+        }
+      }
   const ps = CU ? RAW.users_stats[CU] : null;
 
   return `
@@ -1873,7 +1991,7 @@ function rankStatsHTML(){
               <div style="font-size:14px;font-weight:900;width:20px;text-align:center;color:var(--muted2)">${i+1}</div>
               ${f.poster?`<img src="${esc(f.poster)}" style="width:28px;height:42px;object-fit:cover;border-radius:3px;flex-shrink:0" onerror="this.style.display='none'">`:''}
               <div style="flex:1;min-width:0"><div style="font-size:12px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(f.nome)}</div></div>
-              <div style="font-size:15px;font-weight:800;color:var(--green)">${fmt(f.nota)}</div>
+              <div style="font-size:15px;font-weight:800;color:${nC(f.nota)}">${fmt(f.nota)}</div>
             </div>`).join('')}
           </div>
           <div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:16px">
@@ -1882,7 +2000,7 @@ function rankStatsHTML(){
               <div style="font-size:14px;font-weight:900;width:20px;text-align:center;color:var(--muted2)">${i+1}</div>
               ${f.poster?`<img src="${esc(f.poster)}" style="width:28px;height:42px;object-fit:cover;border-radius:3px;flex-shrink:0" onerror="this.style.display='none'">`:''}
               <div style="flex:1;min-width:0"><div style="font-size:12px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(f.nome)}</div></div>
-              <div style="font-size:15px;font-weight:800;color:#e05555">${fmt(f.nota)}</div>
+              <div style="font-size:15px;font-weight:800;color:${nC(f.nota)}">${fmt(f.nota)}</div>
             </div>`).join('')}
           </div>
         </div>
