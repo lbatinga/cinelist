@@ -339,22 +339,6 @@ tr.selected td{background:rgba(229,9,20,.05)}
 .color-opt{width:28px;height:28px;border-radius:50%;cursor:pointer;border:3px solid transparent;transition:border-color .15s}
 .color-opt.selected{border-color:#fff}
 
-
-/* ── iOS / iPhone fixes ── */
-@supports (-webkit-touch-callout: none) {
-  .topbar { padding-left: 12px; padding-right: 12px; }
-  .tpage-header { flex-wrap: wrap; gap: 8px; }
-  .btn-add { flex-shrink: 0; }
-}
-@media(max-width:768px){
-  .tpage-header { 
-    padding-right: 0;
-    flex-wrap: wrap;
-  }
-  .tpage { padding: 12px 12px 0; }
-  .search-box.open { width: 160px; }
-}
-
 </style>
 </head>
 <body>
@@ -609,8 +593,12 @@ async function loadFilmsFromSupabase() {
     FILMES.length = 0;
     RAW.filmes.forEach(f => FILMES.push(f));
     
+    // Atualiza RECENT_IDS dinamicamente
+    RECENT_IDS = getRecentIds();
+    RAW.recent_ids = RECENT_IDS;
+    
     document.getElementById('loaderMsg').textContent = 'Pronto!';
-    console.log(`✅ Loaded ${RAW.filmes.length} films, ${allAvaliacoes.length} ratings`);
+    console.log(`✅ Loaded ${RAW.filmes.length} films, ${allAvaliacoes.length} ratings, ${RECENT_IDS.length} recentes`);
     return true;
   } catch(e) {
     console.error('Error loading films:', e);
@@ -622,7 +610,20 @@ var FM = FILMES_MAP; // alias
 // FILMES_MAP populated from Supabase after login
 const USERS = RAW.usuarios;
 const STATS = RAW.users_stats;
-const RECENT_IDS = RAW.recent_ids;
+// RECENT_IDS dinâmico: filmes adicionados nos últimos 10 dias
+function getRecentIds(){
+  const cutoff = new Date();
+  cutoff.setDate(cutoff.getDate() - 10);
+  return FILMES
+    .filter(f => {
+      if(!f.data_ts && !f.data_cadastro) return false;
+      const d = f.data_ts ? new Date(f.data_ts) : new Date(f.data_cadastro);
+      return d >= cutoff;
+    })
+    .sort((a,b) => new Date(b.data_ts||b.data_cadastro) - new Date(a.data_ts||a.data_cadastro))
+    .map(f => f.id);
+}
+let RECENT_IDS = RAW.recent_ids; // será atualizado após load
 
 const AC = ['#e50914','#e67e22','#3498db','#9b59b6','#1abc9c','#2ecc71','#e91e63','#00bcd4','#8bc34a'];
 const UK = Object.keys(USERS);
@@ -1107,7 +1108,7 @@ function renderRanking_old_unused(){
           </div>
           <div class="rank-stats">
             <div class="rstat"><div class="rstat-n" style="color:var(--green)">${s.quant}</div><div class="rstat-l">Assistidos</div></div>
-            <div class="rstat"><div class="rstat-n" style="color:var(--yellow)">${s.media?fmt(s.media):'—'}</div><div class="rstat-l">Média</div></div>
+            <div class="rstat"><div class="rstat-n" style="color:${s.media?nC(s.media):'var(--muted2)'}">${s.media?fmt(s.media):'—'}</div><div class="rstat-l">Média</div></div>
             <div class="rstat"><div class="rstat-n" style="color:var(--muted)">${s.pendentes.length}</div><div class="rstat-l">Pendentes</div></div>
           </div>
         </div>`;
@@ -1157,6 +1158,7 @@ async function saveRating(){
   if(btn){btn.textContent='Salvando...';btn.disabled=true;}
 
   try{
+    // Salva no Supabase
     const {error}=await supa.from('avaliacoes').upsert({
       filme_id: rateFilmeId,
       usuario_id: CU,
@@ -1167,14 +1169,17 @@ async function saveRating(){
     },{onConflict:'filme_id,usuario_id'});
     if(error) throw error;
 
+    // Atualiza memória local
     const f=FM[rateFilmeId];
     if(!f.avaliacoes[CU]) f.avaliacoes[CU]={};
     f.avaliacoes[CU]={nota,vai:vaiVal,data:data.split('-').reverse().join('/'),comentario:coment};
 
+    // Recalc media
     const notas=Object.values(f.avaliacoes).filter(a=>a.nota!==null).map(a=>a.nota);
     f.media=notas.length?Math.round(100*notas.reduce((s,n)=>s+n,0)/notas.length)/100:null;
     f.num_avaliacoes=notas.length;
 
+    // Remove dos pendentes locais
     const st=STATS[CU];
     st.pendentes=st.pendentes.filter(id=>id!==rateFilmeId);
     if(!st.quant) st.quant=0;
@@ -1182,7 +1187,7 @@ async function saveRating(){
 
     closeModal('rateModal');
     render();
-    showToast('✅ Nota ' + fmt(nota) + ' salva!');
+    showToast(`✅ Nota ${fmt(nota)} salva!`);
   }catch(e){
     showToast('❌ Erro ao salvar: '+e.message);
   }finally{
@@ -1333,8 +1338,10 @@ async function saveFilme(){
     // Add to local data
     const f={...filme, id:data.id||newId, avaliacoes:{}, media:null, num_avaliacoes:0, is_recent:true, data_ts:new Date().toISOString()};
     FILMES.unshift(f);
-    FILMES_MAP[data.id]=f;
+    FILMES_MAP[data.id||newId]=f;
     RAW.filmes.unshift(f);
+    RECENT_IDS = getRecentIds();
+    RAW.recent_ids = RECENT_IDS;
     
     closeModal('addModal');
     renderHome();
@@ -1358,6 +1365,7 @@ function buildUD(){
     <div style="padding:2px 10px 10px;font-size:11px;color:#666">${email}</div>
     <div style="height:1px;background:#2a2a2a;margin:4px 0"></div>
     <div class="ud-item" onclick="openProfile();document.getElementById('userDropdown').classList.remove('open')">✏️ Editar perfil</div>
+    <div class="ud-item" onclick="cadastrarBiometria();document.getElementById('userDropdown').classList.remove('open')">🔐 Cadastrar biometria</div>
     <div class="ud-item" onclick="openChangePassword();document.getElementById('userDropdown').classList.remove('open')">🔑 Alterar senha</div>
     ${email === 'lwbarbosab@gmail.com' ? '<div class="ud-item" style="color:#f5c518" onclick="openAdmin();document.getElementById(\'userDropdown\').classList.remove(\'open\')">🛠️ Painel Admin</div>' : ''}
     ${(typeof Notification !== 'undefined' && Notification.permission !== 'granted') ? '<div class="ud-item" style="color:#00bcd4" onclick="ativarNotificacoes();document.getElementById(\'userDropdown\').classList.remove(\'open\')">🔔 Ativar notificações</div>' : '<div class="ud-item" style="color:#46d369;cursor:default">🔔 Notificações ativas ✓</div>'}
@@ -1389,10 +1397,51 @@ function closeModalIfBg(id){return e=>{if(e.target===document.getElementById(id)
 document.getElementById('rateModal').addEventListener('click',e=>{if(e.target===document.getElementById('rateModal'))closeModal('rateModal');});
 document.getElementById('addModal').addEventListener('click',e=>{if(e.target===document.getElementById('addModal'))closeModal('addModal');});
 
+
+// ═══════════════════════════════════════════
+// BIOMETRIA (WebAuthn / Passkey via Supabase)
+// ═══════════════════════════════════════════
+async function checkBiometricAvailable(){
+  try {
+    if(!window.PublicKeyCredential) return false;
+    const available = await PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable();
+    return available;
+  } catch(e) { return false; }
+}
+
+async function loginBiometrico(){
+  try {
+    showToast('⏳ Aguardando biometria...');
+    const { data, error } = await supa.auth.signInWithPasskey();
+    if(error) throw error;
+    if(data?.session) await onLogin(data.session);
+  } catch(e) {
+    showToast('❌ Erro na biometria: ' + e.message);
+  }
+}
+
+async function cadastrarBiometria(){
+  try {
+    if(!currentSession) { showToast('⚠️ Faça login primeiro!'); return; }
+    showToast('⏳ Cadastrando biometria...');
+    const { data, error } = await supa.auth.enroll({ factorType: 'passkey' });
+    if(error) throw error;
+    showToast('✅ Biometria cadastrada!');
+    buildUD();
+  } catch(e) {
+    showToast('❌ Erro: ' + e.message);
+  }
+}
+
+// Verifica disponibilidade e mostra botão
+async function initBiometricButton(){
+  const available = await checkBiometricAvailable();
+  const btn = document.getElementById('biometricBtn');
+  if(available && btn) btn.style.display = 'flex';
+}
+
 // INIT
-buildUD();
-renderHome();
-setTimeout(()=>toggleUserMenu(),400);
+initAuth();
 
 // ── RANKING V2 ──
 let rankTab = 'geral', rankYear = RAW.anos[0]||'2025', rankGenre = RAW.all_genres[0]||'Ação';
@@ -1443,7 +1492,7 @@ function rankGeralHTML(){
       </div>
       <div class="rank-stats">
         <div class="rstat"><div class="rstat-n" style="color:var(--green)">${s.quant}</div><div class="rstat-l">Assistidos</div></div>
-        <div class="rstat"><div class="rstat-n" style="color:var(--yellow)">${s.media?fmt(s.media):'—'}</div><div class="rstat-l">Média</div></div>
+        <div class="rstat"><div class="rstat-n" style="color:${s.media?nC(s.media):'var(--muted2)'}">${s.media?fmt(s.media):'—'}</div><div class="rstat-l">Média</div></div>
         <div class="rstat"><div class="rstat-n" style="color:var(--muted)">${s.pendentes.length}</div><div class="rstat-l">Pendentes</div></div>
       </div>
     </div>`;
@@ -2018,8 +2067,10 @@ function showAuthScreen(){
     <button class="auth-btn auth-btn-google" onclick="loginEmailSenha()" style="justify-content:center;font-size:15px;font-weight:700">
       Entrar
     </button>
+    <div style="margin-top:12px" id="bioWrap"></div>
     <div class="auth-footer">Apenas membros cadastrados têm acesso.</div>
-  `;
+  \`;
+  initBiometricButton();
 }
 
 function showAuthLoading(){
@@ -2483,6 +2534,11 @@ window.addEventListener('popstate',()=>{
     <button class="auth-btn auth-btn-google" onclick="loginEmailSenha()" style="justify-content:center;font-size:15px;font-weight:700">
       Entrar
     </button>
+    <div style="margin-top:12px">
+    <button id="biometricBtn" onclick="loginBiometrico()" style="display:none;width:100%;background:#2a2a2a;border:1px solid #444;color:#fff;padding:12px;border-radius:10px;font-family:inherit;font-size:14px;font-weight:600;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px">
+      <span style="font-size:18px">🔐</span> Entrar com biometria
+    </button>
+  </div>
     <div class="auth-footer">Apenas membros cadastrados têm acesso.</div>
   </div>
 </div>
