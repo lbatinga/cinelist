@@ -426,30 +426,32 @@ tr.selected td{background:rgba(229,9,20,.05)}
 <!-- RATE MODAL -->
 <div class="modal-overlay" id="rateModal" onclick="closeModalIfBg('rateModal')">
   <div class="modal-box">
-    <div class="modal-title">Dê a sua nota</div>
+    <div class="modal-title">Avaliar Filme</div>
     <div class="modal-film" id="rateFilmName"></div>
     <div class="form-group">
-      <label class="form-label">Nota (0 a 10)</label>
-      <div class="nota-input-wrap">
-        <button class="nota-btn" onclick="changeNota(-0.1)">−</button>
-        <input type="number" id="notaInput" min="0" max="10" step="0.1" value="0.00">
-        <button class="nota-btn" onclick="changeNota(0.1)">+</button>
-      </div>
-    </div>
-    <div class="form-group">
-      <label class="form-label">Vai Assistir?</label>
+      <label class="form-label">Já assistiu?</label>
       <div class="vai-btns">
-        <button class="vai-btn active" id="vaiBtnSim" onclick="setVai('Sim')">Sim</button>
-        <button class="vai-btn" id="vaiBtnNao" onclick="setVai('Não')">Não</button>
+        <button class="vai-btn active" id="vaiBtnSim" onclick="setVai('Sim')">✅ Sim, já assisti</button>
+        <button class="vai-btn" id="vaiBtnNao" onclick="setVai('Não')">❌ Não quero assistir</button>
       </div>
     </div>
-    <div class="form-group">
-      <label class="form-label">Data de Avaliação *</label>
-      <input class="form-input" type="date" id="rateData">
-    </div>
-    <div class="form-group">
-      <label class="form-label">O que te levou a dar essa nota?</label>
-      <input class="form-input" type="text" id="rateComent" placeholder="Opcional...">
+    <div id="notaSection">
+      <div class="form-group">
+        <label class="form-label">Nota (0 a 10)</label>
+        <div class="nota-input-wrap">
+          <button class="nota-btn" onclick="changeNota(-0.1)">−</button>
+          <input type="number" id="notaInput" min="0" max="10" step="0.1" value="0.00">
+          <button class="nota-btn" onclick="changeNota(0.1)">+</button>
+        </div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Data de Avaliação *</label>
+        <input class="form-input" type="date" id="rateData">
+      </div>
+      <div class="form-group">
+        <label class="form-label">O que te levou a dar essa nota?</label>
+        <input class="form-input" type="text" id="rateComent" placeholder="Opcional...">
+      </div>
     </div>
     <div class="modal-actions">
       <button class="btn-cancel" onclick="closeModal('rateModal')">Cancelar</button>
@@ -723,7 +725,7 @@ const STATS = RAW.users_stats;
 // RECENT_IDS dinâmico: filmes adicionados nos últimos 10 dias
 function getRecentIds(){
   const cutoff = new Date();
-  cutoff.setDate(cutoff.getDate() - 10);
+  cutoff.setDate(cutoff.getDate() - 15);
   return FILMES
     .filter(f => {
       if(!f.data_ts && !f.data_cadastro) return false;
@@ -872,7 +874,7 @@ function buildRows(){
   FILMES.forEach(f=>f.categorias.forEach(c=>{if(!byGenre[c])byGenre[c]=[];byGenre[c].push(f);}));
   
   let html='';
-  if(recentF.length) html+=rowHTML('🆕 Adicionados Recentemente',recentF);
+  if(recentF.length) html+=rowHTML('🆕 Adicionados Recentemente',recentF,true);
   html+=rowHTML('⭐ Mais Bem Avaliados',topRated);
   
   // Top 5 genres by count
@@ -887,17 +889,22 @@ function buildRows(){
   return html;
 }
 
-function rowHTML(title,films){
-  return `<div class="row"><div class="row-title">${title}</div><div class="row-track">${films.map(pCard).join('')}</div></div>`;
+function rowHTML(title,films,showDate){
+  return `<div class="row"><div class="row-title">${title}</div><div class="row-track">${films.map(f=>pCard(f,showDate)).join('')}</div></div>`;
 }
 
-function pCard(f){
+function pCard(f, showDate){
+  const dataCad = f.data_cadastro ? (f.data_cadastro.includes('-') ? f.data_cadastro.split('-').reverse().join('/') : f.data_cadastro) : null;
   return `<div class="poster-card" onclick="openFilme('${f.id}')">
     ${f.poster?`<img class="poster-img" src="${esc(f.poster)}" loading="lazy" alt="" onerror="this.style.display='none'">`:`<div class="poster-no-img">🎬</div>`}
     ${f.media?`<div class="poster-badge" style="color:${nC(f.media)}">${fmt(f.media)}</div>`:''}
     <div class="poster-class">${f.classificacao}</div>
     <div class="poster-overlay"></div>
-    <div class="poster-info"><div class="poster-title">${esc(f.nome)}</div>${f.media?`<div class="poster-nota" style="color:${nC(f.media)}">★ ${fmt(f.media)}</div>`:''}</div>
+    <div class="poster-info">
+      <div class="poster-title">${esc(f.nome)}</div>
+      ${f.media?`<div class="poster-nota" style="color:${nC(f.media)}">★ ${fmt(f.media)}</div>`:''}
+      ${showDate&&dataCad?`<div style="font-size:9px;color:var(--muted2);margin-top:2px">📅 ${dataCad}</div>`:''}
+    </div>
   </div>`;
 }
 
@@ -1023,8 +1030,12 @@ function filmDetailHTML(id){
         </div>`:''}
       <div class="dp-footer">
         <span>Inserido por: <strong style="color:#fff">${esc(USERS[f.inserido_por]?.nome||f.inserido_por)}</strong></span>
-        <span>Cadastro: <strong style="color:#fff">${f.data_cadastro}</strong></span>
+        <span>Cadastro: <strong style="color:#fff">${f.data_cadastro ? (f.data_cadastro.includes('-') ? f.data_cadastro.split('-').reverse().join('/') : f.data_cadastro) : '—'}</strong></span>
       </div>
+      ${(()=>{
+        const naoQ = Object.entries(STATS).filter(([uid,s])=>(s.nao_quer||[]).includes(f.id)).map(([uid])=>USERS[uid]?.nome||uid);
+        return naoQ.length ? `<div class="dp-footer" style="margin-top:4px;color:#e05555"><span>❌ Não quer assistir: <strong style="color:#e05555">${naoQ.join(', ')}</strong></span></div>` : '';
+      })()}
     </div>
   `;
 }
@@ -1158,7 +1169,7 @@ function renderRecentes(){
   navList=list;
   const el=document.getElementById('viewRecentes');
   if(!list.length){
-    el.innerHTML=`<div class="tpage"><div class="tpage-header"><div class="tpage-title">Filmes Recentes</div></div><div class="empty-block"><div class="empty-icon">🎬</div><div>Nenhum filme adicionado nos últimos 10 dias.</div></div></div>`;
+    el.innerHTML=`<div class="tpage"><div class="tpage-header"><div class="tpage-title">Filmes Recentes</div></div><div class="empty-block"><div class="empty-icon">🎬</div><div>Nenhum filme adicionado nos últimos 15 dias.</div></div></div>`;
     return;
   }
   el.innerHTML=`
@@ -1166,17 +1177,19 @@ function renderRecentes(){
       <div class="detail-list">
         <div class="tpage" style="padding-bottom:0">
           <div class="tpage-header"><div class="tpage-title">Filmes Recentes <span style="color:var(--muted);font-size:13px;font-weight:400">${list.length}</span></div></div>
-          <p style="font-size:12px;color:var(--muted);margin-bottom:14px">Adicionados nos últimos 10 dias</p>
+          <p style="font-size:12px;color:var(--muted);margin-bottom:14px">Adicionados nos últimos 15 dias</p>
         </div>
         <table>
-          <thead><tr><th>Nome</th><th>Ano</th><th>Nota</th><th>Status</th></tr></thead>
+          <thead><tr><th>Nome</th><th>Ano</th><th>Nota</th><th>Adicionado</th><th>Status</th></tr></thead>
           <tbody>
           ${list.map(f=>{
             const hasAv=CU&&f.avaliacoes[CU]&&f.avaliacoes[CU].nota!==null;
+            const dataCad = f.data_cadastro ? (f.data_cadastro.includes('-') ? f.data_cadastro.split('-').reverse().join('/') : f.data_cadastro) : '—';
             return `<tr class="${f.id===list[0].id?'selected':''}" onclick="openRecentPanel('${f.id}')">
               <td class="td-name">${esc(f.nome)}</td>
               <td class="td-muted">${f.ano}</td>
               <td>${f.media?`<span style="color:${nC(f.media)};font-weight:700">${fmt(f.media)}</span>`:'—'}</td>
+              <td class="td-muted">${dataCad}</td>
               <td><span style="font-size:11px;font-weight:600;color:${hasAv?'var(--green)':'var(--muted)'}">${hasAv?'✅ Assistido':'⬤ Pendente'}</span></td>
             </tr>`;
           }).join('')}
@@ -1255,14 +1268,17 @@ function setVai(v){
   vaiVal=v;
   document.getElementById('vaiBtnSim').classList.toggle('active',v==='Sim');
   document.getElementById('vaiBtnNao').classList.toggle('active',v==='Não');
+  const ns = document.getElementById('notaSection');
+  if(ns) ns.style.display = v==='Sim' ? 'block' : 'none';
 }
 
 async function saveRating(){
-  const nota=parseFloat(document.getElementById('notaInput').value);
-  const data=document.getElementById('rateData').value;
-  const coment=document.getElementById('rateComent').value.trim();
-  if(!data){showToast('⚠️ Preencha a data de avaliação!');return;}
-  if(nota<0||nota>10){showToast('⚠️ Nota deve ser entre 0 e 10');return;}
+  const isNao = vaiVal === 'Não';
+  const nota = isNao ? null : parseFloat(document.getElementById('notaInput').value);
+  const data = isNao ? new Date().toISOString().split('T')[0] : document.getElementById('rateData').value;
+  const coment = isNao ? '' : document.getElementById('rateComent').value.trim();
+  if(!isNao && !data){showToast('⚠️ Preencha a data de avaliação!');return;}
+  if(!isNao && (nota<0||nota>10)){showToast('⚠️ Nota deve ser entre 0 e 10');return;}
 
   const btn=document.querySelector('#rateModal .btn-save');
   if(btn){btn.textContent='Salvando...';btn.disabled=true;}
@@ -1438,7 +1454,7 @@ async function saveFilme(){
     categorias: td?.categorias||[],
     classificacao: td?.classificacao||null,
     inserido_por: CU,
-    data_cadastro: new Date().toISOString().slice(0,10)
+    data_cadastro: (()=>{ const n=new Date(); return `${String(n.getDate()).padStart(2,'0')}/${String(n.getMonth()+1).padStart(2,'0')}/${n.getFullYear()}`; })()
   };
   
   try{
@@ -1620,6 +1636,7 @@ function rankGeralHTML(){
         <div class="rstat"><div class="rstat-n" style="color:var(--green)">${s.quant}</div><div class="rstat-l">Assistidos</div></div>
         <div class="rstat"><div class="rstat-n" style="color:${s.media?nC(s.media):'var(--muted2)'}">${s.media?fmt(s.media):'—'}</div><div class="rstat-l">Média</div></div>
         <div class="rstat"><div class="rstat-n" style="color:var(--muted)">${s.pendentes.length}</div><div class="rstat-l">Pendentes</div></div>
+        <div class="rstat"><div class="rstat-n" style="color:#e05555">${(s.nao_quer||[]).length}</div><div class="rstat-l">Não quer</div></div>
       </div>
     </div>`;
   }).join('');
@@ -1911,18 +1928,33 @@ function rankStatsHTML(){
         </div>
       </div>
 
-      <!-- Atividade mensal -->
+      <!-- Quadro comparativo de membros -->
       <div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:16px;margin-bottom:16px">
-        <div style="font-size:13px;font-weight:700;margin-bottom:14px">📈 Atividade mensal do clube (avaliações)</div>
-        <div style="display:flex;align-items:flex-end;gap:4px;height:80px;overflow-x:auto">
-          ${monthEntries.map(([ym,n])=>{
-            const [y,m]=ym.split('-');
-            return `<div style="display:flex;flex-direction:column;align-items:center;gap:3px;flex:1;min-width:32px">
-              <div style="font-size:9px;color:var(--muted2)">${n}</div>
-              <div style="width:100%;background:linear-gradient(to top,var(--red),var(--yellow));border-radius:3px 3px 0 0;height:${Math.round(n/maxMonthVal*60)+4}px;min-height:4px;transition:height .3s" title="${monthNames[m]||m}/${y}: ${n} avaliações"></div>
-              <div style="font-size:8px;color:var(--muted2);white-space:nowrap">${monthNames[m]||m}<br>${y.slice(2)}</div>
-            </div>`;
-          }).join('')}
+        <div style="font-size:13px;font-weight:700;margin-bottom:14px">📊 Distribuição por membro</div>
+        ${Object.entries(RAW.users_stats).filter(([,s])=>s.in_ranking).sort(([,a],[,b])=>b.quant-a.quant).map(([uid,s])=>{
+          const total = (s.quant||0) + (s.pendentes||[]).length + (s.nao_quer||[]).length;
+          const pct = total ? {
+            ass: Math.round((s.quant||0)/total*100),
+            pend: Math.round((s.pendentes||[]).length/total*100),
+            nao: Math.round((s.nao_quer||[]).length/total*100)
+          } : {ass:0,pend:0,nao:0};
+          return `<div style="margin-bottom:12px">
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
+              <div style="width:24px;height:24px;border-radius:4px;background:${aC(uid)};color:#000;font-size:9px;font-weight:800;display:flex;align-items:center;justify-content:center">${ini(s.nome)}</div>
+              <div style="font-size:12px;font-weight:700;flex:1">${esc(s.nome)}</div>
+              <div style="font-size:10px;color:var(--muted)">${s.quant||0} ✅ · ${(s.pendentes||[]).length} ⏳ · ${(s.nao_quer||[]).length} ❌</div>
+            </div>
+            <div style="height:8px;border-radius:4px;overflow:hidden;background:var(--surface2);display:flex">
+              <div style="width:${pct.ass}%;background:#46d369" title="Assistidos: ${s.quant}"></div>
+              <div style="width:${pct.pend}%;background:#f5c518" title="Pendentes: ${(s.pendentes||[]).length}"></div>
+              <div style="width:${pct.nao}%;background:#e05555" title="Não quer: ${(s.nao_quer||[]).length}"></div>
+            </div>
+          </div>`;
+        }).join('')}
+        <div style="display:flex;gap:16px;margin-top:10px;font-size:11px;color:var(--muted)">
+          <span><span style="color:#46d369">■</span> Assistidos</span>
+          <span><span style="color:#f5c518">■</span> Pendentes</span>
+          <span><span style="color:#e05555">■</span> Não quer</span>
         </div>
       </div>
 
