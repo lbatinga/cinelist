@@ -8,7 +8,6 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="CineList">
 <title>CineList</title>
-  <link rel="manifest" href="manifest.json">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
 <style>
@@ -91,7 +90,7 @@ body{background:var(--bg);color:var(--text);font-family:'Inter',sans-serif;displ
 .rows-section{padding:0 40px 48px}
 .row{margin-bottom:28px}
 .row-title{font-size:18px;font-weight:700;margin-bottom:12px;color:#e5e5e5}
-.row-track{display:flex;gap:6px;overflow-x:auto;padding-bottom:6px;scrollbar-width:none}
+.row-track{display:flex;gap:6px;overflow-x:auto;padding-bottom:6px;scrollbar-width:none;-webkit-overflow-scrolling:touch;cursor:grab}
 .row-track::-webkit-scrollbar{display:none}
 .poster-card{flex-shrink:0;width:130px;cursor:pointer;border-radius:6px;overflow:hidden;position:relative;transition:transform .25s,box-shadow .25s}
 .poster-card:hover{transform:scale(1.08);box-shadow:0 6px 28px rgba(0,0,0,.8);z-index:10}
@@ -768,7 +767,7 @@ function rowHTML(title,films){
 function pCard(f){
   return `<div class="poster-card" onclick="openFilme('${f.id}')">
     ${f.poster?`<img class="poster-img" src="${esc(f.poster)}" loading="lazy" alt="" onerror="this.style.display='none'">`:`<div class="poster-no-img">🎬</div>`}
-    ${f.media?`<div class="poster-badge">${fmt(f.media)}</div>`:''}
+    ${f.media?`<div class="poster-badge" style="color:${nC(f.media)}">${fmt(f.media)}</div>`:''}
     <div class="poster-class">${f.classificacao}</div>
     <div class="poster-overlay"></div>
     <div class="poster-info"><div class="poster-title">${esc(f.nome)}</div>${f.media?`<div class="poster-nota" style="color:${nC(f.media)}">★ ${fmt(f.media)}</div>`:''}</div>
@@ -850,7 +849,7 @@ function filmDetailHTML(id){
   const avCount=Object.values(f.avaliacoes).filter(a=>a.nota!==null).length;
   const topAvs=Object.entries(f.avaliacoes).filter(([,a])=>a.nota!==null).sort(([,a],[,b])=>b.nota-a.nota).slice(0,3);
   const avStr=topAvs.map(([uid,av])=>`  • ${USERS[uid]?.nome||uid}: ${fmt(av.nota)}`).join('\n');
-  const appUrl='https://lbatinga.github.io/cinelist/';
+  const appUrl='https://lbatinga.github.io/cinelist/cinelist_login_senha.html';
   const wpp=encodeURIComponent(`🎬 *CineList da Tropa*\n\n*${f.nome}* (${f.ano||'?'})\n⏱ ${f.duracao_str||'—'} · ${f.classificacao||'Livre'}\n🎭 ${f.categorias.slice(0,3).join(', ')||'—'}\n\n${f.media?`⭐ Nota média: *${fmt(f.media)}* (${avCount} avaliação${avCount!==1?'s':''})\n${avStr}`:'📝 Ainda sem avaliações'}\n\n${f.sinopse?f.sinopse.slice(0,150)+(f.sinopse.length>150?'...':''):''}\n\n🔗 Veja no app: ${appUrl}`);
   return `
     <div class="dp-backdrop" style="background-image:url('${esc(f.poster)}')">
@@ -1946,8 +1945,6 @@ async function onLogin(session){
     CU = usuario.legacy_id;
     history.replaceState(null, '', window.location.pathname);
     hideAuthScreen();
-    window.CU_EMAIL = email;
-    window.dispatchEvent(new Event('cinelist:login'));
     
     loadFilmsFromSupabase().then(() => {
       try {
@@ -2356,6 +2353,27 @@ window.addEventListener('popstate',()=>{
   if(document.getElementById('mobileFilmeModal').classList.contains('open')) closeMobileFilmeModal();
 });
 
+
+// Drag-to-scroll para as filas de posters
+(function(){
+  let isDown=false, slider=null, startX=0, scrollLeft=0;
+  document.addEventListener('mousedown',e=>{
+    const t=e.target.closest('.row-track');
+    if(!t) return;
+    isDown=true; slider=t;
+    startX=e.pageX-t.offsetLeft;
+    scrollLeft=t.scrollLeft;
+    t.style.cursor='grabbing';
+  });
+  document.addEventListener('mouseup',()=>{ isDown=false; if(slider){slider.style.cursor='grab';slider=null;} });
+  document.addEventListener('mouseleave',()=>{ isDown=false; if(slider){slider.style.cursor='grab';slider=null;} });
+  document.addEventListener('mousemove',e=>{
+    if(!isDown||!slider) return;
+    e.preventDefault();
+    const x=e.pageX-slider.offsetLeft;
+    slider.scrollLeft=scrollLeft-(x-startX)*1.2;
+  });
+})();
 </script>
 
 <!-- AUTH SCREEN -->
@@ -2494,98 +2512,6 @@ window.addEventListener('popstate',()=>{
   <div id="mfmContent"></div>
 </div>
 
-
-<script type="module">
-// ===== FIREBASE FCM =====
-import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js';
-import { getMessaging, getToken, onMessage } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-messaging.js';
-
-const firebaseConfig = {
-  apiKey: "AIzaSyBj3dOMt3v6zw3SHAGdnBEWB_BuDYVBBD0",
-  authDomain: "cinelist-new.firebaseapp.com",
-  projectId: "cinelist-new",
-  storageBucket: "cinelist-new.firebasestorage.app",
-  messagingSenderId: "101304466431",
-  appId: "1:101304466431:web:22b0367c1845ee8404c5ca"
-};
-
-const VAPID_KEY = "BFxhuP8nULdLvH6IwV7OwIXxyAjTaFB68lfPCNLjAaF9Vff1G58NOC0cvXiPlcX2u6TskdwGAgqJ4oC88-ApeWo";
-const SUPABASE_URL = "https://gxwbxrnoqhkjwqfzmdpz.supabase.co";
-const SUPABASE_KEY = document.querySelector('script[src*="supabase"]') ? null : null; // usamos o supa já inicializado
-
-window.fbApp = initializeApp(firebaseConfig);
-window.fbMessaging = getMessaging(window.fbApp);
-
-async function registerFCM() {
-  try {
-    // Registra SW
-    const swReg = await navigator.serviceWorker.register('./sw.js');
-    
-    // Pede permissão
-    const perm = await Notification.requestPermission();
-    if (perm !== 'granted') return;
-
-    // Pega token FCM
-    const token = await getToken(window.fbMessaging, {
-      vapidKey: VAPID_KEY,
-      serviceWorkerRegistration: swReg
-    });
-
-    if (token) {
-      console.log('FCM token:', token);
-      // Salva token no Supabase vinculado ao usuário
-      window._fcmToken = token;
-      await saveFCMToken(token);
-    }
-  } catch(e) {
-    console.warn('FCM registro falhou:', e);
-  }
-}
-
-async function saveFCMToken(token) {
-  try {
-    const uid = window.CU_EMAIL || '';
-    if (!uid) return;
-    // Usa o cliente Supabase já inicializado globalmente
-    await window.supa.from('fcm_tokens').upsert({
-      email: uid,
-      token: token,
-      updated_at: new Date().toISOString()
-    }, { onConflict: 'email' });
-    console.log('Token FCM salvo!');
-  } catch(e) {
-    console.warn('Erro ao salvar token:', e);
-  }
-}
-
-// Notificação em foreground (app aberto)
-onMessage(window.fbMessaging, (payload) => {
-  console.log('Mensagem recebida:', payload);
-  const { title, body } = payload.notification || {};
-  if (title) {
-    // Mostra como toast no app
-    if (window.showToast) window.showToast('🔔 ' + title + (body ? ': ' + body : ''));
-  }
-});
-
-// Registra ao fazer login
-window.addEventListener('cinelist:login', () => {
-  if ('serviceWorker' in navigator && 'Notification' in window) {
-    registerFCM();
-  }
-});
-</script>
-
-<script>
-// Service Worker registration
-if ('serviceWorker' in navigator) {
-  window.addEventListener('load', () => {
-    navigator.serviceWorker.register('./sw.js')
-      .then(r => console.log('SW registrado:', r.scope))
-      .catch(e => console.warn('SW erro:', e));
-  });
-}
-</script>
 
 </body>
 </html>
