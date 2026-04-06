@@ -2131,17 +2131,22 @@ async function onLogin(session){
     );
 
     if(error) {
-      showAuthError('Erro de banco: ' + error.message);
+      console.error('DB error:', error);
+      showAuthError('Erro ao buscar usuário. Verifique sua conexão.');
       return;
     }
 
     if(!usuario) {
-      showAuthError('E-mail não cadastrado: ' + email);
+      showAuthError('E-mail não cadastrado: ' + email + '\nApenas membros cadastrados têm acesso.');
       return;
     }
 
     supaProfile = usuario;
     CU = usuario.legacy_id;
+    if(!CU || !USERS[CU]) {
+      showAuthError('Perfil não configurado para ' + email + '. Fale com o administrador.');
+      return;
+    }
     history.replaceState(null, '', window.location.pathname);
     hideAuthScreen();
     window.CU_EMAIL = email;
@@ -2175,8 +2180,12 @@ async function onLogin(session){
 function showAuthScreen(){
   const loader = document.getElementById('startLoader');
   if(loader) loader.style.display = 'none';
-  document.getElementById('authScreen').style.display = 'flex';
-  document.getElementById('authBox').innerHTML = `
+  const authScreen = document.getElementById('authScreen');
+  if(!authScreen) return;
+  authScreen.style.display = 'flex';
+  const authBox = document.getElementById('authBox');
+  if(!authBox) return;
+  authBox.innerHTML = `
     <div class="auth-logo"><svg width="160" height="48" viewBox="0 0 160 48" xmlns="http://www.w3.org/2000/svg">
   <rect x="2" y="20" width="36" height="26" rx="2" fill="none" stroke="#fff" stroke-width="1.6"/>
   <line x1="8" y1="29" x2="33" y2="29" stroke="#fff" stroke-width="0.7" stroke-opacity="0.35"/>
@@ -2228,27 +2237,24 @@ function showAuthLoading(){
   `;
 }
 
-function showAuthError(email){
-  document.getElementById('authBox').innerHTML = `
-    <div class="auth-logo"><svg width="160" height="48" viewBox="0 0 160 48" xmlns="http://www.w3.org/2000/svg">
-  <rect x="2" y="20" width="36" height="26" rx="2" fill="none" stroke="#fff" stroke-width="1.6"/>
-  <line x1="8" y1="29" x2="33" y2="29" stroke="#fff" stroke-width="0.7" stroke-opacity="0.35"/>
-  <line x1="8" y1="36" x2="33" y2="36" stroke="#fff" stroke-width="0.7" stroke-opacity="0.35"/>
-  <g transform="rotate(-26, 2, 20)">
-    <rect x="2" y="11" width="36" height="10" rx="2" fill="#111" stroke="#fff" stroke-width="1.6"/>
-    <rect x="1"  y="11" width="5" height="10" fill="#fff" fill-opacity="0.72"/>
-    <rect x="10" y="11" width="5" height="10" fill="#fff" fill-opacity="0.72"/>
-    <rect x="19" y="11" width="5" height="10" fill="#fff" fill-opacity="0.72"/>
-    <rect x="28" y="11" width="5" height="10" fill="#fff" fill-opacity="0.72"/>
-  </g>
-  <circle cx="2" cy="20" r="2.2" fill="#fff" fill-opacity="0.55"/>
-  <text x="46" y="35" font-family="Georgia,serif" font-size="28" font-weight="400" fill="#fff" letter-spacing="0.4">Cine<tspan font-style="italic" fill="#ccc">List</tspan></text>
-</svg></div>
-    <div style="color:#e05555;font-size:14px;margin-bottom:16px">⚠️ E-mail não encontrado:<br><strong style="color:#fff">${email}</strong></div>
-    <div style="color:#666;font-size:13px;margin-bottom:24px">Apenas membros cadastrados têm acesso. Fale com o administrador.</div>
-    <button class="auth-btn auth-btn-ms" onclick="logout()" style="width:auto;padding:10px 20px">← Tentar outro e-mail</button>
-  `;
-  document.getElementById('authScreen').style.display = 'flex';
+function showAuthError(msg){
+  try {
+    const authScreen = document.getElementById('authScreen');
+    if(authScreen) authScreen.style.display = 'flex';
+    const authBox = document.getElementById('authBox');
+    if(!authBox) return;
+    authBox.innerHTML = `
+      <div style="text-align:center;padding:20px">
+        <div style="font-size:40px;margin-bottom:16px">⚠️</div>
+        <div style="color:#e05555;font-size:14px;font-weight:700;margin-bottom:12px">Erro ao entrar</div>
+        <div style="color:#888;font-size:12px;margin-bottom:24px;word-break:break-word">${esc(String(msg||'Erro desconhecido'))}</div>
+        <button class="auth-btn auth-btn-ms" onclick="showAuthScreen()" style="width:auto;padding:10px 20px">← Tentar novamente</button>
+      </div>
+    `;
+  } catch(e2) {
+    console.error('showAuthError falhou:', e2);
+    location.reload();
+  }
 }
 
 function hideAuthScreen(){
