@@ -339,6 +339,22 @@ tr.selected td{background:rgba(229,9,20,.05)}
 .color-opt{width:28px;height:28px;border-radius:50%;cursor:pointer;border:3px solid transparent;transition:border-color .15s}
 .color-opt.selected{border-color:#fff}
 
+
+/* ── iOS / iPhone fixes ── */
+@supports (-webkit-touch-callout: none) {
+  .topbar { padding-left: 12px; padding-right: 12px; }
+  .tpage-header { flex-wrap: wrap; gap: 8px; }
+  .btn-add { flex-shrink: 0; }
+}
+@media(max-width:768px){
+  .tpage-header { 
+    padding-right: 0;
+    flex-wrap: wrap;
+  }
+  .tpage { padding: 12px 12px 0; }
+  .search-box.open { width: 160px; }
+}
+
 </style>
 </head>
 <body>
@@ -1141,7 +1157,6 @@ async function saveRating(){
   if(btn){btn.textContent='Salvando...';btn.disabled=true;}
 
   try{
-    // Salva no Supabase
     const {error}=await supa.from('avaliacoes').upsert({
       filme_id: rateFilmeId,
       usuario_id: CU,
@@ -1152,17 +1167,14 @@ async function saveRating(){
     },{onConflict:'filme_id,usuario_id'});
     if(error) throw error;
 
-    // Atualiza memória local
     const f=FM[rateFilmeId];
     if(!f.avaliacoes[CU]) f.avaliacoes[CU]={};
     f.avaliacoes[CU]={nota,vai:vaiVal,data:data.split('-').reverse().join('/'),comentario:coment};
 
-    // Recalc media
     const notas=Object.values(f.avaliacoes).filter(a=>a.nota!==null).map(a=>a.nota);
     f.media=notas.length?Math.round(100*notas.reduce((s,n)=>s+n,0)/notas.length)/100:null;
     f.num_avaliacoes=notas.length;
 
-    // Remove dos pendentes locais
     const st=STATS[CU];
     st.pendentes=st.pendentes.filter(id=>id!==rateFilmeId);
     if(!st.quant) st.quant=0;
@@ -1170,7 +1182,7 @@ async function saveRating(){
 
     closeModal('rateModal');
     render();
-    showToast(`✅ Nota ${fmt(nota)} salva!`);
+    showToast('✅ Nota ' + fmt(nota) + ' salva!');
   }catch(e){
     showToast('❌ Erro ao salvar: '+e.message);
   }finally{
