@@ -1332,6 +1332,7 @@ function buildUD(){
     <div class="ud-item" onclick="openProfile();document.getElementById('userDropdown').classList.remove('open')">✏️ Editar perfil</div>
     <div class="ud-item" onclick="openChangePassword();document.getElementById('userDropdown').classList.remove('open')">🔑 Alterar senha</div>
     ${email === 'lwbarbosab@gmail.com' ? '<div class="ud-item" style="color:#f5c518" onclick="openAdmin();document.getElementById(\'userDropdown\').classList.remove(\'open\')">🛠️ Painel Admin</div>' : ''}
+    ${(typeof Notification !== 'undefined' && Notification.permission !== 'granted') ? '<div class="ud-item" style="color:#00bcd4" onclick="ativarNotificacoes();document.getElementById(\'userDropdown\').classList.remove(\'open\')">🔔 Ativar notificações</div>' : '<div class="ud-item" style="color:#46d369;cursor:default">🔔 Notificações ativas ✓</div>'}
     <div class="ud-item" onclick="logout()" style="color:#e05555">↩️ Sair</div>
   `;
 }
@@ -2078,6 +2079,60 @@ async function saveRatingToSupabase(filmeId, nota, vai, data, comentario){
 const _origSaveRating = typeof saveRating !== 'undefined' ? saveRating : null;
 
 // Replace logout option in user dropdown
+
+
+// ===== NOTIFICAÇÕES =====
+async function ativarNotificacoes() {
+  if (!('Notification' in window)) {
+    showToast('⚠️ Seu navegador não suporta notificações.');
+    return;
+  }
+  if (!('serviceWorker' in navigator)) {
+    showToast('⚠️ Service Worker não disponível.');
+    return;
+  }
+
+  try {
+    // iOS exige que o pedido venha de uma ação direta do usuário
+    const perm = await Notification.requestPermission();
+    if (perm !== 'granted') {
+      showToast('❌ Permissão de notificação negada.');
+      buildUD();
+      return;
+    }
+
+    showToast('⏳ Registrando notificações...');
+
+    const swReg = await navigator.serviceWorker.register('./sw.js');
+    await navigator.serviceWorker.ready;
+
+    const VAPID = 'BFxhuP8nULdLvH6IwV7OwIXxyAjTaFB68lfPCNLjAaF9Vff1G58NOC0cvXiPlcX2u6TskdwGAgqJ4oC88-ApeWo';
+
+    // Usa o fbMessaging se disponível, senão usa push API direto
+    let token = null;
+    if (window.fbMessaging) {
+      const { getToken } = await import('https://www.gstatic.com/firebasejs/10.12.0/firebase-messaging.js');
+      token = await getToken(window.fbMessaging, { vapidKey: VAPID, serviceWorkerRegistration: swReg });
+    }
+
+    if (token) {
+      const email = currentSession?.user?.email || window.CU_EMAIL || '';
+      if (email && window.supa) {
+        await window.supa.from('fcm_tokens').upsert({
+          email, token, updated_at: new Date().toISOString()
+        }, { onConflict: 'email' });
+      }
+      showToast('✅ Notificações ativadas!');
+    } else {
+      showToast('✅ Notificações permitidas!');
+    }
+
+    buildUD(); // atualiza o menu
+  } catch(e) {
+    console.warn('Erro ao ativar notificações:', e);
+    showToast('⚠️ Erro: ' + e.message);
+  }
+}
 
 // INIT — call initAuth instead of buildUD+renderHome
 
