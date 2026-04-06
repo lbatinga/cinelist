@@ -1196,7 +1196,7 @@ function openRecentPanel(id){
 }
 
 // ── RANKING V2 injected ──
-let rankTab_dummy = null; // replaced below
+var rankTab = 'geral', rankYear = '2025', rankGenre = 'Ação'; // inicializado cedo
 function renderRanking_old_unused(){
   let list=Object.entries(STATS).filter(([,s])=>s.in_ranking).map(([uid,s])=>({uid,...s}));
   if(searchQ) list=list.filter(s=>s.nome.toLowerCase().includes(searchQ));
@@ -1570,7 +1570,7 @@ async function initBiometricButton(){
 showAuthScreen();
 
 // ── RANKING V2 ──
-let rankTab = 'geral', rankYear = RAW.anos[0]||'2025', rankGenre = RAW.all_genres[0]||'Ação';
+// rankTab já declarado acima
 
 function renderRanking(){
   const el = document.getElementById('viewRanking');
