@@ -2662,21 +2662,36 @@ function checkBirthdays(){
 
 // ===== ADMIN PANEL =====
 const ADMIN_EMAIL = 'lwbarbosab@gmail.com';
+var _adminTab = 'duplicatas';
 
 function openAdmin(){
   if(currentSession?.user?.email !== ADMIN_EMAIL){ showToast('⛔ Acesso negado.'); return; }
   document.getElementById('adminModal').classList.add('open');
-  renderAdminPanel();
+  adminTab('duplicatas');
 }
 
 function closeAdmin(){
   document.getElementById('adminModal').classList.remove('open');
 }
 
-function renderAdminPanel(){
+function adminTab(tab){
+  _adminTab = tab;
+  // Highlight active tab
+  document.querySelectorAll('[id^="atab-"]').forEach(b => {
+    b.style.background = b.id === 'atab-'+tab ? 'var(--red)' : '#2a2a2a';
+  });
   const body = document.getElementById('adminBody');
+  body.innerHTML = '<div style="color:#888;text-align:center;padding:30px">Carregando...</div>';
+  if(tab === 'duplicatas') renderAdminDuplicatas();
+  else if(tab === 'membros') renderAdminMembros();
+  else if(tab === 'sem_avaliacao') renderAdminSemAvaliacao();
+  else if(tab === 'stats') renderAdminStats();
+  else if(tab === 'notificacao') renderAdminNotificacao();
+}
 
-  // Find duplicates
+// ── ABA: DUPLICATAS ──
+function renderAdminDuplicatas(){
+  const body = document.getElementById('adminBody');
   const grupos = {};
   FILMES.forEach(f => {
     const key = f.nome.trim().toLowerCase() + '|' + (f.ano || '');
@@ -2685,60 +2700,257 @@ function renderAdminPanel(){
   });
   const duplicatas = Object.values(grupos).filter(g => g.length > 1);
 
-  if(duplicatas.length === 0){
+  if(!duplicatas.length){
     body.innerHTML = '<div style="color:#46d369;text-align:center;padding:30px;font-size:15px">✅ Nenhum filme duplicado encontrado!</div>';
     return;
   }
 
-  let html = `<div style="color:#f5c518;font-size:13px;margin-bottom:16px;font-weight:700">${duplicatas.length} grupo(s) de duplicatas encontrados</div>`;
-
+  let html = `<div style="color:#f5c518;font-size:13px;margin-bottom:16px;font-weight:700;padding:4px 0">${duplicatas.length} grupo(s) de duplicatas encontrados</div>`;
   duplicatas.forEach(grupo => {
-    // Sort: keep oldest (first inserted), mark rest as duplicates
     const sorted = [...grupo].sort((a,b) => new Date(a.data_cadastro||0) - new Date(b.data_cadastro||0));
     const original = sorted[0];
-    const duplicados = sorted.slice(1);
-
     html += `<div style="background:#1a1a1a;border:1px solid #2a2a2a;border-radius:10px;padding:14px;margin-bottom:12px">
-      <div style="font-size:14px;font-weight:800;color:#fff;margin-bottom:10px">🎬 ${esc(original.nome)} (${original.ano||'—'})</div>
-      <div style="font-size:12px;color:#46d369;margin-bottom:8px">✅ MANTER — Cadastrado em ${original.data_cadastro||'?'} por ${esc(original.inserido_por||'?')}</div>`;
-
-    duplicados.forEach(d => {
-      const temAvaliacao = Object.keys(d.avaliacoes||{}).length > 0;
-      html += `<div style="display:flex;align-items:center;justify-content:space-between;background:#111;border:1px solid #333;border-radius:8px;padding:10px 12px;margin-top:6px">
+      <div style="font-size:14px;font-weight:800;color:#fff;margin-bottom:6px">🎬 ${esc(original.nome)} (${original.ano||'—'})</div>
+      <div style="font-size:11px;color:#46d369;margin-bottom:8px">✅ MANTER — id: ${original.id} · por ${esc(USERS[original.inserido_por]?.nome||original.inserido_por)}</div>`;
+    sorted.slice(1).forEach(d => {
+      const nAv = Object.keys(d.avaliacoes||{}).length;
+      html += `<div style="display:flex;align-items:center;justify-content:space-between;background:#111;border:1px solid #333;border-radius:8px;padding:10px;margin-top:6px">
         <div>
-          <span style="font-size:12px;color:#e05555;font-weight:700">❌ DUPLICATA</span>
-          <span style="font-size:11px;color:#888;margin-left:8px">Cadastrado em ${d.data_cadastro||'?'} por ${esc(d.inserido_por||'?')}</span>
-          ${temAvaliacao ? '<span style="font-size:11px;color:#f5c518;margin-left:6px">⚠️ tem avaliação</span>' : ''}
+          <span style="font-size:11px;color:#e05555;font-weight:700">❌ DUPLICATA</span>
+          <span style="font-size:10px;color:#888;margin-left:6px">id: ${d.id}</span>
+          ${nAv ? `<span style="font-size:10px;color:#f5c518;margin-left:6px">⚠️ ${nAv} avaliação(ões)</span>` : ''}
         </div>
-        <button onclick="deleteFilmeAdmin('${d.id}', this)" style="background:#e50914;color:#fff;border:none;border-radius:6px;padding:5px 12px;cursor:pointer;font-size:12px;font-weight:700">Excluir</button>
+        <button onclick="deleteFilmeAdmin('${d.id}',this)" style="background:#e50914;color:#fff;border:none;border-radius:6px;padding:5px 12px;cursor:pointer;font-size:12px;font-weight:700">Excluir</button>
       </div>`;
     });
-
-    html += `</div>`;
+    html += '</div>';
   });
-
   body.innerHTML = html;
 }
 
 async function deleteFilmeAdmin(id, btn){
-  if(!confirm('Tem certeza que deseja excluir este filme? Esta ação não pode ser desfeita.')) return;
-  btn.textContent = '...';
-  btn.disabled = true;
+  if(!confirm('Excluir este filme? Ação irreversível.')) return;
+  btn.textContent = '...'; btn.disabled = true;
   try {
     const {error} = await supa.from('filmes').delete().eq('id', id);
     if(error) throw error;
-    // Remove from local data
     const idx = FILMES.findIndex(f => f.id === id);
     if(idx > -1) FILMES.splice(idx, 1);
     delete FILMES_MAP[id];
     RAW.filmes = RAW.filmes.filter(f => f.id !== id);
     renderHome();
     showToast('🗑️ Filme excluído!');
-    renderAdminPanel();
+    renderAdminDuplicatas();
   } catch(e) {
     showToast('❌ Erro: ' + e.message);
-    btn.textContent = 'Excluir';
-    btn.disabled = false;
+    btn.textContent = 'Excluir'; btn.disabled = false;
+  }
+}
+
+// ── ABA: MEMBROS ──
+function renderAdminMembros(){
+  const body = document.getElementById('adminBody');
+  const membros = Object.entries(USERS).filter(([uid]) => uid !== 'USER-001');
+  let html = `
+    <div style="margin-bottom:16px">
+      <div style="font-size:13px;font-weight:700;color:#f5c518;margin-bottom:12px">👥 ${membros.length} membros cadastrados</div>
+      ${membros.map(([uid, u]) => {
+        const s = STATS[uid] || {};
+        return `<div style="background:#1a1a1a;border:1px solid #2a2a2a;border-radius:10px;padding:12px;margin-bottom:8px;display:flex;align-items:center;gap:12px">
+          <div style="width:36px;height:36px;border-radius:8px;background:${aC(uid)};color:#000;font-weight:800;font-size:14px;display:flex;align-items:center;justify-content:center;flex-shrink:0">${ini(u.nome)}</div>
+          <div style="flex:1">
+            <div style="font-size:14px;font-weight:700">${esc(u.nome)} <span style="font-size:10px;color:#666">${uid}</span></div>
+            <div style="font-size:11px;color:#888">${s.quant||0} assistidos · média ${s.media?fmt(s.media):'—'} · ${(s.pendentes||[]).length} pendentes</div>
+          </div>
+          <div style="font-size:11px;color:#666">${s.ultima_av||'—'}</div>
+        </div>`;
+      }).join('')}
+    </div>
+    <div style="border-top:1px solid #2a2a2a;padding-top:16px">
+      <div style="font-size:13px;font-weight:700;color:#46d369;margin-bottom:12px">➕ Adicionar novo membro</div>
+      <div style="display:flex;flex-direction:column;gap:10px">
+        <input id="newMemberNome" class="pm-input" placeholder="Nome (ex: João)">
+        <input id="newMemberEmail" class="pm-input" type="email" placeholder="E-mail">
+        <input id="newMemberSenha" class="pm-input" type="password" placeholder="Senha inicial">
+        <input id="newMemberLegacy" class="pm-input" placeholder="Legacy ID (ex: USER-010)">
+        <button onclick="addNewMember()" style="background:var(--green);color:#000;border:none;border-radius:8px;padding:10px;font-family:inherit;font-size:14px;font-weight:800;cursor:pointer">Criar membro</button>
+      </div>
+      <div id="newMemberMsg" style="margin-top:10px;font-size:12px;text-align:center"></div>
+    </div>`;
+  body.innerHTML = html;
+}
+
+async function addNewMember(){
+  const nome = document.getElementById('newMemberNome').value.trim();
+  const email = document.getElementById('newMemberEmail').value.trim();
+  const senha = document.getElementById('newMemberSenha').value;
+  const legacy = document.getElementById('newMemberLegacy').value.trim();
+  const msg = document.getElementById('newMemberMsg');
+
+  if(!nome||!email||!senha||!legacy){ msg.style.color='#e05555'; msg.textContent='⚠️ Preencha todos os campos.'; return; }
+  if(Object.values(USERS).some(u=>u.nome.toLowerCase()===nome.toLowerCase())){ msg.style.color='#e05555'; msg.textContent='⚠️ Já existe um membro com esse nome.'; return; }
+
+  msg.style.color='#888'; msg.textContent='⏳ Criando...';
+
+  try {
+    // Cria usuário no Auth (via Admin API — precisaria de service role, então usamos signup)
+    const { data: authData, error: authErr } = await supa.auth.admin.createUser({
+      email, password: senha, email_confirm: true
+    });
+    if(authErr) throw authErr;
+
+    const auth_id = authData.user.id;
+
+    // Insere na tabela usuarios
+    const { error: dbErr } = await supa.from('usuarios').insert({
+      nome, email, legacy_id: legacy, auth_id
+    });
+    if(dbErr) throw dbErr;
+
+    msg.style.color='#46d369';
+    msg.textContent=`✅ Membro "${nome}" criado com sucesso! Atualize o STATIC no código.`;
+
+    // Atualiza localmente
+    USERS[legacy] = { nome };
+    STATS[legacy] = { nome, in_ranking:true, quant:0, media:null, pendentes:[], nao_quer:[], inseridos:[], by_year:{}, by_genre:{}, genre_avg:{} };
+
+  } catch(e) {
+    msg.style.color='#e05555';
+    msg.textContent='❌ Erro: ' + e.message;
+  }
+}
+
+// ── ABA: SEM AVALIAÇÃO ──
+function renderAdminSemAvaliacao(){
+  const body = document.getElementById('adminBody');
+  const membros = Object.keys(USERS).filter(uid => uid !== 'USER-001' && STATS[uid]?.in_ranking);
+
+  // Filmes que nenhum membro avaliou
+  const semNinguem = FILMES.filter(f => {
+    const notas = Object.values(f.avaliacoes||{}).filter(a => a.nota !== null);
+    return notas.length === 0;
+  }).sort((a,b) => a.nome.localeCompare(b.nome));
+
+  // Filmes que apenas 1 membro avaliou
+  const poucoAvaliados = FILMES.filter(f => {
+    const notas = Object.values(f.avaliacoes||{}).filter(a => a.nota !== null);
+    return notas.length === 1;
+  }).sort((a,b) => a.nome.localeCompare(b.nome));
+
+  let html = `
+    <div style="font-size:13px;font-weight:700;color:#e05555;margin-bottom:12px">🎬 ${semNinguem.length} filmes sem nenhuma avaliação</div>
+    ${semNinguem.slice(0,30).map(f=>`<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid #1a1a1a">
+      <div>
+        <div style="font-size:13px;font-weight:600">${esc(f.nome)}</div>
+        <div style="font-size:10px;color:#888">${f.ano} · por ${esc(USERS[f.inserido_por]?.nome||f.inserido_por)}</div>
+      </div>
+      <button onclick="closeAdmin();openFilme('${f.id}')" style="background:#2a2a2a;color:#fff;border:none;border-radius:6px;padding:4px 10px;cursor:pointer;font-size:11px">Ver</button>
+    </div>`).join('')}
+    ${semNinguem.length > 30 ? `<div style="color:#888;font-size:12px;text-align:center;padding:8px">...e mais ${semNinguem.length-30}</div>` : ''}
+
+    <div style="font-size:13px;font-weight:700;color:#f5c518;margin-top:20px;margin-bottom:12px">⭐ ${poucoAvaliados.length} filmes com apenas 1 avaliação</div>
+    ${poucoAvaliados.slice(0,20).map(f=>{
+      const av = Object.entries(f.avaliacoes).find(([,a])=>a.nota!==null);
+      return `<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid #1a1a1a">
+        <div>
+          <div style="font-size:13px;font-weight:600">${esc(f.nome)}</div>
+          <div style="font-size:10px;color:#888">${f.ano} · avaliado por ${av?esc(USERS[av[0]]?.nome||av[0]):'?'} (${av?fmt(av[1].nota):'?'})</div>
+        </div>
+        <button onclick="closeAdmin();openFilme('${f.id}')" style="background:#2a2a2a;color:#fff;border:none;border-radius:6px;padding:4px 10px;cursor:pointer;font-size:11px">Ver</button>
+      </div>`;
+    }).join('')}`;
+
+  body.innerHTML = html;
+}
+
+// ── ABA: STATS ──
+function renderAdminStats(){
+  const body = document.getElementById('adminBody');
+  const gs = RAW.global_stats || {};
+  const totalAv = FILMES.reduce((s,f)=>s+f.num_avaliacoes,0);
+  const semAv = FILMES.filter(f=>f.num_avaliacoes===0).length;
+  const membrosAtivos = Object.values(STATS).filter(s=>s.in_ranking && s.quant > 0);
+
+  // FCM tokens count
+  supa.from('fcm_tokens').select('email', {count:'exact'}).then(({count}) => {
+    document.getElementById('fcmCount').textContent = count || '?';
+  });
+
+  body.innerHTML = `
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:20px">
+      ${[
+        ['🎬 Total de filmes', FILMES.length, '#46d369'],
+        ['⭐ Total de avaliações', totalAv, '#f5c518'],
+        ['😶 Filmes sem avaliação', semAv, '#e05555'],
+        ['👥 Membros ativos', membrosAtivos.length + '/' + Object.keys(STATS).filter(u=>u!=='USER-001').length, '#4fc3f7'],
+        ['📱 Dispositivos com push', '<span id="fcmCount">...</span>', '#ce93d8'],
+        ['📅 Dias de catálogo', gs.total_catalog_days || '—', '#80cbc4'],
+      ].map(([label, val, color]) => `
+        <div style="background:#1a1a1a;border:1px solid #2a2a2a;border-radius:10px;padding:14px;text-align:center">
+          <div style="font-size:22px;font-weight:900;color:${color}">${val}</div>
+          <div style="font-size:11px;color:#888;margin-top:4px">${label}</div>
+        </div>`).join('')}
+    </div>
+    <div style="font-size:13px;font-weight:700;color:#fff;margin-bottom:10px">📊 Por membro</div>
+    <table style="width:100%;border-collapse:collapse;font-size:12px">
+      <thead><tr style="color:#888;border-bottom:1px solid #2a2a2a">
+        <th style="text-align:left;padding:6px">Membro</th>
+        <th style="text-align:center;padding:6px">Assistidos</th>
+        <th style="text-align:center;padding:6px">Média</th>
+        <th style="text-align:center;padding:6px">Pendentes</th>
+        <th style="text-align:center;padding:6px">Não quer</th>
+        <th style="text-align:center;padding:6px">Inseridos</th>
+      </tr></thead>
+      <tbody>
+      ${Object.entries(STATS).filter(([uid])=>uid!=='USER-001'&&STATS[uid].in_ranking).sort(([,a],[,b])=>b.quant-a.quant).map(([uid,s])=>`
+        <tr style="border-bottom:1px solid #1a1a1a">
+          <td style="padding:8px;font-weight:600">${esc(s.nome)}</td>
+          <td style="text-align:center;color:#46d369">${s.quant||0}</td>
+          <td style="text-align:center;color:${s.media?nC(s.media):'#888'}">${s.media?fmt(s.media):'—'}</td>
+          <td style="text-align:center;color:#888">${(s.pendentes||[]).length}</td>
+          <td style="text-align:center;color:#e05555">${(s.nao_quer||[]).length}</td>
+          <td style="text-align:center;color:#888">${(s.inseridos||[]).length}</td>
+        </tr>`).join('')}
+      </tbody>
+    </table>`;
+}
+
+// ── ABA: NOTIFICAÇÃO MANUAL ──
+function renderAdminNotificacao(){
+  const body = document.getElementById('adminBody');
+  body.innerHTML = `
+    <div style="font-size:13px;color:#888;margin-bottom:16px">Envie uma notificação push para todos os membros com o app instalado.</div>
+    <div style="display:flex;flex-direction:column;gap:12px">
+      <div>
+        <label style="font-size:12px;color:#888;font-weight:700;display:block;margin-bottom:6px">TÍTULO</label>
+        <input id="notifTitulo" class="pm-input" placeholder="Ex: 🎬 CineList" value="🎬 CineList">
+      </div>
+      <div>
+        <label style="font-size:12px;color:#888;font-weight:700;display:block;margin-bottom:6px">MENSAGEM</label>
+        <input id="notifBody" class="pm-input" placeholder="Ex: Novo filme adicionado!">
+      </div>
+      <button onclick="enviarNotificacaoManual()" style="background:var(--red);color:#fff;border:none;border-radius:8px;padding:12px;font-family:inherit;font-size:14px;font-weight:800;cursor:pointer">🔔 Enviar para todos</button>
+      <div id="notifMsg" style="font-size:12px;text-align:center;color:#888"></div>
+    </div>`;
+}
+
+async function enviarNotificacaoManual(){
+  const titulo = document.getElementById('notifTitulo').value.trim();
+  const body = document.getElementById('notifBody').value.trim();
+  const msg = document.getElementById('notifMsg');
+  if(!titulo||!body){ msg.style.color='#e05555'; msg.textContent='⚠️ Preencha título e mensagem.'; return; }
+
+  msg.style.color='#888'; msg.textContent='⏳ Enviando...';
+  try {
+    const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbyOBpxJ2PQOxMsOQyVjcxw4Y8F1_MprYHTSqoGOc5-ErqZHajCEKLC_fVCHmTJUi4Rr/exec';
+    const res = await fetch(APPS_SCRIPT_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ titulo, body, manual: true })
+    });
+    msg.style.color='#46d369'; msg.textContent='✅ Notificação enviada!';
+  } catch(e) {
+    msg.style.color='#e05555'; msg.textContent='❌ Erro: ' + e.message;
   }
 }
 
@@ -2891,25 +3103,19 @@ window.addEventListener('popstate',()=>{
 
 <!-- ADMIN MODAL -->
 <div class="profile-overlay" id="adminModal" onclick="if(event.target===this)closeAdmin()">
-  <div class="profile-modal" style="max-width:680px;width:100%">
+  <div class="profile-modal" style="max-width:720px;width:95%">
     <div class="pm-header">
       <div class="pm-title">🛠️ Painel Admin</div>
       <button class="pm-close" onclick="closeAdmin()">×</button>
     </div>
-    <div class="pm-body" id="adminBody" style="max-height:70vh;overflow-y:auto">
-      <div style="color:#888;font-size:13px;text-align:center;padding:20px">Carregando...</div>
+    <div style="display:flex;gap:6px;padding:0 20px 12px;flex-wrap:wrap">
+      <button onclick="adminTab('duplicatas')" id="atab-duplicatas" style="flex:1;min-width:100px;padding:7px;border-radius:8px;border:none;cursor:pointer;font-size:12px;font-weight:700;font-family:inherit;background:#2a2a2a;color:#fff">🔁 Duplicatas</button>
+      <button onclick="adminTab('membros')" id="atab-membros" style="flex:1;min-width:100px;padding:7px;border-radius:8px;border:none;cursor:pointer;font-size:12px;font-weight:700;font-family:inherit;background:#2a2a2a;color:#fff">👥 Membros</button>
+      <button onclick="adminTab('sem_avaliacao')" id="atab-sem_avaliacao" style="flex:1;min-width:100px;padding:7px;border-radius:8px;border:none;cursor:pointer;font-size:12px;font-weight:700;font-family:inherit;background:#2a2a2a;color:#fff">⭐ Sem avaliação</button>
+      <button onclick="adminTab('stats')" id="atab-stats" style="flex:1;min-width:100px;padding:7px;border-radius:8px;border:none;cursor:pointer;font-size:12px;font-weight:700;font-family:inherit;background:#2a2a2a;color:#fff">📊 Stats</button>
+      <button onclick="adminTab('notificacao')" id="atab-notificacao" style="flex:1;min-width:100px;padding:7px;border-radius:8px;border:none;cursor:pointer;font-size:12px;font-weight:700;font-family:inherit;background:#2a2a2a;color:#fff">🔔 Notificação</button>
     </div>
-    <div class="pm-footer">
-      <button class="pm-cancel" onclick="closeAdmin()">Fechar</button>
-    </div>
-  </div>
-</div>
-
-<!-- ADMIN MODAL -->
-<div class="profile-overlay" id="adminModal" onclick="if(event.target===this)closeAdmin()">
-  <div class="profile-modal" style="max-width:680px;width:100%">
-    <div class="pm-header"><div class="pm-title">🛠️ Painel Admin</div><button class="pm-close" onclick="closeAdmin()">×</button></div>
-    <div class="pm-body" id="adminBody" style="max-height:70vh;overflow-y:auto"><div style="color:#888;text-align:center;padding:20px">Carregando...</div></div>
+    <div class="pm-body" id="adminBody" style="max-height:65vh;overflow-y:auto"></div>
     <div class="pm-footer"><button class="pm-cancel" onclick="closeAdmin()">Fechar</button></div>
   </div>
 </div>
