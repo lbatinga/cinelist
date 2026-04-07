@@ -1675,13 +1675,26 @@ async function initBiometricButton(){
 
 // ===== BOTTOM SHEETS =====
 function openBSheet(name){
-  document.getElementById(name+'Overlay').classList.add('open');
-  document.getElementById(name+'Sheet').classList.add('open');
+  // Support both old bsheet and new profile-overlay style
+  const modal = document.getElementById(name+'Modal');
+  if(modal){ modal.classList.add('open'); }
+  else {
+    const ol = document.getElementById(name+'Overlay');
+    const sh = document.getElementById(name+'Sheet');
+    if(ol) ol.classList.add('open');
+    if(sh) sh.classList.add('open');
+  }
   history.pushState({bsheet:name},'','');
 }
 function closeBSheet(name){
-  document.getElementById(name+'Overlay').classList.remove('open');
-  document.getElementById(name+'Sheet').classList.remove('open');
+  const modal = document.getElementById(name+'Modal');
+  if(modal){ modal.classList.remove('open'); }
+  else {
+    const ol = document.getElementById(name+'Overlay');
+    const sh = document.getElementById(name+'Sheet');
+    if(ol) ol.classList.remove('open');
+    if(sh) sh.classList.remove('open');
+  }
 }
 
 // Back button closes sheets
@@ -1750,10 +1763,10 @@ async function openMaisInfo(id, nome, ano){
     const wri = omdb?.Writer && omdb.Writer!=='N/A' ? omdb.Writer.split(',').slice(0,2).join(', ') : null;
     if(dir||wri) html += '<div class="bsheet-section"><div class="bsheet-section-title">🎬 Direção e Roteiro</div>'+(dir?'<div style="margin-bottom:6px"><span style="color:#888;font-size:11px">Diretor</span><br><span style="font-size:14px;font-weight:600">'+esc(dir)+'</span></div>':'')+(wri?'<div><span style="color:#888;font-size:11px">Roteiro</span><br><span style="font-size:13px">'+esc(wri)+'</span></div>':'')+'</div>';
     const cast = tmdbC?.cast?.slice(0,6)||[];
-    if(cast.length) html += '<div class="bsheet-section"><div class="bsheet-section-title">🎭 Elenco Principal</div><div style="display:flex;gap:10px;overflow-x:auto;padding-bottom:4px">'+cast.map(a=>'<div style="text-align:center;min-width:60px"><div style="width:52px;height:52px;border-radius:50%;overflow:hidden;margin:0 auto 4px;background:#2a2a2a">'+(a.profile_path?'<img src="https://image.tmdb.org/t/p/w200'+a.profile_path+'" style="width:100%;height:100%;object-fit:cover">':'<div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;font-size:18px">👤</div>')+'</div><div style="font-size:9px;font-weight:600;line-height:1.2">'+esc(a.name.split(' ')[0])+'</div></div>').join('')+'</div></div>';
-    const prods = tmdbD?.production_companies?.slice(0,3).map(p=>p.name)||[];
-    const countries = tmdbD?.production_countries?.map(p=>p.name)||[];
-    if(prods.length||countries.length) html += '<div class="bsheet-section"><div class="bsheet-section-title">🏢 Produção</div>'+(prods.length?'<div style="margin-bottom:6px"><span style="color:#888;font-size:11px">Produtoras</span><br><span style="font-size:13px">'+esc(prods.join(', '))+'</span></div>':'')+(countries.length?'<div><span style="color:#888;font-size:11px">Países</span><br><span style="font-size:13px">'+esc(countries.join(', '))+'</span></div>':'')+'</div>';
+    if(cast.length) html += '<div class="bsheet-section"><div class="bsheet-section-title">🎭 Elenco Principal</div><div style="display:flex;gap:10px;overflow-x:auto;padding-bottom:4px">'+cast.map(a=>'<div style="text-align:center;min-width:60px"><div style="width:52px;height:52px;border-radius:50%;overflow:hidden;margin:0 auto 4px;background:#2a2a2a">'+(a.profile_path?'<img src="https://image.tmdb.org/t/p/w200'+a.profile_path+'" style="width:100%;height:100%;object-fit:cover">':'<div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;font-size:18px">👤</div>')+'</div><div style="font-size:9px;font-weight:600;line-height:1.2">'+esc(a.name.split(' ').slice(0,2).join(' '))+'</div></div>').join('')+'</div></div>';
+    const countryMap = {'United States of America':'Estados Unidos','United Kingdom':'Reino Unido','France':'França','Germany':'Alemanha','Italy':'Itália','Spain':'Espanha','Japan':'Japão','South Korea':'Coreia do Sul','China':'China','Brazil':'Brasil','Australia':'Austrália','Canada':'Canadá','India':'Índia','Mexico':'México','Argentina':'Argentina','New Zealand':'Nova Zelândia','Ireland':'Irlanda','Sweden':'Suécia','Denmark':'Dinamarca','Norway':'Noruega','Russia':'Rússia','South Africa':'África do Sul'};
+    const countries = tmdbD?.production_countries?.map(p=>countryMap[p.name]||p.name)||[];
+    if(countries.length) html += '<div class="bsheet-section"><div class="bsheet-section-title">🌍 País de Produção</div><div style="font-size:13px">'+esc(countries.join(', '))+'</div></div>';
     const bud = tmdbD?.budget, rev = tmdbD?.revenue;
     const fm = n => n>=1e6?'US$ '+(n/1e6).toFixed(1)+'M':n>=1e3?'US$ '+(n/1e3).toFixed(0)+'K':'US$ '+n;
     if(bud>0||rev>0) html += '<div class="bsheet-section"><div class="bsheet-section-title">💰 Financeiro</div><div style="display:flex;gap:16px">'+(bud>0?'<div><span style="color:#888;font-size:11px">Orçamento</span><br><span style="font-size:14px;font-weight:700">'+fm(bud)+'</span></div>':'')+(rev>0?'<div><span style="color:#888;font-size:11px">Bilheteria</span><br><span style="font-size:14px;font-weight:700;color:#46d369">'+fm(rev)+'</span></div>':'')+'</div></div>';
@@ -3078,12 +3091,11 @@ async function enviarNotificacaoManual(){
   msg.style.color='#888'; msg.textContent='⏳ Enviando...';
   try {
     const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbyOBpxJ2PQOxMsOQyVjcxw4Y8F1_MprYHTSqoGOc5-ErqZHajCEKLC_fVCHmTJUi4Rr/exec';
-    // Use no-cors to avoid CORS blocking (Apps Script limitation)
-    await fetch(APPS_SCRIPT_URL, {
-      method: 'POST',
-      mode: 'no-cors',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ titulo, body, manual: true })
+    // Use GET with params to avoid CORS issues with Apps Script
+    const params = new URLSearchParams({ titulo, body, manual: '1' });
+    await fetch(APPS_SCRIPT_URL + '?' + params.toString(), {
+      method: 'GET',
+      mode: 'no-cors'
     });
     msg.style.color='#46d369'; msg.textContent='✅ Notificação enviada!';
   } catch(e) {
@@ -3268,19 +3280,25 @@ window.addEventListener('popstate',()=>{
 
 
 
-<!-- BOTTOM SHEET: MAIS INFO -->
-<div class="bsheet-overlay" id="maisInfoOverlay" onclick="closeBSheet('maisInfo')"></div>
-<div class="bsheet" id="maisInfoSheet">
-  <div class="bsheet-handle"></div>
-  <div class="bsheet-title">ℹ️ Mais Informações</div>
-  <div class="bsheet-body" id="maisInfoBody"></div>
+<!-- MODAL: MAIS INFO -->
+<div class="profile-overlay" id="maisInfoModal" onclick="if(event.target===this)closeBSheet('maisInfo')">
+  <div class="profile-modal" style="max-width:480px">
+    <div class="pm-header">
+      <div class="pm-title">ℹ️ Mais Informações</div>
+      <button class="pm-close" onclick="closeBSheet('maisInfo')">×</button>
+    </div>
+    <div class="pm-body" id="maisInfoBody" style="padding:16px;max-height:70vh;overflow-y:auto"></div>
+  </div>
 </div>
-<!-- BOTTOM SHEET: ONDE ASSISTIR -->
-<div class="bsheet-overlay" id="ondeOverlay" onclick="closeBSheet('onde')"></div>
-<div class="bsheet" id="ondeSheet">
-  <div class="bsheet-handle"></div>
-  <div class="bsheet-title">📺 Onde Assistir</div>
-  <div class="bsheet-body" id="ondeBody"></div>
+<!-- MODAL: ONDE ASSISTIR -->
+<div class="profile-overlay" id="ondeModal" onclick="if(event.target===this)closeBSheet('onde')">
+  <div class="profile-modal" style="max-width:420px">
+    <div class="pm-header">
+      <div class="pm-title">📺 Onde Assistir</div>
+      <button class="pm-close" onclick="closeBSheet('onde')">×</button>
+    </div>
+    <div class="pm-body" id="ondeBody" style="padding:16px"></div>
+  </div>
 </div>
 
 </body>
