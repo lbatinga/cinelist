@@ -14,10 +14,8 @@ const messaging = firebase.messaging();
 
 // Notificação em background (app fechado)
 messaging.onBackgroundMessage(payload => {
-  console.log('Background message:', payload);
   const { title = 'CineList', body = '' } = payload.notification || {};
   const data = payload.data || {};
-
   self.registration.showNotification(title, {
     body,
     icon: './icon-192.png',
@@ -43,18 +41,32 @@ self.addEventListener('notificationclick', e => {
   );
 });
 
-// Cache básico
-const CACHE = 'cinelist-v2';
-self.addEventListener('install', e => { self.skipWaiting(); });
+// SEM CACHE — sempre busca a versão mais recente da rede
+const CACHE = 'cinelist-v3';
+
+self.addEventListener('install', e => {
+  self.skipWaiting(); // Ativa imediatamente sem esperar fechar o app
+});
+
 self.addEventListener('activate', e => {
   e.waitUntil(
     caches.keys().then(keys =>
-      Promise.all(keys.filter(k => k !== CACHE).map(k => caches.delete(k)))
-    )
+      Promise.all(keys.map(k => caches.delete(k))) // Limpa TODO o cache antigo
+    ).then(() => self.clients.claim()) // Toma controle imediatamente
   );
-  self.clients.claim();
 });
+
 self.addEventListener('fetch', e => {
-  if (e.request.url.includes('supabase.co') || e.request.url.includes('gstatic.com')) return;
-  e.respondWith(fetch(e.request).catch(() => caches.match(e.request)));
+  // Nunca serve cache — sempre vai para a rede
+  // Só ignora requisições externas (Supabase, Firebase)
+  if (
+    e.request.url.includes('supabase.co') ||
+    e.request.url.includes('gstatic.com') ||
+    e.request.url.includes('firebase') ||
+    e.request.url.includes('tmdb.org')
+  ) return;
+
+  e.respondWith(
+    fetch(e.request).catch(() => caches.match(e.request))
+  );
 });
