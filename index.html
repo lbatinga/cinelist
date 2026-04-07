@@ -1639,7 +1639,10 @@ async function initBiometricButton(){
   }
 }
 
-// INIT
+// INIT — registra Service Worker imediatamente para PWA funcionar
+if('serviceWorker' in navigator){
+  navigator.serviceWorker.register('./sw.js').catch(e => console.warn('SW:', e));
+}
 showAuthScreen();
 
 // ── RANKING V2 ──
