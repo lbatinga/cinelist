@@ -10,6 +10,8 @@
 <meta name="apple-mobile-web-app-title" content="CineList">
 <title>CineList</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-messaging-compat.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
@@ -261,9 +263,9 @@ tr.selected td{background:rgba(229,9,20,.05)}
 /* ── RANKING TABS ── */
 .rtabs{display:flex;gap:0;border-bottom:2px solid var(--border);margin-bottom:20px;overflow-x:auto;scrollbar-width:none}
 .rtabs::-webkit-scrollbar{display:none}
-.rtab{padding:10px 20px;font-size:13px;font-weight:600;color:var(--muted);cursor:pointer;white-space:nowrap;border-bottom:2px solid transparent;margin-bottom:-2px;transition:all .2s}
-.rtab:hover{color:var(--text)}
-.rtab.active{color:#fff;border-bottom-color:var(--red)}
+.rtab{padding:10px 20px;font-size:13px;font-weight:600;color:var(--muted);cursor:pointer;white-space:nowrap;border-bottom:3px solid transparent;margin-bottom:-2px;transition:all .2s;border-radius:6px 6px 0 0}
+.rtab:hover{color:var(--text);background:rgba(255,255,255,.05)}
+.rtab.active{color:#fff;border-bottom-color:var(--red);background:rgba(229,9,20,.12);font-weight:800}
 .year-sel{background:var(--surface2);border:1px solid var(--border);color:#fff;padding:6px 12px;border-radius:6px;font-family:inherit;font-size:13px;outline:none;cursor:pointer;margin-bottom:16px}
 .genre-sel{background:var(--surface2);border:1px solid var(--border);color:#fff;padding:6px 12px;border-radius:6px;font-family:inherit;font-size:13px;outline:none;cursor:pointer;margin-bottom:16px;min-width:180px}
 /* STATS CARDS */
@@ -367,6 +369,25 @@ tr.selected td{background:rgba(229,9,20,.05)}
 .rtabs-wrap::after{content:'';position:absolute;right:0;top:0;bottom:2px;width:40px;background:linear-gradient(to right,transparent,var(--bg));pointer-events:none}
 
 </style>
+<script>
+// ── FIREBASE INIT ──
+(function() {
+  try {
+    firebase.initializeApp({
+      apiKey: "AIzaSyBj3dOMt3v6zw3SHAGdnBEWB_BuDYVBBD0",
+      authDomain: "cinelist-new.firebaseapp.com",
+      projectId: "cinelist-new",
+      storageBucket: "cinelist-new.firebasestorage.app",
+      messagingSenderId: "101304466431",
+      appId: "1:101304466431:web:22b0367c1845ee8404c5ca"
+    });
+    window.fbMessaging = firebase.messaging();
+  } catch(e) {
+    console.warn('Firebase init error:', e);
+    window.fbMessaging = null;
+  }
+})();
+</script>
 </head>
 <body>
 
@@ -1020,6 +1041,7 @@ function openFilmeInPanel(id){
   if(window.innerWidth < 769){ openMobileFilmeModal(id); return; }
   document.getElementById('filmDetailPanel').innerHTML=filmDetailHTML(id);
   document.getElementById('filmDetailPanel').scrollTop=0;
+  const _f1=FM[id]; if(_f1) setTimeout(()=>loadExtRatings(id,_f1.nome,_f1.ano),0);
 }
 
 function filmDetailHTML(id){
@@ -1180,6 +1202,7 @@ function openPendPanel(id){
   if(window.innerWidth < 769){ openMobileFilmeModal(id); return; }
   document.getElementById('pendDetailPanel').innerHTML=filmDetailHTML(id);
   document.getElementById('pendDetailPanel').scrollTop=0;
+  const _fp=FM[id]; if(_fp) setTimeout(()=>loadExtRatings(id,_fp.nome,_fp.ano),0);
 }
 
 // ── AVALIAÇÕES ──
@@ -1249,6 +1272,7 @@ function openAvPanel(id){
   event.currentTarget.classList.add('selected');
   document.getElementById('avDetailPanel').innerHTML=filmDetailHTML(id);
   document.getElementById('avDetailPanel').scrollTop=0;
+  const _fa=FM[id]; if(_fa) setTimeout(()=>loadExtRatings(id,_fa.nome,_fa.ano),0);
 }
 
 // ── RECENTES ──
@@ -1296,6 +1320,7 @@ function openRecentPanel(id){
   event.currentTarget.classList.add('selected');
   document.getElementById('recentDetailPanel').innerHTML=filmDetailHTML(id);
   document.getElementById('recentDetailPanel').scrollTop=0;
+  const _fr=FM[id]; if(_fr) setTimeout(()=>loadExtRatings(id,_fr.nome,_fr.ano),0);
 }
 
 // ── RANKING V2 injected ──
@@ -2538,6 +2563,14 @@ const _origSaveRating = typeof saveRating !== 'undefined' ? saveRating : null;
 // Replace logout option in user dropdown
 
 
+// Helper para converter VAPID key
+function urlBase64ToUint8Array(base64String) {
+  const padding = '='.repeat((4 - base64String.length % 4) % 4);
+  const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
+  const rawData = window.atob(base64);
+  return Uint8Array.from([...rawData].map(c => c.charCodeAt(0)));
+}
+
 // ===== NOTIFICAÇÕES =====
 async function ativarNotificacoes() {
   if (!('Notification' in window)) {
@@ -2565,11 +2598,13 @@ async function ativarNotificacoes() {
 
     const VAPID = 'BFxhuP8nULdLvH6IwV7OwIXxyAjTaFB68lfPCNLjAaF9Vff1G58NOC0cvXiPlcX2u6TskdwGAgqJ4oC88-ApeWo';
 
-    // Usa o fbMessaging se disponível, senão usa push API direto
     let token = null;
     if (window.fbMessaging) {
-      const { getToken } = await import('https://www.gstatic.com/firebasejs/10.12.0/firebase-messaging.js');
-      token = await getToken(window.fbMessaging, { vapidKey: VAPID, serviceWorkerRegistration: swReg });
+      // SDK compat: getToken é método direto da instância
+      token = await window.fbMessaging.getToken({ vapidKey: VAPID, serviceWorkerRegistration: swReg });
+    } else {
+      showToast('⚠️ Firebase não carregou. Tente reabrir o app.');
+      return;
     }
 
     if (token) {
@@ -2581,7 +2616,7 @@ async function ativarNotificacoes() {
       }
       showToast('✅ Notificações ativadas!');
     } else {
-      showToast('✅ Notificações permitidas!');
+      showToast('⚠️ Permissão concedida, mas não foi possível registrar o dispositivo. Tente reabrir o app.');
     }
 
     buildUD(); // atualiza o menu
@@ -3108,6 +3143,7 @@ function openMobileFilmeModal(id){
   const f=FM[id]; if(!f) return;
   document.getElementById('mfmTitle').textContent=f.nome;
   document.getElementById('mfmContent').innerHTML=filmDetailHTML(id);
+  const _fm=FM[id]; if(_fm) setTimeout(()=>loadExtRatings(id,_fm.nome,_fm.ano),0);
   document.getElementById('mobileFilmeModal').classList.add('open');
   document.getElementById('mobileFilmeModal').scrollTop=0;
   document.body.style.overflow='hidden';
