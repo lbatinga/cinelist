@@ -723,16 +723,33 @@ var FM = FILMES_MAP; // alias
 const USERS = RAW.usuarios;
 const STATS = RAW.users_stats;
 // RECENT_IDS dinâmico: filmes adicionados nos últimos 10 dias
+function parseDataCadastro(f){
+  // Tenta data_ts primeiro (ISO format, mais confiável)
+  if(f.data_ts) return new Date(f.data_ts);
+  if(!f.data_cadastro) return null;
+  const s = f.data_cadastro;
+  // Formato dd/mm/yyyy
+  if(s.includes('/')) {
+    const [d,m,y] = s.split('/');
+    return new Date(parseInt(y), parseInt(m)-1, parseInt(d));
+  }
+  // Formato yyyy-mm-dd
+  return new Date(s);
+}
+
 function getRecentIds(){
   const cutoff = new Date();
   cutoff.setDate(cutoff.getDate() - 15);
   return FILMES
     .filter(f => {
-      if(!f.data_ts && !f.data_cadastro) return false;
-      const d = f.data_ts ? new Date(f.data_ts) : new Date(f.data_cadastro);
-      return d >= cutoff;
+      const d = parseDataCadastro(f);
+      return d && d >= cutoff;
     })
-    .sort((a,b) => new Date(b.data_ts||b.data_cadastro) - new Date(a.data_ts||a.data_cadastro))
+    .sort((a,b) => {
+      const da = parseDataCadastro(a) || new Date(0);
+      const db = parseDataCadastro(b) || new Date(0);
+      return db - da;
+    })
     .map(f => f.id);
 }
 let RECENT_IDS = RAW.recent_ids; // será atualizado após load
@@ -894,16 +911,17 @@ function rowHTML(title,films,showDate){
 }
 
 function pCard(f, showDate){
-  const dataCad = f.data_cadastro ? (f.data_cadastro.includes('-') ? f.data_cadastro.split('-').reverse().join('/') : f.data_cadastro) : null;
+  const d = parseDataCadastro ? parseDataCadastro(f) : null;
+  const dataCad = d ? `${String(d.getDate()).padStart(2,'0')}/${String(d.getMonth()+1).padStart(2,'0')}/${d.getFullYear()}` : null;
   return `<div class="poster-card" onclick="openFilme('${f.id}')">
     ${f.poster?`<img class="poster-img" src="${esc(f.poster)}" loading="lazy" alt="" onerror="this.style.display='none'">`:`<div class="poster-no-img">🎬</div>`}
     ${f.media?`<div class="poster-badge" style="color:${nC(f.media)}">${fmt(f.media)}</div>`:''}
     <div class="poster-class">${f.classificacao}</div>
+    ${showDate&&dataCad?`<div style="position:absolute;bottom:0;left:0;right:0;background:rgba(0,0,0,0.75);color:#aaa;font-size:9px;text-align:center;padding:3px 0">📅 ${dataCad}</div>`:''}
     <div class="poster-overlay"></div>
     <div class="poster-info">
       <div class="poster-title">${esc(f.nome)}</div>
       ${f.media?`<div class="poster-nota" style="color:${nC(f.media)}">★ ${fmt(f.media)}</div>`:''}
-      ${showDate&&dataCad?`<div style="font-size:9px;color:var(--muted2);margin-top:2px">📅 ${dataCad}</div>`:''}
     </div>
   </div>`;
 }
@@ -1024,7 +1042,10 @@ function filmDetailHTML(id){
         <div class="dp-ratings">
           ${avList.map(([uid,av])=>`<div class="dp-rating-row">
             <div class="dp-r-av" style="background:${aC(uid)}">${ini(USERS[uid]?.nome||'?')}</div>
-            <div class="dp-r-name">${esc(USERS[uid]?.nome||uid)}</div>
+            <div class="dp-r-name">
+              ${esc(USERS[uid]?.nome||uid)}
+              ${av.data?`<div style="font-size:10px;color:var(--muted2);margin-top:1px">${av.data}</div>`:''}
+            </div>
             <div class="dp-r-nota" style="color:${nC(av.nota)}">★ ${fmt(av.nota)}</div>
           </div>`).join('')}
         </div>`:''}
