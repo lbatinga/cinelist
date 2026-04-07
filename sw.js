@@ -1,72 +1,3341 @@
-importScripts('https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js');
-importScripts('https://www.gstatic.com/firebasejs/10.12.0/firebase-messaging-compat.js');
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<link rel="manifest" href="./manifest.json">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="theme-color" content="#141414">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="CineList">
+<title>CineList</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-messaging-compat.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#141414;--surface:#1f1f1f;--surface2:#2a2a2a;--surface3:#333;
+  --border:rgba(255,255,255,.1);
+  --red:#e50914;--red2:#b81d24;
+  --green:#46d369;--yellow:#f5c518;
+  --text:#fff;--muted:#b3b3b3;--muted2:#666;
+  --safe-top:env(safe-area-inset-top,0px);
+  --safe-bottom:env(safe-area-inset-bottom,0px);
+}
+html,body{height:100%;overflow:hidden}
+body{background:var(--bg);color:var(--text);font-family:'Inter',sans-serif;display:flex;flex-direction:column}
 
-firebase.initializeApp({
-  apiKey: "AIzaSyBj3dOMt3v6zw3SHAGdnBEWB_BuDYVBBD0",
-  authDomain: "cinelist-new.firebaseapp.com",
-  projectId: "cinelist-new",
-  storageBucket: "cinelist-new.firebasestorage.app",
-  messagingSenderId: "101304466431",
-  appId: "1:101304466431:web:22b0367c1845ee8404c5ca"
+/* ── TOPBAR ── */
+.topbar{
+  position:fixed;top:0;left:0;right:0;z-index:200;
+  height:calc(60px + var(--safe-top));
+  padding:calc(var(--safe-top) + 10px) 40px 10px;
+  display:flex;align-items:center;gap:20px;
+  background:linear-gradient(to bottom,rgba(20,20,20,1) 0%,rgba(20,20,20,0) 100%);
+  transition:background .3s;
+}
+.topbar.scrolled{background:rgba(20,20,20,.97);backdrop-filter:blur(8px)}
+.logo{cursor:pointer;display:flex;align-items:center;flex-shrink:0;line-height:1}
+.nav-links{display:flex;gap:2px}
+.nav-link{padding:6px 10px;font-size:13px;color:var(--muted);cursor:pointer;border-radius:6px;transition:color .15s;font-weight:500;white-space:nowrap}
+.nav-link:hover{color:var(--text)}
+.nav-link.active{color:var(--text);font-weight:700}
+.topbar-right{margin-left:auto;display:flex;align-items:center;gap:12px;flex-shrink:0}
+.search-wrap{position:relative}
+.search-icon{cursor:pointer;color:var(--muted);font-size:16px;padding:6px;transition:color .15s}
+.search-icon:hover{color:var(--text)}
+.search-box{position:absolute;right:0;top:50%;transform:translateY(-50%);width:0;background:rgba(20,20,20,.9);border:1px solid var(--border);padding:6px 0;border-radius:4px;color:var(--text);font-family:inherit;font-size:13px;outline:none;transition:width .3s,padding .3s,opacity .3s;opacity:0;pointer-events:none}
+.search-box.open{width:220px;padding:6px 14px;opacity:1;pointer-events:auto}
+.user-menu{position:relative}
+.user-avatar{width:34px;height:34px;border-radius:6px;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:13px;cursor:pointer;transition:opacity .2s;color:#000;user-select:none}
+.user-avatar:hover{opacity:.85}
+.user-dropdown{display:none;position:absolute;right:0;top:calc(100%+8px);background:rgba(20,20,20,.97);border:1px solid var(--border);border-radius:8px;padding:8px;min-width:190px;backdrop-filter:blur(12px);box-shadow:0 8px 32px rgba(0,0,0,.6)}
+.user-dropdown.open{display:block}
+.ud-header{font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:var(--muted2);padding:4px 10px 10px}
+.ud-item{display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:6px;cursor:pointer;font-size:13px;transition:background .15s}
+.ud-item:hover{background:var(--surface2)}
+.ud-item.current{background:var(--surface2)}
+.ud-av{width:28px;height:28px;border-radius:4px;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:11px;color:#000;flex-shrink:0}
+.ud-name{flex:1}
+.ud-check{color:var(--green);font-size:14px}
+
+/* ── MAIN SCROLL ── */
+.app-scroll{flex:1;overflow-y:auto;padding-top:60px;padding-bottom:var(--safe-bottom)}
+.app-scroll::-webkit-scrollbar{width:4px}
+.app-scroll::-webkit-scrollbar-thumb{background:var(--surface3);border-radius:2px}
+
+/* ── VIEWS ── */
+.view{display:none}
+.view.active{display:block}
+
+/* ── HERO BANNER (rotating) ── */
+.hero{position:relative;height:72vh;min-height:480px;overflow:hidden}
+.hero-slide{position:absolute;inset:0;background-size:cover;background-position:center 15%;transition:opacity .8s ease;opacity:0}
+.hero-slide.active{opacity:1}
+.hero-gradient{position:absolute;inset:0;background:linear-gradient(to top,rgba(20,20,20,1) 0%,rgba(20,20,20,.5) 40%,transparent 80%),linear-gradient(to right,rgba(20,20,20,.8) 0%,transparent 55%)}
+.hero-content{position:absolute;bottom:80px;left:48px;max-width:480px}
+.hero-title{font-size:clamp(28px,4vw,56px);font-weight:900;line-height:1.05;margin-bottom:10px;text-shadow:1px 1px 6px rgba(0,0,0,.6)}
+.hero-meta{display:flex;align-items:center;gap:12px;margin-bottom:12px;font-size:13px;color:var(--muted);flex-wrap:wrap}
+.hero-score{color:var(--green);font-weight:800;font-size:15px}
+.hero-desc{font-size:13px;color:#ccc;line-height:1.6;margin-bottom:18px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.hero-btns{display:flex;gap:10px}
+.hero-dots{position:absolute;bottom:20px;left:48px;display:flex;gap:6px}
+.hero-dot{width:8px;height:8px;border-radius:50%;background:rgba(255,255,255,.3);cursor:pointer;transition:all .2s;border:none}
+.hero-dot.active{background:#fff;width:20px;border-radius:4px}
+.btn-play{background:#fff;color:#000;font-weight:700;font-size:14px;padding:9px 22px;border-radius:6px;border:none;cursor:pointer;font-family:inherit;display:flex;align-items:center;gap:7px;transition:opacity .2s}
+.btn-play:hover{opacity:.85}
+.btn-info{background:rgba(109,109,110,.6);color:#fff;font-weight:700;font-size:14px;padding:9px 22px;border-radius:6px;border:none;cursor:pointer;font-family:inherit;display:flex;align-items:center;gap:7px;transition:background .2s}
+.btn-info:hover{background:rgba(109,109,110,.4)}
+
+/* ── ROWS ── */
+.rows-section{padding:0 40px 48px}
+.row{margin-bottom:28px}
+.row-title{font-size:18px;font-weight:700;margin-bottom:12px;color:#e5e5e5}
+.row-track{display:flex;gap:6px;overflow-x:auto;padding-bottom:6px;scrollbar-width:none;-webkit-overflow-scrolling:touch;cursor:grab}
+.row-track::-webkit-scrollbar{display:none}
+.poster-card{flex-shrink:0;width:130px;cursor:pointer;border-radius:6px;overflow:hidden;position:relative;transition:transform .25s,box-shadow .25s}
+.poster-card:hover{transform:scale(1.08);box-shadow:0 6px 28px rgba(0,0,0,.8);z-index:10}
+.poster-img{width:130px;height:195px;object-fit:cover;display:block;background:var(--surface2)}
+.poster-no-img{width:130px;height:195px;background:var(--surface2);display:flex;align-items:center;justify-content:center;font-size:36px}
+.poster-overlay{position:absolute;inset:0;background:linear-gradient(to top,rgba(0,0,0,.9) 0%,transparent 50%);opacity:0;transition:opacity .25s}
+.poster-card:hover .poster-overlay{opacity:1}
+.poster-info{position:absolute;bottom:0;left:0;right:0;padding:8px;transform:translateY(100%);transition:transform .25s}
+.poster-card:hover .poster-info{transform:translateY(0)}
+.poster-title{font-size:11px;font-weight:700;line-height:1.3;margin-bottom:3px}
+.poster-nota{font-size:12px;font-weight:800;color:var(--green)}
+.poster-badge{position:absolute;top:5px;right:5px;background:rgba(0,0,0,.8);color:var(--green);font-weight:800;font-size:11px;padding:2px 6px;border-radius:4px;backdrop-filter:blur(4px)}
+.poster-class{position:absolute;top:5px;left:5px;font-size:9px;font-weight:700;padding:1px 5px;border-radius:3px;background:rgba(0,0,0,.7);color:var(--muted)}
+
+/* ── TABLE PAGES ── */
+.tpage{padding:20px 40px 40px}
+.tpage-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:10px}
+.tpage-title{font-size:22px;font-weight:800}
+.btn-add{background:var(--red);color:#fff;font-weight:700;font-size:13px;padding:8px 16px;border-radius:6px;border:none;cursor:pointer;font-family:inherit;display:flex;align-items:center;gap:6px;transition:background .2s;flex-shrink:0}
+.btn-add:hover{background:var(--red2)}
+.genre-pills{display:flex;gap:6px;overflow-x:auto;padding-bottom:4px;scrollbar-width:none;margin-bottom:14px}
+.genre-pills::-webkit-scrollbar{display:none}
+.gpill{flex-shrink:0;background:var(--surface2);border:1px solid var(--border);color:var(--muted);padding:5px 14px;border-radius:20px;font-size:12px;font-family:inherit;cursor:pointer;transition:all .2s;white-space:nowrap}
+.gpill:hover{border-color:rgba(255,255,255,.3);color:#fff}
+.gpill.active{background:#fff;color:#000;font-weight:700;border-color:#fff}
+table{width:100%;border-collapse:collapse;font-size:13px}
+th{text-align:left;padding:9px 12px;color:var(--muted2);font-weight:500;font-size:11px;letter-spacing:.4px;text-transform:uppercase;border-bottom:1px solid var(--border);position:sticky;top:0;background:var(--bg);z-index:5}
+td{padding:9px 12px;border-bottom:1px solid rgba(255,255,255,.04);vertical-align:middle}
+tr:hover td{background:rgba(255,255,255,.03);cursor:pointer}
+tr.selected td{background:rgba(229,9,20,.05)}
+.td-nota{font-weight:800;font-size:14px}
+.td-name{font-weight:500;max-width:380px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.td-muted{color:var(--muted)}
+
+/* ── FILM DETAIL (split panel) ── */
+.detail-layout{display:flex;height:calc(100vh - 60px);overflow:hidden}
+.detail-list{width:55%;border-right:1px solid var(--border);overflow-y:auto;flex-shrink:0}
+.detail-list::-webkit-scrollbar{width:4px}
+.detail-list::-webkit-scrollbar-thumb{background:var(--surface2)}
+.detail-panel{flex:1;overflow-y:auto;background:var(--surface)}
+.detail-panel::-webkit-scrollbar{width:4px}
+.detail-panel::-webkit-scrollbar-thumb{background:var(--surface2)}
+.dp-backdrop{width:100%;height:280px;background-size:cover;background-position:center 20%;position:relative}
+.dp-backdrop-grad{position:absolute;inset:0;background:linear-gradient(to top,var(--surface) 0%,rgba(31,31,31,.3) 60%,transparent 100%)}
+.dp-body{padding:0 24px 32px;margin-top:-60px;position:relative}
+.dp-title{font-size:24px;font-weight:900;margin-bottom:10px;line-height:1.1}
+.dp-meta{display:flex;align-items:center;gap:10px;margin-bottom:12px;flex-wrap:wrap}
+.dp-score{font-size:17px;font-weight:800;color:var(--green)}
+.dp-meta-item{font-size:12px;color:var(--muted)}
+.dp-class{font-size:10px;font-weight:700;padding:2px 7px;border-radius:3px;border:1px solid var(--muted2);color:var(--muted)}
+.dp-cats{display:flex;gap:5px;flex-wrap:wrap;margin-bottom:12px}
+.dp-cat{font-size:11px;padding:3px 10px;border-radius:16px;background:var(--surface2);color:var(--muted)}
+.dp-desc{font-size:13px;color:#ccc;line-height:1.7;margin-bottom:16px}
+.dp-actions{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px}
+.dp-btn{display:flex;flex-direction:column;align-items:center;gap:4px;padding:10px 14px;border-radius:10px;cursor:pointer;border:none;font-family:inherit;min-width:64px;transition:opacity .2s;text-decoration:none}
+.dp-btn:hover{opacity:.85}
+.dp-btn-icon{font-size:18px}
+.dp-btn-label{font-size:10px;font-weight:700;color:#000}
+.dp-btn-green{background:var(--green)}
+.dp-btn-grey{background:var(--surface3);color:#fff}
+.dp-btn-grey .dp-btn-label{color:#fff}
+.dp-btn-red{background:var(--red);color:#fff}
+.dp-btn-red .dp-btn-label{color:#fff}
+.dp-section-title{font-size:13px;font-weight:700;color:#e5e5e5;margin:16px 0 10px}
+.dp-ratings{display:flex;flex-direction:column;gap:6px}
+.dp-rating-row{display:flex;align-items:center;gap:10px;padding:8px 12px;background:var(--surface2);border-radius:8px}
+.dp-r-av{width:30px;height:30px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:11px;color:#000;flex-shrink:0}
+.dp-r-name{flex:1;font-size:13px;font-weight:600}
+.dp-r-nota{font-size:18px;font-weight:800;color:var(--green);flex-shrink:0}
+.dp-r-noav{font-size:11px;color:var(--muted2);flex-shrink:0}
+.dp-footer{margin-top:16px;padding-top:14px;border-top:1px solid var(--border);display:flex;gap:16px;font-size:12px;color:var(--muted);flex-wrap:wrap}
+.dp-nav{position:absolute;top:12px;right:12px;display:flex;gap:6px;z-index:10}
+.dp-nav-btn{background:rgba(20,20,20,.8);border:1px solid rgba(255,255,255,.2);color:#fff;width:30px;height:30px;border-radius:50%;cursor:pointer;font-size:14px;display:flex;align-items:center;justify-content:center;transition:all .15s;backdrop-filter:blur(4px)}
+.dp-nav-btn:hover{background:var(--surface3)}
+.dp-nav-btn:disabled{opacity:.25;cursor:default}
+.dp-empty{padding:80px 24px;text-align:center;color:var(--muted)}
+
+/* ── RATING MODAL ── */
+.modal-overlay{display:none;position:fixed;inset:0;z-index:600;background:rgba(0,0,0,.8);align-items:center;justify-content:center;padding:20px;backdrop-filter:blur(4px)}
+.modal-overlay.open{display:flex}
+.modal-box{background:#181818;border-radius:14px;width:100%;max-width:440px;padding:28px;animation:mIn .22s ease;border:1px solid var(--border)}
+@keyframes mIn{from{opacity:0;transform:scale(.93) translateY(16px)}to{opacity:1;transform:none}}
+.modal-title{font-size:20px;font-weight:800;margin-bottom:4px}
+.modal-film{font-size:13px;color:var(--muted);margin-bottom:24px}
+.form-group{margin-bottom:16px}
+.form-label{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);margin-bottom:8px;display:block}
+.nota-input-wrap{display:flex;align-items:center;gap:0;background:var(--surface2);border:1px solid var(--border);border-radius:8px;overflow:hidden}
+.nota-input-wrap input{flex:1;background:transparent;border:none;color:#fff;font-size:22px;font-weight:800;text-align:center;padding:12px;font-family:inherit;outline:none}
+.nota-btn{background:transparent;border:none;color:#fff;font-size:22px;padding:0 18px;cursor:pointer;transition:background .15s;height:100%;align-self:stretch;display:flex;align-items:center}
+.nota-btn:hover{background:var(--surface3)}
+.vai-btns{display:flex;gap:8px}
+.vai-btn{flex:1;background:var(--surface2);border:1px solid var(--border);color:var(--muted);padding:10px;border-radius:8px;font-family:inherit;font-size:13px;font-weight:600;cursor:pointer;transition:all .2s}
+.vai-btn:hover,.vai-btn.active{background:#fff;color:#000;border-color:#fff}
+.form-input{width:100%;background:var(--surface2);border:1px solid var(--border);color:#fff;padding:10px 14px;border-radius:8px;font-family:inherit;font-size:14px;outline:none;transition:border-color .2s}
+.form-input:focus{border-color:var(--red)}
+.modal-actions{display:flex;gap:10px;margin-top:22px;justify-content:flex-end}
+.btn-cancel{background:var(--surface2);color:#fff;border:1px solid var(--border);padding:9px 18px;border-radius:6px;cursor:pointer;font-family:inherit;font-size:13px;font-weight:600}
+.btn-save{background:var(--green);color:#000;border:none;padding:9px 22px;border-radius:6px;cursor:pointer;font-family:inherit;font-size:14px;font-weight:800;transition:opacity .2s}
+.btn-save:hover{opacity:.88}
+
+/* ── ADD FILM MODAL ── */
+.add-modal-box{background:#181818;border-radius:14px;width:100%;max-width:460px;padding:28px;animation:mIn .22s ease;border:1px solid var(--border)}
+.tmdb-prev{display:none;background:var(--surface2);border-radius:8px;padding:12px;gap:12px;margin-top:10px;align-items:flex-start}
+.tmdb-prev.show{display:flex}
+.tmdb-thumb{width:56px;height:84px;object-fit:cover;border-radius:4px;flex-shrink:0;background:var(--surface3)}
+.form-row{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+
+/* ── RANKING ── */
+.rank-section{padding:20px 40px 40px}
+.rank-item{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:14px 18px;display:flex;align-items:center;gap:14px;cursor:pointer;transition:all .2s;margin-bottom:8px}
+.rank-item:hover{background:var(--surface2);border-color:rgba(255,255,255,.2)}
+.rank-num{font-size:22px;font-weight:900;width:36px;text-align:center;color:var(--muted2);flex-shrink:0}
+.rank-av{width:44px;height:44px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:15px;color:#000;flex-shrink:0}
+.rank-info{flex:1;min-width:0}
+.rank-name{font-size:15px;font-weight:700}
+.rank-sub{font-size:11px;color:var(--muted);margin-top:2px}
+.rank-stats{display:flex;gap:16px;flex-shrink:0}
+.rstat{display:flex;flex-direction:column;align-items:center}
+.rstat-n{font-size:17px;font-weight:800}
+.rstat-l{font-size:9px;text-transform:uppercase;color:var(--muted2);letter-spacing:.5px}
+
+/* ── EMPTY / NEED LOGIN ── */
+.empty-block{padding:70px 24px;text-align:center;color:var(--muted)}
+.empty-icon{font-size:44px;margin-bottom:10px}
+
+/* ── MOBILE BOTTOM NAV ── */
+.bottom-nav{display:none;position:fixed;bottom:0;left:0;right:0;z-index:100;background:rgba(20,20,20,.97);backdrop-filter:blur(12px);border-top:1px solid var(--border);padding-bottom:var(--safe-bottom)}
+.bn-inner{display:flex;justify-content:space-around}
+.bn-item{display:flex;flex-direction:column;align-items:center;gap:3px;padding:8px 4px;cursor:pointer;flex:1;transition:color .15s;color:var(--muted);min-width:0}
+.bn-item.active,.bn-item:hover{color:#fff}
+.bn-icon{font-size:20px}
+.bn-label{font-size:9px;font-weight:600;text-transform:uppercase;letter-spacing:.3px}
+
+@media(max-width:768px){
+  .topbar{padding:calc(var(--safe-top) + 8px) 16px 8px;height:calc(52px + var(--safe-top))}
+  .nav-links{display:none}
+  .bottom-nav{display:flex}
+  .app-scroll{padding-top:52px;padding-bottom:calc(56px + var(--safe-bottom))}
+  .hero-content{left:16px;bottom:50px;max-width:calc(100% - 32px)}
+  .rows-section{padding:0 12px 40px}
+  .tpage{padding:16px}
+  .rank-section{padding:16px}
+  .detail-layout{flex-direction:column;height:auto}
+  .detail-list{width:100%;height:auto;border-right:none;border-bottom:1px solid var(--border)}
+  .detail-panel{height:auto}
+  .dp-backdrop{height:220px}
+  .rank-stats{gap:10px}
+  .poster-card{width:110px}
+  .poster-img,.poster-no-img{width:110px;height:165px}
+  table thead th:nth-child(4),table thead th:nth-child(5),table thead th:nth-child(6),table thead th:nth-child(7),
+  table tbody td:nth-child(4),table tbody td:nth-child(5),table tbody td:nth-child(6),table tbody td:nth-child(7){display:none}
+  table tbody td{padding:12px 8px}
+  .td-name{font-size:14px;max-width:200px}
+  .detail-panel{display:none}
+  table tbody tr{cursor:pointer;-webkit-tap-highlight-color:rgba(255,255,255,.08)}
+}
+
+#mobileFilmeModal{display:none;position:fixed;inset:0;z-index:800;background:#0d0d0d;overflow-y:auto;-webkit-overflow-scrolling:touch}
+#mobileFilmeModal.open{display:block}
+.mfm-close{position:sticky;top:0;z-index:10;display:flex;align-items:center;gap:10px;padding:12px 16px;background:rgba(13,13,13,.92);backdrop-filter:blur(8px);border-bottom:1px solid #222}
+.mfm-close-btn{background:#222;border:none;color:#fff;width:34px;height:34px;border-radius:50%;font-size:20px;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.mfm-close-title{font-size:14px;font-weight:700;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+@media(min-width:769px){
+  .detail-layout{height:calc(100vh - 60px)}
+}
+
+/* ── RANKING TABS ── */
+.rtabs{display:flex;gap:0;border-bottom:2px solid var(--border);margin-bottom:20px;overflow-x:auto;scrollbar-width:none}
+.rtabs::-webkit-scrollbar{display:none}
+.rtab{padding:10px 20px;font-size:13px;font-weight:600;color:var(--muted);cursor:pointer;white-space:nowrap;border-bottom:3px solid transparent;margin-bottom:-2px;transition:all .2s;border-radius:6px 6px 0 0}
+.rtab:hover{color:var(--text);background:rgba(255,255,255,.05)}
+.rtab.active{color:#fff;border-bottom-color:var(--red);background:rgba(229,9,20,.12);font-weight:800}
+.year-sel{background:var(--surface2);border:1px solid var(--border);color:#fff;padding:6px 12px;border-radius:6px;font-family:inherit;font-size:13px;outline:none;cursor:pointer;margin-bottom:16px}
+.genre-sel{background:var(--surface2);border:1px solid var(--border);color:#fff;padding:6px 12px;border-radius:6px;font-family:inherit;font-size:13px;outline:none;cursor:pointer;margin-bottom:16px;min-width:180px}
+/* STATS CARDS */
+.stats-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:12px;margin-bottom:24px}
+.stat-card{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:18px}
+.stat-card-n{font-size:30px;font-weight:900;line-height:1;margin-bottom:4px}
+.stat-card-l{font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:var(--muted2)}
+.stat-card-sub{font-size:12px;color:var(--muted);margin-top:4px}
+/* FILM RANK LIST */
+.film-rank-item{display:flex;align-items:center;gap:12px;padding:10px 14px;border-bottom:1px solid rgba(255,255,255,.04);cursor:pointer;transition:background .15s}
+.film-rank-item:hover{background:rgba(255,255,255,.03)}
+.fr-num{font-size:18px;font-weight:900;width:32px;text-align:center;color:var(--muted2);flex-shrink:0}
+.fr-num.top3{color:var(--yellow)}
+.fr-poster{width:36px;height:54px;object-fit:cover;border-radius:4px;flex-shrink:0;background:var(--surface2)}
+.fr-info{flex:1;min-width:0}
+.fr-title{font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.fr-sub{font-size:11px;color:var(--muted);margin-top:2px}
+.fr-nota{font-size:20px;font-weight:900;color:var(--green);flex-shrink:0}
+.fr-bar{width:60px;flex-shrink:0}
+.fr-bar-track{height:3px;background:var(--surface2);border-radius:2px;overflow:hidden}
+.fr-bar-fill{height:100%;background:linear-gradient(90deg,var(--green),#00a0ff);border-radius:2px}
+/* GENRE BARS */
+.genre-bar-row{display:flex;align-items:center;gap:10px;margin-bottom:8px}
+.genre-bar-label{font-size:12px;font-weight:600;width:120px;flex-shrink:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.genre-bar-track{flex:1;height:8px;background:var(--surface2);border-radius:4px;overflow:hidden}
+.genre-bar-fill{height:100%;background:linear-gradient(90deg,var(--red),#f5c518);border-radius:4px}
+.genre-bar-n{font-size:12px;font-weight:700;width:32px;text-align:right;flex-shrink:0;color:var(--muted)}
+/* USER YEAR TABLE */
+.uyt{width:100%;border-collapse:collapse;font-size:12px;margin-top:12px}
+.uyt th{text-align:center;padding:6px 8px;color:var(--muted2);font-size:10px;font-weight:600;text-transform:uppercase;border-bottom:1px solid var(--border)}
+.uyt td{text-align:center;padding:6px 8px;border-bottom:1px solid rgba(255,255,255,.04);font-weight:600}
+.uyt td:first-child{text-align:left;color:var(--muted)}
+
+
+/* ── AUTH SCREEN ── */
+.auth-screen{position:fixed;inset:0;z-index:1000;background:#0a0a0a;display:flex;align-items:center;justify-content:center;padding:20px}
+.auth-box{background:#181818;border:1px solid rgba(255,255,255,.1);border-radius:20px;padding:48px 40px;max-width:400px;width:100%;text-align:center}
+.auth-logo{display:flex;justify-content:center;margin-bottom:8px}
+.auth-tagline{font-size:14px;color:#666;margin-bottom:40px}
+.auth-btn{width:100%;display:flex;align-items:center;justify-content:center;gap:12px;padding:13px 20px;border-radius:10px;font-size:15px;font-weight:600;cursor:pointer;border:none;font-family:inherit;transition:all .2s;margin-bottom:12px}
+.auth-btn-google{background:#fff;color:#000}
+.auth-btn-google:hover{background:#f0f0f0}
+.auth-btn-ms{background:#2f2f2f;color:#fff;border:1px solid #444}
+.auth-btn-ms:hover{background:#3a3a3a}
+.auth-btn-icon{width:22px;height:22px;flex-shrink:0}
+.auth-divider{color:#444;font-size:12px;margin:16px 0;position:relative}
+.auth-divider::before,.auth-divider::after{content:'';position:absolute;top:50%;width:40%;height:1px;background:#333}
+.auth-divider::before{left:0}.auth-divider::after{right:0}
+.auth-footer{font-size:12px;color:#444;margin-top:24px;line-height:1.6}
+.auth-loading{display:flex;flex-direction:column;align-items:center;gap:16px}
+.auth-spinner{width:40px;height:40px;border:3px solid #333;border-top-color:#e50914;border-radius:50%;animation:spin .8s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+
+.form-input:focus { border-color: var(--red) !important; }
+
+/* ── PROFILE & PASSWORD MODALS ── */
+.profile-overlay{display:none;position:fixed;inset:0;z-index:700;background:rgba(0,0,0,.85);align-items:center;justify-content:center;padding:20px;backdrop-filter:blur(6px)}
+.profile-overlay.open{display:flex}
+.profile-modal{background:#181818;border-radius:16px;width:100%;max-width:480px;max-height:90vh;overflow-y:auto;border:1px solid rgba(255,255,255,.1);animation:mIn .22s ease}
+.pm-header{padding:24px 24px 0;display:flex;align-items:center;justify-content:space-between}
+.pm-title{font-size:20px;font-weight:800}
+.pm-close{background:var(--surface2);border:1px solid rgba(255,255,255,.1);color:#fff;width:32px;height:32px;border-radius:50%;cursor:pointer;font-size:18px;display:flex;align-items:center;justify-content:center}
+.pm-close:hover{background:#333}
+.pm-body{padding:20px 24px}
+.pm-field{margin-bottom:16px}
+.pm-label{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:#888;margin-bottom:7px;display:block}
+.pm-input{width:100%;background:#2a2a2a;border:1px solid #333;color:#fff;padding:10px 14px;border-radius:8px;font-family:inherit;font-size:14px;outline:none}
+.pm-input:focus{border-color:var(--red)}
+.pm-footer{padding:0 24px 24px;display:flex;gap:10px;justify-content:flex-end}
+.pm-save{background:var(--red);color:#fff;border:none;padding:10px 24px;border-radius:8px;cursor:pointer;font-family:inherit;font-size:14px;font-weight:800}
+.pm-cancel{background:#2a2a2a;color:#fff;border:1px solid #333;padding:10px 18px;border-radius:8px;cursor:pointer;font-family:inherit;font-size:14px}
+.color-picker{display:flex;gap:8px;flex-wrap:wrap}
+.color-opt{width:28px;height:28px;border-radius:50%;cursor:pointer;border:3px solid transparent;transition:border-color .15s}
+.color-opt.selected{border-color:#fff}
+
+
+/* BOTTOM SHEET */
+.bsheet-overlay{position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:300;opacity:0;transition:opacity .3s;pointer-events:none}
+.bsheet-overlay.open{opacity:1;pointer-events:all}
+.bsheet{position:fixed;bottom:0;left:0;right:0;background:#1a1a1a;border-radius:16px 16px 0 0;z-index:301;max-height:85vh;overflow-y:auto;transform:translateY(100%);transition:transform .35s cubic-bezier(.32,1,.23,1)}
+.bsheet.open{transform:translateY(0)}
+.bsheet-handle{width:40px;height:4px;background:#444;border-radius:2px;margin:12px auto 0}
+.bsheet-title{font-size:16px;font-weight:800;padding:12px 20px 4px;text-align:center}
+.bsheet-body{padding:16px 20px 32px}
+.bsheet-section{margin-bottom:16px}
+.bsheet-section-title{font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:10px}
+.stream-logo{width:50px;height:50px;border-radius:10px;object-fit:cover;border:1px solid #333}
+/* RANKING MOBILE FIX */
+@media(max-width:600px){
+  .rank-item{padding:10px 12px!important;flex-wrap:wrap}
+  .rank-stats{display:grid!important;grid-template-columns:1fr 1fr 1fr 1fr!important;gap:4px!important;margin-top:8px;width:100%}
+  .rstat{flex-direction:column!important;align-items:center!important;text-align:center}
+  .rstat-n{font-size:14px!important}
+  .rstat-l{font-size:8px!important}
+  .rank-meta{font-size:10px!important}
+  .rank-name{font-size:14px!important}
+}
+/* RTABS FADE */
+.rtabs-wrap{position:relative;overflow:hidden}
+.rtabs-wrap::after{content:'';position:absolute;right:0;top:0;bottom:2px;width:40px;background:linear-gradient(to right,transparent,var(--bg));pointer-events:none}
+
+</style>
+<script>
+// ── FIREBASE INIT ──
+(function() {
+  try {
+    firebase.initializeApp({
+      apiKey: "AIzaSyBj3dOMt3v6zw3SHAGdnBEWB_BuDYVBBD0",
+      authDomain: "cinelist-new.firebaseapp.com",
+      projectId: "cinelist-new",
+      storageBucket: "cinelist-new.firebasestorage.app",
+      messagingSenderId: "101304466431",
+      appId: "1:101304466431:web:22b0367c1845ee8404c5ca"
+    });
+    window.fbMessaging = firebase.messaging();
+  } catch(e) {
+    console.warn('Firebase init error:', e);
+    window.fbMessaging = null;
+  }
+})();
+</script>
+</head>
+<body>
+
+<!-- TOPBAR -->
+<!-- STARTUP LOADER -->
+<div id="startLoader" style="position:fixed;inset:0;z-index:2000;background:#0a0a0a;display:none;align-items:center;justify-content:center;flex-direction:column;gap:16px">
+  <div style="display:flex;justify-content:center;margin-bottom:4px"><svg width="160" height="48" viewBox="0 0 160 48" xmlns="http://www.w3.org/2000/svg">
+  <rect x="2" y="20" width="36" height="26" rx="2" fill="none" stroke="#fff" stroke-width="1.6"/>
+  <line x1="8" y1="29" x2="33" y2="29" stroke="#fff" stroke-width="0.7" stroke-opacity="0.35"/>
+  <line x1="8" y1="36" x2="33" y2="36" stroke="#fff" stroke-width="0.7" stroke-opacity="0.35"/>
+  <g transform="rotate(-26, 2, 20)">
+    <rect x="2" y="11" width="36" height="10" rx="2" fill="#111" stroke="#fff" stroke-width="1.6"/>
+    <rect x="1"  y="11" width="5" height="10" fill="#fff" fill-opacity="0.72"/>
+    <rect x="10" y="11" width="5" height="10" fill="#fff" fill-opacity="0.72"/>
+    <rect x="19" y="11" width="5" height="10" fill="#fff" fill-opacity="0.72"/>
+    <rect x="28" y="11" width="5" height="10" fill="#fff" fill-opacity="0.72"/>
+  </g>
+  <circle cx="2" cy="20" r="2.2" fill="#fff" fill-opacity="0.55"/>
+  <text x="46" y="35" font-family="Georgia,serif" font-size="28" font-weight="400" fill="#fff" letter-spacing="0.4">Cine<tspan font-style="italic" fill="#ccc">List</tspan></text>
+</svg></div>
+  <div style="width:36px;height:36px;border:3px solid #333;border-top-color:#e50914;border-radius:50%;animation:spin .8s linear infinite"></div>
+  <div id="loaderMsg" style="font-size:12px;color:#444;margin-top:8px">Carregando...</div>
+</div>
+
+<nav class="topbar" id="topbar">
+  <div class="logo" onclick="navigate('home')" title="CineList">
+    <svg width="128" height="36" viewBox="0 0 128 36" xmlns="http://www.w3.org/2000/svg">
+      <rect x="2" y="14" width="28" height="20" rx="2" fill="none" stroke="#fff" stroke-width="1.4"/>
+      <line x1="7" y1="21" x2="26" y2="21" stroke="#fff" stroke-width="0.6" stroke-opacity="0.35"/>
+      <line x1="7" y1="27" x2="26" y2="27" stroke="#fff" stroke-width="0.6" stroke-opacity="0.35"/>
+      <g transform="rotate(-26, 2, 14)">
+        <rect x="2" y="7" width="28" height="8" rx="2" fill="#111" stroke="#fff" stroke-width="1.4"/>
+        <rect x="1"  y="7" width="4" height="8" fill="#fff" fill-opacity="0.72" clip-path="url(#ct)"/>
+        <rect x="8"  y="7" width="4" height="8" fill="#fff" fill-opacity="0.72" clip-path="url(#ct)"/>
+        <rect x="15" y="7" width="4" height="8" fill="#fff" fill-opacity="0.72" clip-path="url(#ct)"/>
+        <rect x="22" y="7" width="4" height="8" fill="#fff" fill-opacity="0.72" clip-path="url(#ct)"/>
+      </g>
+      <circle cx="2" cy="14" r="1.8" fill="#fff" fill-opacity="0.55"/>
+      <text x="36" y="26" font-family="Georgia,serif" font-size="21" font-weight="400" fill="#fff" letter-spacing="0.3">Cine<tspan font-style="italic" fill="#ccc">List</tspan></text>
+    </svg>
+  </div>
+  <div class="nav-links">
+    <div class="nav-link active" id="nav-home" onclick="navigate('home')">Início</div>
+    <div class="nav-link" id="nav-filmes" onclick="navigate('filmes')">Filmes</div>
+    <div class="nav-link" id="nav-pendentes" onclick="navigate('pendentes')">Meus Pendentes</div>
+    <div class="nav-link" id="nav-avaliacoes" onclick="navigate('avaliacoes')">Minhas Avaliações</div>
+    <div class="nav-link" id="nav-recentes" onclick="navigate('recentes')">Recentes</div>
+    <div class="nav-link" id="nav-ranking" onclick="navigate('ranking')">Ranking</div>
+  </div>
+  <div class="topbar-right">
+    <div class="search-wrap">
+      <span class="search-icon" onclick="toggleSearch()">🔍</span>
+      <input class="search-box" id="topSearch" placeholder="Buscar filmes..." oninput="handleSearch()">
+    </div>
+    <div class="user-menu">
+      <div class="user-avatar" id="userAvatar" onclick="toggleUserMenu()" style="background:var(--surface2);color:#fff">?</div>
+      <div class="user-dropdown" id="userDropdown">
+        <div class="ud-header">Trocar perfil</div>
+        <div id="udList"></div>
+      </div>
+    </div>
+  </div>
+</nav>
+
+<!-- BOTTOM NAV (mobile) -->
+<div class="bottom-nav">
+  <div class="bn-item active" id="bn-home" onclick="navigate('home')"><span class="bn-icon">🏠</span><span class="bn-label">Início</span></div>
+  <div class="bn-item" id="bn-filmes" onclick="navigate('filmes')"><span class="bn-icon">🎬</span><span class="bn-label">Filmes</span></div>
+  <div class="bn-item" id="bn-pendentes" onclick="navigate('pendentes')"><span class="bn-icon">⏳</span><span class="bn-label">Pendentes</span></div>
+  <div class="bn-item" id="bn-avaliacoes" onclick="navigate('avaliacoes')"><span class="bn-icon">⭐</span><span class="bn-label">Notas</span></div>
+  <div class="bn-item" id="bn-ranking" onclick="navigate('ranking')"><span class="bn-icon">🏆</span><span class="bn-label">Ranking</span></div>
+</div>
+
+<!-- SCROLL CONTAINER -->
+<div class="app-scroll" id="appScroll">
+  <div id="viewHome" class="view active"></div>
+  <div id="viewFilmes" class="view"></div>
+  <div id="viewPendentes" class="view"></div>
+  <div id="viewAvaliacoes" class="view"></div>
+  <div id="viewRecentes" class="view"></div>
+  <div id="viewRanking" class="view"></div>
+</div>
+
+<!-- RATE MODAL -->
+<div class="modal-overlay" id="rateModal" onclick="closeModalIfBg('rateModal')">
+  <div class="modal-box">
+    <div class="modal-title">Avaliar Filme</div>
+    <div class="modal-film" id="rateFilmName"></div>
+    <div class="form-group">
+      <label class="form-label">Já assistiu?</label>
+      <div class="vai-btns">
+        <button class="vai-btn active" id="vaiBtnSim" onclick="setVai('Sim')">✅ Sim, já assisti</button>
+        <button class="vai-btn" id="vaiBtnNao" onclick="setVai('Não')">❌ Não quero assistir</button>
+      </div>
+    </div>
+    <div id="notaSection">
+      <div class="form-group">
+        <label class="form-label">Nota (0 a 10)</label>
+        <div class="nota-input-wrap">
+          <button class="nota-btn" onclick="changeNota(-0.1)">−</button>
+          <input type="number" id="notaInput" min="0" max="10" step="0.1" value="0.00">
+          <button class="nota-btn" onclick="changeNota(0.1)">+</button>
+        </div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Data de Avaliação *</label>
+        <input class="form-input" type="date" id="rateData">
+      </div>
+      <div class="form-group">
+        <label class="form-label">O que te levou a dar essa nota?</label>
+        <input class="form-input" type="text" id="rateComent" placeholder="Opcional...">
+      </div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn-cancel" onclick="closeModal('rateModal')">Cancelar</button>
+      <button class="btn-save" onclick="saveRating()">Salvar</button>
+    </div>
+  </div>
+</div>
+
+<!-- ADD FILM MODAL -->
+<div class="modal-overlay" id="addModal" onclick="closeModalIfBg('addModal')">
+  <div class="add-modal-box">
+    <div class="modal-title">Adicionar Filme</div>
+    <div class="modal-film" style="margin-bottom:18px">Preencha os dados básicos. Categoria, sinopse e capa vêm via TMDB.</div>
+    <div class="form-group">
+      <label class="form-label">Nome do Filme *</label>
+      <input class="form-input" id="addNome" placeholder="Ex: Interestelar" oninput="onAddNomeInput()">
+      <div class="tmdb-prev" id="tmdbPrev">
+        <img class="tmdb-thumb" id="tmdbThumb" src="" alt="">
+        <div><div id="tmdbTitle" style="font-weight:700;font-size:13px;margin-bottom:4px"></div><div id="tmdbMeta" style="font-size:12px;color:var(--muted);line-height:1.5"></div></div>
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group" style="margin-bottom:0">
+        <label class="form-label">Ano *</label>
+        <input class="form-input" id="addAno" type="number" placeholder="2025">
+      </div>
+      <div class="form-group" style="margin-bottom:0">
+        <label class="form-label">Duração (hh:mm) *</label>
+        <input class="form-input" id="addDur" placeholder="2:15">
+      </div>
+    </div>
+    <div style="margin-top:14px;background:var(--surface2);border-radius:8px;padding:10px 14px;font-size:12px;color:var(--muted)">
+      📌 Inserido por: <strong id="addInsPor" style="color:#fff">—</strong> &nbsp;·&nbsp; Data: <strong id="addDataCad" style="color:#fff"></strong>
+    </div>
+    <div class="modal-actions">
+      <button class="btn-cancel" onclick="closeModal('addModal')">Cancelar</button>
+      <button class="btn-save" onclick="saveFilme()">Salvar</button>
+    </div>
+  </div>
+</div>
+
+<script>
+var currentSession = null, supaUser = null, supaProfile = null;
+var FILMES_MAP = {};
+var FILMES = [];
+const SUPA_URL2 = 'https://iznikddtdwfvkkwqtwxg.supabase.co';
+const SUPA_KEY2 = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Iml6bmlrZGR0ZHdmdmtrd3F0d3hnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzUzNTI4MDcsImV4cCI6MjA5MDkyODgwN30.VszR38ukPOQFkxVW1UdSLKcz55mZTOsiIQry2KRhfq8';
+var supa = supabase.createClient(SUPA_URL2, SUPA_KEY2, {
+  auth: { storage: window.localStorage, persistSession: true, detectSessionInUrl: true }
 });
+// Static data (users, stats) - films loaded from Supabase
+const STATIC = {"usuarios":{"USER-001":{"nome":"Tropa"},"USER-002":{"nome":"Lucas"},"USER-003":{"nome":"Lidiane"},"USER-004":{"nome":"Jheffeson"},"USER-005":{"nome":"Catharine"},"USER-006":{"nome":"Mauricio"},"USER-007":{"nome":"Felipe"},"USER-008":{"nome":"Pedro"},"USER-009":{"nome":"Bruno"}},"users_stats":{"USER-001":{"nome":"Tropa","in_ranking":false,"quant":0,"media":null,"time_str":"0h 0min","ultima_av":null,"pendentes":["FILME-0001","FILME-0002","FILME-0003","FILME-0004","FILME-0005","FILME-0006","FILME-0007","FILME-0008","FILME-0009","FILME-0010","FILME-0011","FILME-0012","FILME-0013","FILME-0014","FILME-0015","FILME-0016","FILME-0017","FILME-0018","FILME-0019","FILME-0020","FILME-0021","FILME-0022","FILME-0023","FILME-0024","FILME-0025","FILME-0026","FILME-0027","FILME-0028","FILME-0029","FILME-0030","FILME-0031","FILME-0032","FILME-0033","FILME-0034","FILME-0035","FILME-0036","FILME-0037","FILME-0038","FILME-0039","FILME-0040","FILME-0041","FILME-0042","FILME-0043","FILME-0044","FILME-0045","FILME-0046","FILME-0047","FILME-0048","FILME-0049","FILME-0050","FILME-0051","FILME-0052","FILME-0053","FILME-0054","FILME-0055","FILME-0056","FILME-0057","FILME-0058","FILME-0059","FILME-0060","FILME-0061","FILME-0062","FILME-0063","FILME-0064","FILME-0065","FILME-0066","FILME-0067","FILME-0068","FILME-0069","FILME-0070","FILME-0071","FILME-0072","FILME-0073","FILME-0074","FILME-0075","FILME-0076","FILME-0077","FILME-0078","FILME-0079","FILME-0080","FILME-0081","FILME-0082","FILME-0083","FILME-0084","FILME-0085","FILME-0086","FILME-0087","FILME-0088","FILME-0089","FILME-0090","FILME-0091","FILME-0092","FILME-0093","FILME-0094","FILME-0095","FILME-0096","FILME-0097","FILME-0098","FILME-0099","FILME-0100","FILME-0101","FILME-0102","FILME-0103","FILME-0104","FILME-0105","FILME-0106","FILME-0107","FILME-0108","FILME-0109","FILME-0110","FILME-0111","FILME-0112","FILME-0113","FILME-0114","FILME-0115","FILME-0116","FILME-0117","FILME-0118","FILME-0119","FILME-0120","FILME-0121","FILME-0122","FILME-0123","FILME-0124","FILME-0125","FILME-0126","FILME-0127","FILME-0128","FILME-0129","FILME-0130","FILME-0131","FILME-0132","FILME-0133","FILME-0134","FILME-0135","FILME-0136","FILME-0137","FILME-0138","FILME-0139","FILME-0140","FILME-0141","FILME-0142","FILME-0143","FILME-0144","FILME-0145","FILME-0146","FILME-0147","FILME-0148","FILME-0149","FILME-0150","FILME-0151","FILME-0152","FILME-0153","FILME-0154","FILME-0155","FILME-0156","FILME-0157","FILME-0158","FILME-0159","FILME-0160","FILME-0161","FILME-0162","FILME-0163","FILME-0164","FILME-0165","FILME-0166","FILME-0167","FILME-0168","FILME-0169","FILME-0170","FILME-0171","FILME-0172","FILME-0173","FILME-0174","FILME-0175","FILME-0176","FILME-0177","FILME-0178","FILME-0179","FILME-0180","FILME-0181","FILME-0182","FILME-0183","FILME-0184","FILME-0185","FILME-0186","FILME-0187","FILME-0188","FILME-0189","FILME-0190","FILME-0191","FILME-0192","FILME-0193","FILME-0194","FILME-0195","FILME-0196","FILME-0197","FILME-0198","FILME-0199","FILME-0200","FILME-0201","FILME-0202","FILME-0203","FILME-0204","FILME-0205","FILME-0206","FILME-0207","FILME-0208","FILME-0209","FILME-0210","FILME-0211","FILME-0212","FILME-0213","FILME-0214","FILME-0215","FILME-0216","FILME-0217","FILME-0218","FILME-0219","FILME-0220","FILME-0221","FILME-0222","FILME-0223","FILME-0224","FILME-0225","FILME-0226","FILME-0227","FILME-0228","FILME-0229","FILME-0230","FILME-0231","FILME-0232","FILME-0233","FILME-0234","FILME-0235","FILME-0236","FILME-0237","FILME-0238","FILME-0239","FILME-0240","FILME-0241","FILME-0242","FILME-0243","FILME-0244","FILME-0245","FILME-0246","FILME-0247","FILME-0248","FILME-0249","FILME-0250","FILME-0251","FILME-0252","FILME-0253","FILME-0254","FILME-0255","FILME-0256","FILME-0257","FILME-0258","FILME-0259","FILME-0260","FILME-0261","FILME-0262","FILME-0263","FILME-0264","FILME-0265","FILME-0266","FILME-0267","FILME-0268","FILME-0269","FILME-0270","FILME-0271","FILME-0272","FILME-0273","FILME-0274","FILME-0275","FILME-0276","FILME-0277","FILME-0278","FILME-0279","FILME-0280","FILME-0281","FILME-0282","FILME-0283","FILME-0284","FILME-0285","FILME-0286","FILME-0287","FILME-0288","FILME-0289","FILME-0290","FILME-0291","FILME-0292","FILME-0293","FILME-0294","FILME-0295","FILME-0296","FILME-0297","FILME-0298","FILME-0299","FILME-0300","FILME-0301","FILME-0302","FILME-0303","FILME-0304","FILME-0305","FILME-0306","FILME-0307","FILME-0308","FILME-0309","FILME-0310","FILME-0311","FILME-0312","FILME-0313","FILME-0314","FILME-0315","FILME-0316","FILME-0317","FILME-0318","FILME-0319","FILME-0320","FILME-0321","FILME-0322","FILME-0323","FILME-0324","FILME-0325","FILME-0326","FILME-0327","FILME-0328","FILME-0329","FILME-0330","FILME-0331","FILME-0332","FILME-0333","FILME-0334","FILME-0335","FILME-0336","FILME-0337","FILME-0338","FILME-0339","FILME-0340","FILME-0341","FILME-0342","FILME-0343","FILME-0344","FILME-0345","FILME-0346","FILME-0347","FILME-0348","FILME-0349","FILME-0350","FILME-0351","FILME-0352","FILME-0353","FILME-0354","FILME-0355","FILME-0356","FILME-0357","FILME-0358","FILME-0359","FILME-0360","FILME-0361","FILME-0362","FILME-0363","FILME-0364","FILME-0365","FILME-0366","FILME-0367","FILME-0368","FILME-0369","FILME-0370","FILME-0371","FILME-0372","FILME-0373","FILME-0374","FILME-0375","FILME-0376","FILME-0377","FILME-0378","FILME-0379","FILME-0380","FILME-0381","FILME-0382","FILME-0383","FILME-0384","FILME-0385","FILME-0386","FILME-0387","FILME-0388","FILME-0389","FILME-0390","FILME-0391","FILME-0392","FILME-0393","FILME-0394","FILME-0395","FILME-0396","FILME-0397","FILME-0398","FILME-0399","FILME-0400","FILME-0401","FILME-0402","FILME-0403","FILME-0404","FILME-0405","FILME-0406","FILME-0407","FILME-0408","FILME-0409","FILME-0410","FILME-0411","FILME-0412","FILME-0413","FILME-0414","FILME-0415","FILME-0416","FILME-0417","FILME-0418","FILME-0419","FILME-0420","FILME-0421","FILME-0422","FILME-0423","FILME-0424","FILME-0425","FILME-0426","FILME-0427","FILME-0428","FILME-0429","FILME-0430","FILME-0431","FILME-0432","FILME-0433","FILME-0434","FILME-0435","FILME-0436","FILME-0437","FILME-0438","FILME-0439","FILME-0440","FILME-0441","FILME-0442","FILME-0443","FILME-0444","FILME-0445","FILME-0446","FILME-0447","FILME-0448","FILME-0449","FILME-0450","FILME-0451","FILME-0452","FILME-0453","FILME-0454","FILME-0455","FILME-0456","FILME-0457","FILME-0458","FILME-0459","FILME-0460","FILME-0461","FILME-0462","FILME-0463","FILME-0464","FILME-0465","FILME-0466","FILME-0467","FILME-0468","FILME-0469","FILME-0470","FILME-0471","FILME-0472","FILME-0473","FILME-0474","FILME-0475","FILME-0476","FILME-0477","FILME-0478","FILME-0479","FILME-0480","FILME-0481","FILME-0482","FILME-0483","FILME-0484","FILME-0485","FILME-0486","FILME-0487","FILME-0488","FILME-0489","FILME-0490","FILME-0491","FILME-0492","FILME-0493","FILME-0494","FILME-0495","FILME-0496","FILME-0497","FILME-0498","FILME-0499","FILME-0500","FILME-0501","FILME-0502","FILME-0503","FILME-0504","FILME-0505","FILME-0506","FILME-0507","FILME-0508","FILME-0509","FILME-0510","FILME-0511","FILME-0512","FILME-0513","FILME-0514","FILME-0515","FILME-0516","FILME-0517","FILME-0518","FILME-0519","FILME-0520","FILME-0521","FILME-0522","FILME-0523","FILME-0524","FILME-0525","FILME-0526","FILME-0527","FILME-0528","FILME-0529","FILME-0530","FILME-0531","FILME-0532","FILME-0533","FILME-0534","FILME-0535","FILME-0536","FILME-0537","FILME-0538","88f59ca9","5de03b9e","125ed258","c6204f39","606ad458","c3b9ca95","6fc3d59e","21bf9750","33c17a95","34da919e","4f1cc62b","355d0e50","5071b4e3","68d79185","e9711417","323cc492","008d44c5","95582006","3483408c","706be416","0da37d21","900ee1a6","4d26a7cc","3501ef0f","d1a91df5","ff51f35d","842a8cad","3b7b4837","38f9dde4","1a0f2b11","d9e8c421","413c8b0b","752b81c7","68a80eeb","9967103a","26044c1d","4864a8c9","b6a26d48","f79d0cbd","7abe7d88","4dc435d9","6fbae6eb","865266ed","7b775e40","08ca5842","23c156bc","41a99830","6b0aa643","7af37cfb","1f22b893","46ebd075","1a3c7c14","80f40bb4","00af1ffe","f03dfb3d","6a36d11f","fc7513f5","e2cb3996","199a5005","dd74b531","282ca923","cb25ac3f","54f932fd","e950525d","6eb55c52","9c37b1d5","d67b25d1","6f991543","1d51e703","74f11d5b","7423f9cc","c708e74f","f96a71db","9c17994b","ef571fc2","acc8788b","bf8b8573","ddbe79a7","20de124c","9f9a841e","715f32b3","3fc7ecfc","123f5d9c","2978d5cb","122cfc21","82f1f683","951cbf15","83f62e35","49e33c1b","ed861f85","1f11c40a","bdc83b70","bcfccc26","46469c3b","d6ee905c","33a75b90","8f8e5bf6","1d1e4042","a710f248","8cc56582","6bf32149","7ee04d73","e8c01304","c18a1708","da173299","17cbe284","76cc0ab5","c9f0263c","8104328e","c01a1722","d8c29900","bea11354","23790f18","731b5fa0","6e85830d","49a60b13","86704d72","21c9c3da","0a9abbc9","4ec97df7","f06ca32d","2bd2d1ac","0cd54e14","4747bdc9","d5adbff5","c43cf758","dd387caa","317bd2f8","d2742f2f","2eaf65b6","22943d3b","4d87faf5","ba2805c8","44f68705","6caf47bd","b7dd12c3","86b35d1b","bdc9e296","91b426c8","9da6bb13","d6ac8e96","1ab824b2","419a36a7","7ee9138f","2795b9a9","adbdcc63","753fc052","992df573","824d004d","1f10d9dd","ae89b59b","34848dc2","03cb0f0d","7ea7a242","04ca5281","969ccf35","93200b79","a473f10a","352744c9","97737039","a2680ad8","69dcef8e","b24f2baa","9d8f5c72","b3b31ec6","1b74291e","37f28f5a","25576111","e6fdff5d","0f352f1b","0dbcca31","e997fb5b","5d647b19","c6f86b0a","5642fde7","a2b8dfc6","297ee096","aab58b4c","fc1b78af","3fad39bb","956cf2c1","04c18ae5","1ad5fbce","c33b38d7","0111b668","10e72e8e","91f32580","ed746207","fdb1a8c8","7b1274a4","d96623f5","cc617d84","4b3a160f","b3ed0b9a","0bf97d6f","07f0763a","f1761b83","50820d58","41323b79","3480a1a2","0c55e47b","2c5ad285","20c68205","f2ba7c92","34344838","8b9b51b0","3f81e944","3a52ba52","c1d2041f","72bc5273","d20be917","60bec810","e3037f05","beabf76b","bdd91db0","e79e4491","3362d3f0","c7216183","18e21c0d"],"nao_quer":[],"inseridos":["FILME-0002","FILME-0003","FILME-0005","FILME-0006","FILME-0009","FILME-0010","FILME-0011","FILME-0014","FILME-0015","FILME-0016","FILME-0017","FILME-0019","FILME-0021","FILME-0023","FILME-0024","FILME-0028","FILME-0029","FILME-0030","FILME-0031","FILME-0034","FILME-0035","FILME-0036","FILME-0038","FILME-0040","FILME-0106","FILME-0108","FILME-0131","FILME-0143","FILME-0172","FILME-0401","FILME-0407"],"by_year":{},"by_genre":{},"genre_avg":{}},"USER-002":{"nome":"Lucas","in_ranking":true,"quant":682,"media":7.47,"time_str":"55d 16h 8min","ultima_av":"03/04/2026","pendentes":["FILME-0186","FILME-0239","FILME-0307","FILME-0377","FILME-0404","FILME-0510","FILME-0523","FILME-0536","5de03b9e","6fc3d59e","706be416","d1a91df5","08ca5842","6b0aa643","6f991543","ef571fc2","acc8788b","1f11c40a","7ee04d73","c18a1708","731b5fa0","0cd54e14","4747bdc9","d5adbff5","dd387caa","b7dd12c3","bdc9e296","9da6bb13","753fc052","824d004d","1f10d9dd","ae89b59b","34848dc2","352744c9","97737039","1b74291e","25576111","e6fdff5d","0dbcca31","e997fb5b","5d647b19","297ee096","fdb1a8c8","7b1274a4","cc617d84","41323b79","2c5ad285","34344838","8b9b51b0","60bec810","bdd91db0","e79e4491","3362d3f0","c7216183"],"nao_quer":["FILME-0145","FILME-0204","FILME-0235","FILME-0306","FILME-0308","FILME-0344","FILME-0345","FILME-0363","FILME-0452","FILME-0460","FILME-0475","FILME-0509","FILME-0529","FILME-0534","7af37cfb","9c17994b","992df573","d96623f5","4b3a160f","b3ed0b9a","0bf97d6f"],"inseridos":["FILME-0001","FILME-0004","FILME-0012","FILME-0025","FILME-0027","FILME-0042","FILME-0043","FILME-0050","FILME-0051","FILME-0053","FILME-0060","FILME-0062","FILME-0063","FILME-0064","FILME-0066","FILME-0067","FILME-0069","FILME-0070","FILME-0074","FILME-0075","FILME-0076","FILME-0077","FILME-0083","FILME-0085","FILME-0086","FILME-0089","FILME-0091","FILME-0093","FILME-0099","FILME-0101","FILME-0105","FILME-0109","FILME-0110","FILME-0111","FILME-0112","FILME-0113","FILME-0114","FILME-0115","FILME-0116","FILME-0117","FILME-0118","FILME-0119","FILME-0128","FILME-0129","FILME-0130","FILME-0147","FILME-0159","FILME-0160","FILME-0164","FILME-0165","FILME-0166","FILME-0167","FILME-0168","FILME-0173","FILME-0174","FILME-0175","FILME-0176","FILME-0177","FILME-0178","FILME-0179","FILME-0185","FILME-0189","FILME-0191","FILME-0193","FILME-0195","FILME-0197","FILME-0226","FILME-0266","FILME-0273","FILME-0276","FILME-0277","FILME-0278","FILME-0286","FILME-0287","FILME-0288","FILME-0289","FILME-0290","FILME-0291","FILME-0292","FILME-0293","FILME-0294","FILME-0296","FILME-0297","FILME-0301","FILME-0302","FILME-0305","FILME-0314","FILME-0321","FILME-0322","FILME-0328","FILME-0334","FILME-0335","FILME-0346","FILME-0347","FILME-0352","FILME-0353","FILME-0354","FILME-0361","FILME-0365","FILME-0366","FILME-0367","FILME-0369","FILME-0372","FILME-0373","FILME-0374","FILME-0379","FILME-0384","FILME-0385","FILME-0386","FILME-0387","FILME-0388","FILME-0389","FILME-0390","FILME-0391","FILME-0392","FILME-0393","FILME-0394","FILME-0408","FILME-0417","FILME-0418","FILME-0419","FILME-0420","FILME-0435","FILME-0436","FILME-0438","FILME-0440","FILME-0441","FILME-0443","FILME-0444","FILME-0453","FILME-0454","FILME-0455","FILME-0458","FILME-0464","FILME-0465","FILME-0466","FILME-0468","FILME-0470","FILME-0472","FILME-0473","FILME-0474","FILME-0476","FILME-0477","FILME-0478","FILME-0484","FILME-0487","FILME-0489","FILME-0490","FILME-0491","FILME-0492","FILME-0493","FILME-0494","FILME-0503","FILME-0504","FILME-0512","FILME-0513","FILME-0514","FILME-0515","FILME-0516","FILME-0517","FILME-0522","FILME-0525","FILME-0526","FILME-0533","88f59ca9","125ed258","c6204f39","606ad458","c3b9ca95","21bf9750","355d0e50","5071b4e3","68d79185","e9711417","323cc492","008d44c5","3483408c","3501ef0f","865266ed","23c156bc","46ebd075","1a3c7c14","80f40bb4","00af1ffe","f03dfb3d","6a36d11f","fc7513f5","e2cb3996","dd74b531","282ca923","cb25ac3f","d67b25d1","1d51e703","74f11d5b","7423f9cc","c708e74f","ddbe79a7","20de124c","3fc7ecfc","123f5d9c","2978d5cb","122cfc21","951cbf15","83f62e35","49e33c1b","bcfccc26","46469c3b","d6ee905c","1d1e4042","17cbe284","76cc0ab5","23790f18","44f68705","1ab824b2","7ee9138f","04ca5281","a473f10a","9d8f5c72","b3b31ec6","5642fde7","a2b8dfc6","fc1b78af","3fad39bb","956cf2c1","04c18ae5","ed746207","f1761b83","50820d58","f2ba7c92","72bc5273","d20be917","18e21c0d"],"by_year":{"2023":40,"2025":167,"2024":13,"2026":39},"by_genre":{"Drama":219,"História":40,"Guerra":20,"Romance":67,"Aventura":193,"Fantasia":84,"Comédia":234,"Crime":115,"Animação":44,"Família":72,"Ação":300,"Thriller":187,"Ficção científica":155,"Terror":69,"Mistério":50,"Faroeste":8,"Cinema TV":5,"Música":16},"genre_avg":{"Drama":7.74,"História":7.95,"Guerra":8.11,"Romance":7.4,"Aventura":7.52,"Fantasia":7.28,"Comédia":7.31,"Crime":7.45,"Animação":7.27,"Família":7.34,"Ação":7.54,"Thriller":7.43,"Ficção científica":7.57,"Terror":6.87,"Mistério":7.33,"Faroeste":7.89,"Cinema TV":5.66,"Música":7.66}},"USER-003":{"nome":"Lidiane","in_ranking":true,"quant":279,"media":7.47,"time_str":"23d 16h 1min","ultima_av":"03/04/2026","pendentes":["FILME-0018","FILME-0039","FILME-0043","FILME-0045","FILME-0046","FILME-0047","FILME-0051","FILME-0052","FILME-0053","FILME-0056","FILME-0058","FILME-0059","FILME-0061","FILME-0062","FILME-0063","FILME-0064","FILME-0065","FILME-0067","FILME-0068","FILME-0069","FILME-0077","FILME-0079","FILME-0082","FILME-0083","FILME-0086","FILME-0089","FILME-0090","FILME-0100","FILME-0110","FILME-0112","FILME-0113","FILME-0114","FILME-0115","FILME-0116","FILME-0117","FILME-0118","FILME-0120","FILME-0121","FILME-0123","FILME-0124","FILME-0126","FILME-0132","FILME-0133","FILME-0135","FILME-0136","FILME-0140","FILME-0141","FILME-0142","FILME-0145","FILME-0146","FILME-0149","FILME-0150","FILME-0151","FILME-0153","FILME-0156","FILME-0157","FILME-0160","FILME-0164","FILME-0167","FILME-0171","FILME-0172","FILME-0174","FILME-0175","FILME-0177","FILME-0178","FILME-0179","FILME-0180","FILME-0181","FILME-0182","FILME-0183","FILME-0184","FILME-0186","FILME-0187","FILME-0189","FILME-0195","FILME-0197","FILME-0204","FILME-0205","FILME-0206","FILME-0207","FILME-0208","FILME-0209","FILME-0210","FILME-0211","FILME-0212","FILME-0215","FILME-0216","FILME-0218","FILME-0219","FILME-0220","FILME-0224","FILME-0225","FILME-0226","FILME-0228","FILME-0231","FILME-0233","FILME-0238","FILME-0239","FILME-0242","FILME-0244","FILME-0256","FILME-0266","FILME-0268","FILME-0269","FILME-0271","FILME-0275","FILME-0276","FILME-0277","FILME-0278","FILME-0281","FILME-0287","FILME-0288","FILME-0291","FILME-0292","FILME-0296","FILME-0297","FILME-0299","FILME-0300","FILME-0302","FILME-0306","FILME-0307","FILME-0308","FILME-0309","FILME-0311","FILME-0313","FILME-0314","FILME-0315","FILME-0316","FILME-0317","FILME-0318","FILME-0319","FILME-0320","FILME-0322","FILME-0325","FILME-0326","FILME-0327","FILME-0329","FILME-0331","FILME-0333","FILME-0334","FILME-0335","FILME-0338","FILME-0345","FILME-0347","FILME-0349","FILME-0353","FILME-0355","FILME-0359","FILME-0362","FILME-0363","FILME-0365","FILME-0366","FILME-0367","FILME-0368","FILME-0369","FILME-0370","FILME-0371","FILME-0372","FILME-0373","FILME-0374","FILME-0375","FILME-0377","FILME-0378","FILME-0379","FILME-0386","FILME-0388","FILME-0390","FILME-0391","FILME-0393","FILME-0395","FILME-0398","FILME-0399","FILME-0403","FILME-0404","FILME-0405","FILME-0406","FILME-0408","FILME-0410","FILME-0411","FILME-0413","FILME-0415","FILME-0417","FILME-0419","FILME-0420","FILME-0423","FILME-0424","FILME-0425","FILME-0427","FILME-0429","FILME-0432","FILME-0438","FILME-0440","FILME-0441","FILME-0442","FILME-0445","FILME-0449","FILME-0450","FILME-0451","FILME-0452","FILME-0453","FILME-0455","FILME-0456","FILME-0457","FILME-0460","FILME-0461","FILME-0464","FILME-0465","FILME-0467","FILME-0468","FILME-0470","FILME-0472","FILME-0473","FILME-0476","FILME-0477","FILME-0478","FILME-0483","FILME-0487","FILME-0489","FILME-0490","FILME-0491","FILME-0492","FILME-0493","FILME-0504","FILME-0508","FILME-0509","FILME-0510","FILME-0511","FILME-0513","FILME-0515","FILME-0516","FILME-0518","FILME-0519","FILME-0520","FILME-0522","FILME-0523","FILME-0524","FILME-0525","FILME-0526","FILME-0527","FILME-0528","FILME-0529","FILME-0530","FILME-0532","FILME-0533","88f59ca9","5de03b9e","125ed258","606ad458","c3b9ca95","6fc3d59e","21bf9750","34da919e","4f1cc62b","355d0e50","5071b4e3","68d79185","e9711417","008d44c5","3483408c","706be416","0da37d21","4d26a7cc","d1a91df5","842a8cad","3b7b4837","38f9dde4","d9e8c421","413c8b0b","68a80eeb","9967103a","26044c1d","4864a8c9","b6a26d48","f79d0cbd","7abe7d88","4dc435d9","865266ed","7b775e40","08ca5842","6b0aa643","7af37cfb","46ebd075","1a3c7c14","80f40bb4","00af1ffe","f03dfb3d","6a36d11f","fc7513f5","e2cb3996","dd74b531","282ca923","cb25ac3f","54f932fd","e950525d","6eb55c52","d67b25d1","6f991543","1d51e703","74f11d5b","7423f9cc","c708e74f","9c17994b","ef571fc2","acc8788b","ddbe79a7","3fc7ecfc","123f5d9c","2978d5cb","122cfc21","82f1f683","951cbf15","83f62e35","49e33c1b","1f11c40a","46469c3b","d6ee905c","33a75b90","8f8e5bf6","8cc56582","6bf32149","7ee04d73","e8c01304","c18a1708","da173299","76cc0ab5","8104328e","c01a1722","d8c29900","bea11354","731b5fa0","6e85830d","49a60b13","86704d72","21c9c3da","0a9abbc9","4ec97df7","f06ca32d","2bd2d1ac","0cd54e14","4747bdc9","d5adbff5","c43cf758","dd387caa","317bd2f8","4d87faf5","44f68705","bdc9e296","91b426c8","1ab824b2","2795b9a9","753fc052","992df573","824d004d","1f10d9dd","ae89b59b","34848dc2","03cb0f0d","7ea7a242","969ccf35","93200b79","a473f10a","352744c9","97737039","1b74291e","25576111","e6fdff5d","0f352f1b","0dbcca31","e997fb5b","5d647b19","5642fde7","a2b8dfc6","297ee096","aab58b4c","fc1b78af","3fad39bb","956cf2c1","04c18ae5","1ad5fbce","c33b38d7","0111b668","91f32580","ed746207","fdb1a8c8","7b1274a4","d96623f5","cc617d84","4b3a160f","b3ed0b9a","0bf97d6f","07f0763a","f1761b83","50820d58","41323b79","3480a1a2","0c55e47b","2c5ad285","f2ba7c92","34344838","8b9b51b0","60bec810","beabf76b","bdd91db0","e79e4491","3362d3f0","c7216183"],"nao_quer":["FILME-0008","FILME-0026","FILME-0032","FILME-0033","FILME-0042","FILME-0049","FILME-0071","FILME-0076","FILME-0078","FILME-0093","FILME-0099","FILME-0125","FILME-0159","FILME-0165","FILME-0168","FILME-0190","FILME-0234","FILME-0235","FILME-0253","FILME-0254","FILME-0255","FILME-0267","FILME-0273","FILME-0282","FILME-0283","FILME-0286","FILME-0289","FILME-0290","FILME-0293","FILME-0294","FILME-0304","FILME-0305","FILME-0312","FILME-0321","FILME-0323","FILME-0330","FILME-0337","FILME-0339","FILME-0343","FILME-0344","FILME-0361","FILME-0364","FILME-0387","FILME-0392","FILME-0396","FILME-0397","FILME-0400","FILME-0418","FILME-0422","FILME-0426","FILME-0430","FILME-0431","FILME-0435","FILME-0437","FILME-0443","FILME-0444","FILME-0446","FILME-0458","FILME-0459","FILME-0462","FILME-0471","FILME-0474","FILME-0475","FILME-0480","FILME-0517","FILME-0521","FILME-0531","FILME-0534","900ee1a6","715f32b3","d2742f2f"],"inseridos":["FILME-0054","FILME-0073","FILME-0080","FILME-0087","FILME-0094","FILME-0095","FILME-0098","FILME-0103","FILME-0104","FILME-0107","FILME-0154","FILME-0188","FILME-0192","FILME-0194","FILME-0196","FILME-0202","FILME-0246","FILME-0247","FILME-0274","FILME-0295","FILME-0332","FILME-0357","FILME-0358","FILME-0360","FILME-0433","FILME-0434","FILME-0485","FILME-0486","FILME-0495","FILME-0496","FILME-0497","FILME-0498","FILME-0499","FILME-0500","FILME-0501","FILME-0502","FILME-0505","FILME-0506","FILME-0507","FILME-0536","33c17a95","199a5005","a710f248","c9f0263c","ba2805c8","b7dd12c3","9da6bb13","d6ac8e96","419a36a7","a2680ad8","69dcef8e","b24f2baa","37f28f5a","10e72e8e","20c68205","3f81e944","c1d2041f","e3037f05"],"by_year":{"2023":33,"2025":64,"2024":2,"2026":19},"by_genre":{"Drama":46,"História":8,"Guerra":4,"Romance":24,"Aventura":118,"Fantasia":49,"Comédia":112,"Crime":44,"Animação":28,"Família":46,"Ação":143,"Thriller":66,"Ficção científica":92,"Terror":29,"Mistério":20,"Música":1,"Cinema TV":1},"genre_avg":{"Drama":7.46,"História":7.66,"Guerra":8.1,"Romance":7.6,"Aventura":7.6,"Fantasia":7.53,"Comédia":7.36,"Crime":7.51,"Animação":7.32,"Família":7.38,"Ação":7.61,"Thriller":7.37,"Ficção científica":7.59,"Terror":6.79,"Mistério":7.31,"Música":8.7,"Cinema TV":6.8}},"USER-004":{"nome":"Jheffeson","in_ranking":true,"quant":613,"media":7.38,"time_str":"50d 13h 39min","ultima_av":"29/03/2026","pendentes":["FILME-0077","FILME-0121","FILME-0126","FILME-0127","FILME-0147","FILME-0168","FILME-0273","FILME-0300","FILME-0302","FILME-0309","FILME-0324","FILME-0336","FILME-0343","FILME-0353","FILME-0378","FILME-0379","FILME-0392","FILME-0395","FILME-0444","FILME-0455","FILME-0464","FILME-0465","FILME-0489","FILME-0490","FILME-0491","FILME-0492","FILME-0510","FILME-0513","FILME-0522","88f59ca9","38f9dde4","413c8b0b","7b775e40","6a36d11f","282ca923","d67b25d1","3fc7ecfc","123f5d9c","2978d5cb","83f62e35","d6ee905c","e8c01304","8104328e","d8c29900","ba2805c8","44f68705","824d004d","ae89b59b","04ca5281","a473f10a","b3b31ec6","37f28f5a","0dbcca31","e997fb5b","5d647b19","a2b8dfc6","fc1b78af","956cf2c1","04c18ae5","10e72e8e","fdb1a8c8","d96623f5","cc617d84","4b3a160f","b3ed0b9a","0bf97d6f","50820d58","41323b79","20c68205","f2ba7c92","34344838","8b9b51b0","3f81e944","beabf76b","bdd91db0","e79e4491","3362d3f0","18e21c0d"],"nao_quer":["FILME-0047","FILME-0056","FILME-0063","FILME-0065","FILME-0068","FILME-0079","FILME-0089","FILME-0091","FILME-0093","FILME-0094","FILME-0104","FILME-0125","FILME-0133","FILME-0145","FILME-0188","FILME-0191","FILME-0196","FILME-0238","FILME-0239","FILME-0242","FILME-0258","FILME-0268","FILME-0290","FILME-0297","FILME-0299","FILME-0305","FILME-0307","FILME-0308","FILME-0314","FILME-0322","FILME-0330","FILME-0332","FILME-0337","FILME-0346","FILME-0355","FILME-0363","FILME-0397","FILME-0398","FILME-0419","FILME-0442","FILME-0470","FILME-0487","FILME-0508","FILME-0509","FILME-0515","606ad458","c3b9ca95","33c17a95","008d44c5","752b81c7","199a5005","9c37b1d5","ef571fc2","bcfccc26","b7dd12c3","9da6bb13","7ee9138f","753fc052","992df573","1f10d9dd","969ccf35","69dcef8e","9d8f5c72","2c5ad285","d20be917","e3037f05"],"inseridos":["FILME-0007","FILME-0008","FILME-0013","FILME-0018","FILME-0020","FILME-0022","FILME-0026","FILME-0032","FILME-0033","FILME-0037","FILME-0039","FILME-0041","FILME-0044","FILME-0049","FILME-0055","FILME-0058","FILME-0059","FILME-0071","FILME-0078","FILME-0081","FILME-0082","FILME-0096","FILME-0097","FILME-0100","FILME-0102","FILME-0140","FILME-0187","FILME-0190","FILME-0203","FILME-0204","FILME-0205","FILME-0206","FILME-0207","FILME-0208","FILME-0209","FILME-0210","FILME-0211","FILME-0212","FILME-0213","FILME-0214","FILME-0215","FILME-0216","FILME-0217","FILME-0218","FILME-0219","FILME-0220","FILME-0221","FILME-0222","FILME-0223","FILME-0224","FILME-0225","FILME-0227","FILME-0228","FILME-0275","FILME-0279","FILME-0280","FILME-0281","FILME-0282","FILME-0283","FILME-0284","FILME-0285","FILME-0306","FILME-0323","FILME-0327","FILME-0329","FILME-0333","FILME-0340","FILME-0341","FILME-0349","FILME-0350","FILME-0351","FILME-0359","FILME-0370","FILME-0371","FILME-0377","FILME-0380","FILME-0381","FILME-0382","FILME-0383","FILME-0405","FILME-0406","FILME-0409","FILME-0411","FILME-0421","FILME-0422","FILME-0423","FILME-0424","FILME-0425","FILME-0426","FILME-0427","FILME-0428","FILME-0429","FILME-0430","FILME-0431","FILME-0432","FILME-0437","FILME-0445","FILME-0446","FILME-0447","FILME-0448","FILME-0449","FILME-0450","FILME-0451","FILME-0452","FILME-0456","FILME-0457","FILME-0460","FILME-0461","FILME-0462","FILME-0463","FILME-0467","FILME-0469","FILME-0471","FILME-0475","FILME-0479","FILME-0480","FILME-0481","FILME-0482","FILME-0483","FILME-0488","FILME-0518","FILME-0519","FILME-0520","FILME-0521","FILME-0527","FILME-0528","FILME-0529","FILME-0530","FILME-0531","FILME-0532","FILME-0534","FILME-0535","FILME-0537","FILME-0538","6fc3d59e","34da919e","95582006","706be416","08ca5842","41a99830","6b0aa643","7af37cfb","1f22b893","54f932fd","e950525d","6eb55c52","6f991543","9c17994b","acc8788b","bf8b8573","9f9a841e","715f32b3","82f1f683","ed861f85","1f11c40a","bdc83b70","33a75b90","8f8e5bf6","8cc56582","6bf32149","7ee04d73","c18a1708","2bd2d1ac","0cd54e14","4747bdc9","d5adbff5","c43cf758","dd387caa","317bd2f8","d2742f2f","2eaf65b6","22943d3b","6caf47bd","91b426c8","adbdcc63","03cb0f0d","352744c9","97737039","25576111","e6fdff5d","91f32580","7b1274a4","60bec810","c7216183"],"by_year":{"2023":40,"2024":1,"2025":153,"2026":19},"by_genre":{"Drama":186,"História":35,"Guerra":19,"Romance":56,"Aventura":193,"Fantasia":76,"Comédia":212,"Crime":103,"Animação":48,"Família":73,"Ação":294,"Thriller":160,"Ficção científica":143,"Terror":54,"Mistério":40,"Faroeste":7,"Música":16,"Cinema TV":2},"genre_avg":{"Drama":7.58,"História":7.99,"Guerra":8.0,"Romance":7.17,"Aventura":7.53,"Fantasia":7.31,"Comédia":7.19,"Crime":7.25,"Animação":7.6,"Família":7.55,"Ação":7.45,"Thriller":7.27,"Ficção científica":7.47,"Terror":6.86,"Mistério":7.03,"Faroeste":8.06,"Música":7.46,"Cinema TV":6.5}},"USER-005":{"nome":"Catharine","in_ranking":true,"quant":282,"media":6.5,"time_str":"23d 18h 52min","ultima_av":"14/02/2026","pendentes":["FILME-0002","FILME-0022","FILME-0035","FILME-0044","FILME-0046","FILME-0049","FILME-0051","FILME-0053","FILME-0054","FILME-0062","FILME-0064","FILME-0067","FILME-0070","FILME-0076","FILME-0078","FILME-0086","FILME-0088","FILME-0093","FILME-0094","FILME-0095","FILME-0100","FILME-0114","FILME-0120","FILME-0125","FILME-0126","FILME-0136","FILME-0141","FILME-0152","FILME-0153","FILME-0159","FILME-0180","FILME-0181","FILME-0182","FILME-0183","FILME-0184","FILME-0193","FILME-0197","FILME-0209","FILME-0236","FILME-0244","FILME-0255","FILME-0258","FILME-0261","FILME-0270","FILME-0281","FILME-0282","FILME-0283","FILME-0288","FILME-0293","FILME-0302","FILME-0305","FILME-0307","FILME-0309","FILME-0312","FILME-0313","FILME-0318","FILME-0320","FILME-0324","FILME-0328","FILME-0334","FILME-0346","FILME-0349","FILME-0350","FILME-0351","FILME-0352","FILME-0354","FILME-0388","FILME-0391","FILME-0400","FILME-0409","FILME-0416","FILME-0418","FILME-0426","FILME-0428","FILME-0438","FILME-0443","FILME-0444","FILME-0448","FILME-0449","FILME-0452","FILME-0466","FILME-0469","FILME-0474","FILME-0490","FILME-0515","FILME-0516","FILME-0517","FILME-0518","FILME-0519","FILME-0522","FILME-0525","FILME-0526","FILME-0529","FILME-0530","FILME-0531","FILME-0532","FILME-0534","FILME-0535","FILME-0536","FILME-0537","FILME-0538","88f59ca9","125ed258","c6204f39","606ad458","c3b9ca95","6fc3d59e","34da919e","68d79185","323cc492","008d44c5","95582006","3483408c","706be416","4d26a7cc","3501ef0f","d1a91df5","842a8cad","3b7b4837","38f9dde4","413c8b0b","68a80eeb","26044c1d","4864a8c9","f79d0cbd","4dc435d9","6fbae6eb","865266ed","7b775e40","08ca5842","23c156bc","41a99830","6b0aa643","7af37cfb","1f22b893","46ebd075","1a3c7c14","80f40bb4","00af1ffe","f03dfb3d","6a36d11f","fc7513f5","e2cb3996","199a5005","dd74b531","282ca923","cb25ac3f","54f932fd","e950525d","6eb55c52","d67b25d1","6f991543","1d51e703","74f11d5b","c708e74f","9c17994b","ef571fc2","acc8788b","bf8b8573","ddbe79a7","20de124c","9f9a841e","715f32b3","3fc7ecfc","123f5d9c","2978d5cb","122cfc21","951cbf15","49e33c1b","bdc83b70","bcfccc26","d6ee905c","a710f248","8cc56582","6bf32149","e8c01304","c18a1708","da173299","76cc0ab5","c01a1722","d8c29900","bea11354","23790f18","49a60b13","86704d72","21c9c3da","0a9abbc9","4ec97df7","f06ca32d","2bd2d1ac","0cd54e14","4747bdc9","d5adbff5","c43cf758","dd387caa","317bd2f8","2eaf65b6","22943d3b","4d87faf5","ba2805c8","44f68705","6caf47bd","b7dd12c3","bdc9e296","91b426c8","9da6bb13","1ab824b2","419a36a7","7ee9138f","2795b9a9","adbdcc63","753fc052","992df573","824d004d","1f10d9dd","03cb0f0d","7ea7a242","04ca5281","93200b79","a473f10a","352744c9","97737039","a2680ad8","69dcef8e","9d8f5c72","b3b31ec6","37f28f5a","25576111","e6fdff5d","0f352f1b","5642fde7","a2b8dfc6","aab58b4c","fc1b78af","3fad39bb","956cf2c1","04c18ae5","1ad5fbce","c33b38d7","0111b668","10e72e8e","91f32580","ed746207","fdb1a8c8","7b1274a4","d96623f5","cc617d84","4b3a160f","b3ed0b9a","0bf97d6f","07f0763a","f1761b83","50820d58","41323b79","3480a1a2","0c55e47b","2c5ad285","20c68205","f2ba7c92","8b9b51b0","3f81e944","3a52ba52","c1d2041f","72bc5273","d20be917","60bec810","e3037f05","beabf76b","bdd91db0","e79e4491","3362d3f0","c7216183","18e21c0d"],"nao_quer":["FILME-0004","FILME-0008","FILME-0010","FILME-0023","FILME-0025","FILME-0032","FILME-0033","FILME-0039","FILME-0042","FILME-0043","FILME-0045","FILME-0047","FILME-0056","FILME-0059","FILME-0060","FILME-0061","FILME-0063","FILME-0065","FILME-0068","FILME-0069","FILME-0071","FILME-0077","FILME-0080","FILME-0083","FILME-0089","FILME-0091","FILME-0092","FILME-0099","FILME-0104","FILME-0105","FILME-0107","FILME-0110","FILME-0112","FILME-0113","FILME-0115","FILME-0117","FILME-0118","FILME-0121","FILME-0123","FILME-0127","FILME-0132","FILME-0133","FILME-0140","FILME-0142","FILME-0144","FILME-0145","FILME-0147","FILME-0149","FILME-0150","FILME-0151","FILME-0154","FILME-0164","FILME-0165","FILME-0166","FILME-0167","FILME-0168","FILME-0172","FILME-0175","FILME-0176","FILME-0177","FILME-0178","FILME-0179","FILME-0187","FILME-0188","FILME-0190","FILME-0191","FILME-0195","FILME-0196","FILME-0201","FILME-0204","FILME-0205","FILME-0206","FILME-0208","FILME-0212","FILME-0215","FILME-0216","FILME-0223","FILME-0226","FILME-0227","FILME-0228","FILME-0229","FILME-0230","FILME-0231","FILME-0234","FILME-0239","FILME-0245","FILME-0246","FILME-0260","FILME-0264","FILME-0265","FILME-0266","FILME-0267","FILME-0268","FILME-0271","FILME-0273","FILME-0274","FILME-0275","FILME-0276","FILME-0278","FILME-0284","FILME-0286","FILME-0287","FILME-0289","FILME-0290","FILME-0292","FILME-0294","FILME-0296","FILME-0304","FILME-0306","FILME-0308","FILME-0311","FILME-0314","FILME-0317","FILME-0319","FILME-0321","FILME-0322","FILME-0325","FILME-0326","FILME-0329","FILME-0330","FILME-0331","FILME-0332","FILME-0333","FILME-0336","FILME-0343","FILME-0348","FILME-0353","FILME-0355","FILME-0356","FILME-0359","FILME-0360","FILME-0361","FILME-0363","FILME-0365","FILME-0366","FILME-0368","FILME-0369","FILME-0370","FILME-0371","FILME-0372","FILME-0375","FILME-0378","FILME-0379","FILME-0386","FILME-0392","FILME-0393","FILME-0395","FILME-0396","FILME-0397","FILME-0398","FILME-0399","FILME-0405","FILME-0406","FILME-0411","FILME-0419","FILME-0424","FILME-0425","FILME-0436","FILME-0437","FILME-0440","FILME-0442","FILME-0446","FILME-0447","FILME-0451","FILME-0453","FILME-0454","FILME-0455","FILME-0456","FILME-0457","FILME-0458","FILME-0459","FILME-0460","FILME-0462","FILME-0465","FILME-0468","FILME-0470","FILME-0471","FILME-0472","FILME-0473","FILME-0475","FILME-0479","FILME-0480","FILME-0482","FILME-0483","FILME-0484","FILME-0485","FILME-0487","FILME-0488","FILME-0489","FILME-0491","FILME-0492","FILME-0494","FILME-0512","FILME-0513","FILME-0514","FILME-0520","33c17a95","9c37b1d5","83f62e35","8104328e","ae89b59b","969ccf35"],"inseridos":["FILME-0299","FILME-0300","FILME-0337","FILME-0402","FILME-0410","FILME-0439","FILME-0508","FILME-0509","FILME-0510","FILME-0511","FILME-0523","FILME-0524","5de03b9e","4f1cc62b","0dbcca31","e997fb5b","5d647b19","c6f86b0a","297ee096","34344838"],"by_year":{"2023":23,"2025":23,"2024":1,"2026":31},"by_genre":{"Drama":61,"História":8,"Guerra":6,"Aventura":114,"Fantasia":43,"Animação":27,"Família":37,"Ação":142,"Thriller":58,"Crime":43,"Ficção científica":94,"Mistério":16,"Comédia":93,"Terror":38,"Romance":27,"Música":5,"Faroeste":1},"genre_avg":{"Drama":6.7,"História":7.72,"Guerra":7.83,"Aventura":6.6,"Fantasia":6.31,"Animação":6.81,"Família":6.76,"Ação":6.56,"Thriller":6.4,"Crime":6.4,"Ficção científica":6.65,"Mistério":6.16,"Comédia":6.35,"Terror":6.12,"Romance":6.21,"Música":5.9,"Faroeste":6.0}},"USER-006":{"nome":"Mauricio","in_ranking":true,"quant":178,"media":7.6,"time_str":"16d 3h 48min","ultima_av":"14/02/2026","pendentes":["FILME-0004","FILME-0008","FILME-0010","FILME-0022","FILME-0023","FILME-0025","FILME-0031","FILME-0032","FILME-0033","FILME-0035","FILME-0039","FILME-0042","FILME-0043","FILME-0044","FILME-0045","FILME-0046","FILME-0047","FILME-0049","FILME-0051","FILME-0052","FILME-0053","FILME-0054","FILME-0056","FILME-0059","FILME-0060","FILME-0061","FILME-0063","FILME-0064","FILME-0065","FILME-0067","FILME-0068","FILME-0069","FILME-0070","FILME-0071","FILME-0072","FILME-0075","FILME-0076","FILME-0077","FILME-0078","FILME-0080","FILME-0082","FILME-0083","FILME-0085","FILME-0086","FILME-0088","FILME-0089","FILME-0091","FILME-0092","FILME-0093","FILME-0094","FILME-0095","FILME-0098","FILME-0099","FILME-0100","FILME-0101","FILME-0104","FILME-0105","FILME-0107","FILME-0110","FILME-0112","FILME-0113","FILME-0114","FILME-0115","FILME-0116","FILME-0117","FILME-0118","FILME-0119","FILME-0120","FILME-0121","FILME-0122","FILME-0123","FILME-0124","FILME-0125","FILME-0126","FILME-0127","FILME-0132","FILME-0133","FILME-0135","FILME-0136","FILME-0140","FILME-0141","FILME-0142","FILME-0144","FILME-0145","FILME-0146","FILME-0147","FILME-0149","FILME-0150","FILME-0151","FILME-0152","FILME-0153","FILME-0154","FILME-0158","FILME-0159","FILME-0160","FILME-0164","FILME-0165","FILME-0166","FILME-0167","FILME-0168","FILME-0171","FILME-0175","FILME-0176","FILME-0177","FILME-0178","FILME-0179","FILME-0180","FILME-0181","FILME-0182","FILME-0183","FILME-0184","FILME-0187","FILME-0188","FILME-0189","FILME-0190","FILME-0191","FILME-0192","FILME-0194","FILME-0195","FILME-0196","FILME-0197","FILME-0200","FILME-0201","FILME-0202","FILME-0203","FILME-0204","FILME-0205","FILME-0206","FILME-0207","FILME-0208","FILME-0209","FILME-0211","FILME-0212","FILME-0215","FILME-0216","FILME-0218","FILME-0222","FILME-0223","FILME-0224","FILME-0226","FILME-0227","FILME-0228","FILME-0229","FILME-0230","FILME-0231","FILME-0233","FILME-0234","FILME-0235","FILME-0236","FILME-0238","FILME-0239","FILME-0241","FILME-0243","FILME-0244","FILME-0246","FILME-0249","FILME-0250","FILME-0253","FILME-0254","FILME-0255","FILME-0256","FILME-0258","FILME-0262","FILME-0263","FILME-0264","FILME-0265","FILME-0266","FILME-0267","FILME-0268","FILME-0269","FILME-0270","FILME-0271","FILME-0272","FILME-0273","FILME-0274","FILME-0275","FILME-0276","FILME-0278","FILME-0279","FILME-0280","FILME-0281","FILME-0282","FILME-0283","FILME-0284","FILME-0286","FILME-0287","FILME-0288","FILME-0290","FILME-0291","FILME-0292","FILME-0293","FILME-0294","FILME-0295","FILME-0296","FILME-0297","FILME-0299","FILME-0300","FILME-0302","FILME-0303","FILME-0305","FILME-0306","FILME-0307","FILME-0308","FILME-0309","FILME-0310","FILME-0311","FILME-0312","FILME-0313","FILME-0314","FILME-0315","FILME-0316","FILME-0317","FILME-0318","FILME-0319","FILME-0321","FILME-0322","FILME-0323","FILME-0324","FILME-0325","FILME-0326","FILME-0328","FILME-0329","FILME-0330","FILME-0331","FILME-0332","FILME-0333","FILME-0334","FILME-0335","FILME-0336","FILME-0339","FILME-0343","FILME-0344","FILME-0345","FILME-0346","FILME-0347","FILME-0348","FILME-0349","FILME-0350","FILME-0351","FILME-0353","FILME-0354","FILME-0355","FILME-0356","FILME-0357","FILME-0358","FILME-0359","FILME-0360","FILME-0361","FILME-0362","FILME-0363","FILME-0364","FILME-0365","FILME-0366","FILME-0367","FILME-0368","FILME-0369","FILME-0370","FILME-0371","FILME-0372","FILME-0373","FILME-0374","FILME-0375","FILME-0377","FILME-0378","FILME-0379","FILME-0386","FILME-0388","FILME-0389","FILME-0391","FILME-0392","FILME-0393","FILME-0395","FILME-0396","FILME-0397","FILME-0398","FILME-0399","FILME-0400","FILME-0405","FILME-0406","FILME-0408","FILME-0409","FILME-0411","FILME-0412","FILME-0414","FILME-0415","FILME-0416","FILME-0417","FILME-0419","FILME-0420","FILME-0421","FILME-0422","FILME-0424","FILME-0425","FILME-0426","FILME-0427","FILME-0428","FILME-0429","FILME-0431","FILME-0432","FILME-0436","FILME-0437","FILME-0438","FILME-0440","FILME-0441","FILME-0442","FILME-0443","FILME-0444","FILME-0445","FILME-0446","FILME-0447","FILME-0448","FILME-0449","FILME-0450","FILME-0451","FILME-0452","FILME-0453","FILME-0455","FILME-0456","FILME-0457","FILME-0458","FILME-0459","FILME-0460","FILME-0461","FILME-0462","FILME-0464","FILME-0465","FILME-0466","FILME-0467","FILME-0468","FILME-0469","FILME-0470","FILME-0471","FILME-0472","FILME-0473","FILME-0474","FILME-0475","FILME-0476","FILME-0477","FILME-0478","FILME-0479","FILME-0480","FILME-0481","FILME-0482","FILME-0483","FILME-0484","FILME-0485","FILME-0487","FILME-0488","FILME-0489","FILME-0490","FILME-0491","FILME-0492","FILME-0493","FILME-0494","FILME-0503","FILME-0504","FILME-0508","FILME-0509","FILME-0512","FILME-0513","FILME-0514","FILME-0515","FILME-0516","FILME-0517","FILME-0518","FILME-0519","FILME-0520","FILME-0521","FILME-0522","FILME-0523","FILME-0525","FILME-0526","FILME-0527","FILME-0528","FILME-0529","FILME-0530","FILME-0531","FILME-0532","FILME-0534","FILME-0535","FILME-0536","FILME-0537","FILME-0538","88f59ca9","125ed258","c6204f39","606ad458","c3b9ca95","6fc3d59e","21bf9750","33c17a95","34da919e","355d0e50","68d79185","323cc492","008d44c5","95582006","3483408c","706be416","0da37d21","4d26a7cc","3501ef0f","d1a91df5","ff51f35d","842a8cad","3b7b4837","38f9dde4","1a0f2b11","413c8b0b","68a80eeb","6fbae6eb","865266ed","7b775e40","08ca5842","23c156bc","41a99830","6b0aa643","7af37cfb","1f22b893","46ebd075","1a3c7c14","80f40bb4","00af1ffe","f03dfb3d","6a36d11f","fc7513f5","e2cb3996","199a5005","dd74b531","282ca923","cb25ac3f","54f932fd","e950525d","6eb55c52","9c37b1d5","d67b25d1","6f991543","1d51e703","74f11d5b","7423f9cc","c708e74f","f96a71db","9c17994b","ef571fc2","acc8788b","bf8b8573","ddbe79a7","20de124c","9f9a841e","3fc7ecfc","123f5d9c","2978d5cb","122cfc21","951cbf15","83f62e35","49e33c1b","bdc83b70","bcfccc26","46469c3b","d6ee905c","8f8e5bf6","1d1e4042","a710f248","8cc56582","6bf32149","7ee04d73","e8c01304","c18a1708","da173299","17cbe284","76cc0ab5","c9f0263c","8104328e","c01a1722","d8c29900","bea11354","23790f18","731b5fa0","6e85830d","49a60b13","86704d72","21c9c3da","0a9abbc9","4ec97df7","f06ca32d","2bd2d1ac","0cd54e14","4747bdc9","d5adbff5","c43cf758","dd387caa","317bd2f8","d2742f2f","2eaf65b6","22943d3b","4d87faf5","ba2805c8","44f68705","6caf47bd","b7dd12c3","bdc9e296","91b426c8","9da6bb13","d6ac8e96","1ab824b2","419a36a7","7ee9138f","2795b9a9","adbdcc63","753fc052","992df573","824d004d","1f10d9dd","ae89b59b","34848dc2","03cb0f0d","7ea7a242","04ca5281","969ccf35","93200b79","a473f10a","352744c9","97737039","a2680ad8","69dcef8e","b24f2baa","9d8f5c72","b3b31ec6","1b74291e","37f28f5a","25576111","e6fdff5d","0f352f1b","5d647b19","c6f86b0a","5642fde7","a2b8dfc6","aab58b4c","fc1b78af","3fad39bb","956cf2c1","04c18ae5","1ad5fbce","c33b38d7","0111b668","10e72e8e","91f32580","ed746207","fdb1a8c8","7b1274a4","d96623f5","cc617d84","4b3a160f","b3ed0b9a","0bf97d6f","07f0763a","f1761b83","50820d58","41323b79","3480a1a2","0c55e47b","2c5ad285","20c68205","f2ba7c92","3f81e944","3a52ba52","c1d2041f","72bc5273","d20be917","60bec810","e3037f05","beabf76b","bdd91db0","e79e4491","3362d3f0","c7216183","18e21c0d"],"nao_quer":["FILME-0304","FILME-0418"],"inseridos":["FILME-0298","8b9b51b0"],"by_year":{"2023":23,"2024":1,"2025":32,"2026":29},"by_genre":{"Drama":37,"História":7,"Guerra":4,"Romance":9,"Aventura":90,"Fantasia":26,"Animação":12,"Família":19,"Ação":103,"Thriller":41,"Crime":23,"Ficção científica":75,"Mistério":8,"Comédia":46,"Terror":20,"Música":1,"Faroeste":1},"genre_avg":{"Drama":7.82,"História":8.57,"Guerra":8.88,"Romance":7.0,"Aventura":7.68,"Fantasia":7.39,"Animação":8.08,"Família":7.92,"Ação":7.7,"Thriller":7.61,"Crime":7.58,"Ficção científica":7.71,"Mistério":6.94,"Comédia":7.54,"Terror":6.78,"Música":6.0,"Faroeste":7.0}},"USER-007":{"nome":"Felipe","in_ranking":true,"quant":238,"media":7.76,"time_str":"20d 17h 33min","ultima_av":"17/03/2026","pendentes":["FILME-0001","FILME-0004","FILME-0008","FILME-0011","FILME-0013","FILME-0014","FILME-0018","FILME-0022","FILME-0026","FILME-0029","FILME-0032","FILME-0039","FILME-0041","FILME-0042","FILME-0043","FILME-0044","FILME-0045","FILME-0046","FILME-0047","FILME-0049","FILME-0051","FILME-0052","FILME-0053","FILME-0054","FILME-0056","FILME-0059","FILME-0060","FILME-0061","FILME-0062","FILME-0063","FILME-0064","FILME-0065","FILME-0067","FILME-0068","FILME-0069","FILME-0070","FILME-0071","FILME-0072","FILME-0075","FILME-0076","FILME-0077","FILME-0079","FILME-0080","FILME-0083","FILME-0086","FILME-0088","FILME-0089","FILME-0090","FILME-0091","FILME-0092","FILME-0093","FILME-0094","FILME-0095","FILME-0097","FILME-0099","FILME-0100","FILME-0101","FILME-0104","FILME-0105","FILME-0108","FILME-0109","FILME-0112","FILME-0113","FILME-0114","FILME-0115","FILME-0117","FILME-0118","FILME-0119","FILME-0120","FILME-0121","FILME-0123","FILME-0125","FILME-0126","FILME-0127","FILME-0132","FILME-0133","FILME-0135","FILME-0136","FILME-0140","FILME-0141","FILME-0142","FILME-0145","FILME-0147","FILME-0150","FILME-0151","FILME-0152","FILME-0153","FILME-0159","FILME-0160","FILME-0164","FILME-0165","FILME-0166","FILME-0167","FILME-0168","FILME-0172","FILME-0173","FILME-0174","FILME-0175","FILME-0177","FILME-0178","FILME-0179","FILME-0180","FILME-0181","FILME-0182","FILME-0184","FILME-0187","FILME-0189","FILME-0190","FILME-0191","FILME-0193","FILME-0194","FILME-0195","FILME-0196","FILME-0197","FILME-0202","FILME-0205","FILME-0206","FILME-0207","FILME-0208","FILME-0209","FILME-0210","FILME-0211","FILME-0212","FILME-0213","FILME-0214","FILME-0215","FILME-0216","FILME-0221","FILME-0224","FILME-0225","FILME-0227","FILME-0228","FILME-0266","FILME-0273","FILME-0275","FILME-0276","FILME-0277","FILME-0278","FILME-0279","FILME-0280","FILME-0281","FILME-0282","FILME-0283","FILME-0286","FILME-0287","FILME-0288","FILME-0289","FILME-0290","FILME-0291","FILME-0293","FILME-0294","FILME-0295","FILME-0296","FILME-0297","FILME-0298","FILME-0299","FILME-0300","FILME-0301","FILME-0302","FILME-0303","FILME-0304","FILME-0305","FILME-0306","FILME-0307","FILME-0311","FILME-0312","FILME-0313","FILME-0314","FILME-0315","FILME-0316","FILME-0317","FILME-0319","FILME-0320","FILME-0321","FILME-0322","FILME-0324","FILME-0325","FILME-0326","FILME-0327","FILME-0328","FILME-0329","FILME-0330","FILME-0331","FILME-0332","FILME-0334","FILME-0335","FILME-0336","FILME-0338","FILME-0340","FILME-0341","FILME-0342","FILME-0343","FILME-0344","FILME-0345","FILME-0346","FILME-0347","FILME-0348","FILME-0349","FILME-0350","FILME-0351","FILME-0352","FILME-0353","FILME-0354","FILME-0355","FILME-0356","FILME-0357","FILME-0358","FILME-0359","FILME-0360","FILME-0362","FILME-0363","FILME-0364","FILME-0365","FILME-0366","FILME-0367","FILME-0368","FILME-0369","FILME-0371","FILME-0372","FILME-0374","FILME-0375","FILME-0378","FILME-0379","FILME-0384","FILME-0385","FILME-0386","FILME-0387","FILME-0388","FILME-0389","FILME-0390","FILME-0391","FILME-0392","FILME-0393","FILME-0395","FILME-0396","FILME-0397","FILME-0398","FILME-0399","FILME-0400","FILME-0401","FILME-0402","FILME-0403","FILME-0404","FILME-0405","FILME-0406","FILME-0407","FILME-0408","FILME-0409","FILME-0410","FILME-0411","FILME-0412","FILME-0413","FILME-0414","FILME-0415","FILME-0416","FILME-0417","FILME-0418","FILME-0419","FILME-0420","FILME-0422","FILME-0424","FILME-0426","FILME-0427","FILME-0428","FILME-0429","FILME-0430","FILME-0431","FILME-0432","FILME-0435","FILME-0437","FILME-0438","FILME-0439","FILME-0440","FILME-0442","FILME-0443","FILME-0444","FILME-0445","FILME-0446","FILME-0447","FILME-0448","FILME-0449","FILME-0450","FILME-0451","FILME-0452","FILME-0453","FILME-0455","FILME-0456","FILME-0457","FILME-0458","FILME-0459","FILME-0460","FILME-0461","FILME-0462","FILME-0463","FILME-0464","FILME-0465","FILME-0467","FILME-0468","FILME-0470","FILME-0471","FILME-0473","FILME-0474","FILME-0475","FILME-0479","FILME-0480","FILME-0483","FILME-0484","FILME-0485","FILME-0487","FILME-0488","FILME-0489","FILME-0490","FILME-0491","FILME-0492","FILME-0494","FILME-0503","FILME-0504","FILME-0508","FILME-0509","FILME-0510","FILME-0511","FILME-0512","FILME-0514","FILME-0515","FILME-0516","FILME-0517","FILME-0518","FILME-0519","FILME-0520","FILME-0521","FILME-0522","FILME-0523","FILME-0524","FILME-0525","FILME-0526","FILME-0528","FILME-0529","FILME-0530","FILME-0531","FILME-0532","FILME-0533","FILME-0535","FILME-0537","FILME-0538","88f59ca9","125ed258","606ad458","c3b9ca95","6fc3d59e","21bf9750","33c17a95","34da919e","355d0e50","68d79185","323cc492","008d44c5","3483408c","706be416","0da37d21","900ee1a6","4d26a7cc","3501ef0f","d1a91df5","38f9dde4","1a0f2b11","413c8b0b","752b81c7","9967103a","865266ed","7b775e40","08ca5842","23c156bc","41a99830","6b0aa643","1f22b893","46ebd075","1a3c7c14","80f40bb4","00af1ffe","f03dfb3d","6a36d11f","fc7513f5","199a5005","dd74b531","282ca923","cb25ac3f","54f932fd","e950525d","6eb55c52","d67b25d1","6f991543","74f11d5b","7423f9cc","c708e74f","9c17994b","ef571fc2","acc8788b","bf8b8573","ddbe79a7","20de124c","9f9a841e","3fc7ecfc","123f5d9c","2978d5cb","122cfc21","82f1f683","951cbf15","83f62e35","49e33c1b","1f11c40a","bdc83b70","bcfccc26","d6ee905c","33a75b90","8f8e5bf6","a710f248","8cc56582","6bf32149","7ee04d73","e8c01304","c18a1708","da173299","17cbe284","76cc0ab5","c9f0263c","c01a1722","d8c29900","bea11354","23790f18","731b5fa0","49a60b13","86704d72","21c9c3da","0a9abbc9","4ec97df7","f06ca32d","2bd2d1ac","0cd54e14","4747bdc9","d5adbff5","c43cf758","dd387caa","317bd2f8","2eaf65b6","22943d3b","4d87faf5","ba2805c8","44f68705","6caf47bd","b7dd12c3","bdc9e296","91b426c8","1ab824b2","7ee9138f","2795b9a9","adbdcc63","753fc052","992df573","824d004d","1f10d9dd","ae89b59b","34848dc2","03cb0f0d","04ca5281","969ccf35","93200b79","a473f10a","352744c9","97737039","a2680ad8","69dcef8e","9d8f5c72","b3b31ec6","1b74291e","37f28f5a","25576111","e6fdff5d","0f352f1b","e997fb5b","5d647b19","c6f86b0a","5642fde7","a2b8dfc6","297ee096","aab58b4c","fc1b78af","3fad39bb","956cf2c1","04c18ae5","91f32580","ed746207","fdb1a8c8","7b1274a4","3480a1a2","0c55e47b","2c5ad285","20c68205","f2ba7c92","34344838","8b9b51b0","3f81e944","3a52ba52","72bc5273","d20be917","60bec810","e3037f05","c7216183","18e21c0d"],"nao_quer":["FILME-0007","FILME-0078","FILME-0110","FILME-0308","FILME-0339","FILME-0361","FILME-0513","e2cb3996","7ea7a242","f1761b83","50820d58"],"inseridos":["FILME-0084","FILME-0198","FILME-0199","FILME-0200","FILME-0201","FILME-0229","FILME-0230","FILME-0231","FILME-0232","FILME-0233","FILME-0234","FILME-0235","FILME-0236","FILME-0237","FILME-0238","FILME-0239","FILME-0240","FILME-0241","FILME-0242","FILME-0243","FILME-0244","FILME-0245","FILME-0248","FILME-0249","FILME-0250","FILME-0251","FILME-0252","FILME-0253","FILME-0254","FILME-0255","FILME-0256","FILME-0257","FILME-0258","FILME-0259","FILME-0260","FILME-0261","FILME-0262","FILME-0263","FILME-0264","FILME-0265","FILME-0267","FILME-0268","FILME-0269","FILME-0270","FILME-0271","FILME-0272","f96a71db","d96623f5","cc617d84","4b3a160f","b3ed0b9a","0bf97d6f","07f0763a","41323b79","beabf76b","bdd91db0","e79e4491","3362d3f0"],"by_year":{"2023":23,"2026":84,"2024":5,"2025":17},"by_genre":{"Drama":45,"Romance":25,"Aventura":137,"Fantasia":58,"Animação":41,"Família":56,"Ação":125,"Ficção científica":91,"Terror":23,"Comédia":60,"Crime":20,"Mistério":10,"Thriller":38,"Guerra":1,"Música":6,"História":4,"Faroeste":1,"Cinema TV":1},"genre_avg":{"Drama":7.98,"Romance":8.11,"Aventura":7.85,"Fantasia":7.72,"Animação":8.28,"Família":8.25,"Ação":7.67,"Ficção científica":7.73,"Terror":7.05,"Comédia":7.83,"Crime":7.6,"Mistério":7.47,"Thriller":7.61,"Guerra":7.0,"Música":8.22,"História":8.12,"Faroeste":8.5,"Cinema TV":6.0}},"USER-008":{"nome":"Pedro","in_ranking":true,"quant":468,"media":7.46,"time_str":"38d 15h 56min","ultima_av":"17/03/2026","pendentes":["FILME-0001","FILME-0008","FILME-0013","FILME-0032","FILME-0035","FILME-0036","FILME-0039","FILME-0040","FILME-0041","FILME-0053","FILME-0054","FILME-0063","FILME-0064","FILME-0067","FILME-0069","FILME-0076","FILME-0077","FILME-0083","FILME-0085","FILME-0089","FILME-0091","FILME-0094","FILME-0103","FILME-0112","FILME-0115","FILME-0118","FILME-0131","FILME-0165","FILME-0167","FILME-0173","FILME-0179","FILME-0189","FILME-0190","FILME-0191","FILME-0193","FILME-0195","FILME-0196","FILME-0197","FILME-0206","FILME-0208","FILME-0209","FILME-0212","FILME-0213","FILME-0215","FILME-0234","FILME-0266","FILME-0273","FILME-0275","FILME-0276","FILME-0278","FILME-0283","FILME-0287","FILME-0288","FILME-0293","FILME-0294","FILME-0296","FILME-0297","FILME-0300","FILME-0302","FILME-0314","FILME-0321","FILME-0322","FILME-0327","FILME-0332","FILME-0333","FILME-0334","FILME-0346","FILME-0349","FILME-0351","FILME-0353","FILME-0354","FILME-0357","FILME-0359","FILME-0361","FILME-0366","FILME-0370","FILME-0372","FILME-0379","FILME-0380","FILME-0382","FILME-0386","FILME-0392","FILME-0393","FILME-0406","FILME-0408","FILME-0409","FILME-0410","FILME-0411","FILME-0418","FILME-0422","FILME-0424","FILME-0425","FILME-0426","FILME-0430","FILME-0431","FILME-0432","FILME-0438","FILME-0439","FILME-0440","FILME-0441","FILME-0444","FILME-0445","FILME-0446","FILME-0449","FILME-0455","FILME-0456","FILME-0457","FILME-0458","FILME-0464","FILME-0466","FILME-0467","FILME-0468","FILME-0470","FILME-0471","FILME-0474","FILME-0475","FILME-0479","FILME-0482","FILME-0483","FILME-0485","FILME-0487","FILME-0488","FILME-0490","FILME-0491","FILME-0492","FILME-0494","FILME-0503","FILME-0504","FILME-0507","FILME-0511","FILME-0512","FILME-0513","FILME-0514","FILME-0515","FILME-0518","FILME-0519","FILME-0520","FILME-0522","FILME-0523","FILME-0525","FILME-0526","FILME-0527","FILME-0528","FILME-0530","FILME-0531","FILME-0532","FILME-0533","FILME-0538","88f59ca9","606ad458","c3b9ca95","6fc3d59e","21bf9750","33c17a95","34da919e","4f1cc62b","68d79185","e9711417","008d44c5","95582006","3483408c","706be416","08ca5842","6b0aa643","1f22b893","1a3c7c14","00af1ffe","6a36d11f","fc7513f5","199a5005","dd74b531","282ca923","cb25ac3f","54f932fd","e950525d","6eb55c52","d67b25d1","6f991543","74f11d5b","9c17994b","acc8788b","bf8b8573","3fc7ecfc","122cfc21","951cbf15","49e33c1b","1f11c40a","bdc83b70","bcfccc26","d6ee905c","6bf32149","7ee04d73","2bd2d1ac","0cd54e14","4747bdc9","c43cf758","dd387caa","2eaf65b6","ba2805c8","44f68705","6caf47bd","b7dd12c3","91b426c8","d6ac8e96","1ab824b2","7ee9138f","adbdcc63","03cb0f0d","04ca5281","a473f10a","352744c9","97737039","69dcef8e","9d8f5c72","b3b31ec6","37f28f5a","25576111","e6fdff5d","e997fb5b","5d647b19","c6f86b0a","5642fde7","a2b8dfc6","297ee096","fc1b78af","3fad39bb","956cf2c1","04c18ae5","10e72e8e","7b1274a4","f1761b83","50820d58","41323b79","f2ba7c92","34344838","8b9b51b0","3f81e944","c1d2041f","72bc5273","d20be917","60bec810","e3037f05","beabf76b","bdd91db0","e79e4491","3362d3f0","c7216183","18e21c0d"],"nao_quer":["FILME-0004","FILME-0038","FILME-0073","FILME-0080","FILME-0098","FILME-0101","FILME-0104","FILME-0113","FILME-0143","FILME-0154","FILME-0159","FILME-0200","FILME-0201","FILME-0204","FILME-0205","FILME-0207","FILME-0230","FILME-0231","FILME-0238","FILME-0258","FILME-0264","FILME-0268","FILME-0290","FILME-0299","FILME-0305","FILME-0358","FILME-0371","FILME-0401","FILME-0402","FILME-0437","FILME-0460","FILME-0508","FILME-0509","FILME-0534","9da6bb13","d96623f5","cc617d84","4b3a160f","b3ed0b9a","0bf97d6f","07f0763a"],"inseridos":["FILME-0045","FILME-0046","FILME-0047","FILME-0048","FILME-0052","FILME-0056","FILME-0057","FILME-0061","FILME-0065","FILME-0068","FILME-0072","FILME-0079","FILME-0088","FILME-0090","FILME-0092","FILME-0120","FILME-0121","FILME-0122","FILME-0123","FILME-0124","FILME-0125","FILME-0126","FILME-0127","FILME-0132","FILME-0133","FILME-0134","FILME-0135","FILME-0136","FILME-0137","FILME-0138","FILME-0139","FILME-0141","FILME-0142","FILME-0144","FILME-0145","FILME-0146","FILME-0148","FILME-0149","FILME-0150","FILME-0151","FILME-0152","FILME-0153","FILME-0155","FILME-0156","FILME-0157","FILME-0158","FILME-0161","FILME-0162","FILME-0163","FILME-0169","FILME-0170","FILME-0171","FILME-0180","FILME-0181","FILME-0182","FILME-0183","FILME-0184","FILME-0186","FILME-0303","FILME-0304","FILME-0307","FILME-0308","FILME-0309","FILME-0310","FILME-0311","FILME-0312","FILME-0313","FILME-0315","FILME-0316","FILME-0317","FILME-0318","FILME-0319","FILME-0320","FILME-0324","FILME-0325","FILME-0326","FILME-0330","FILME-0331","FILME-0336","FILME-0338","FILME-0339","FILME-0342","FILME-0343","FILME-0344","FILME-0345","FILME-0348","FILME-0355","FILME-0356","FILME-0362","FILME-0363","FILME-0364","FILME-0368","FILME-0375","FILME-0376","FILME-0378","FILME-0395","FILME-0396","FILME-0397","FILME-0398","FILME-0399","FILME-0400","FILME-0403","FILME-0404","FILME-0412","FILME-0413","FILME-0414","FILME-0415","FILME-0416","FILME-0442","FILME-0459","0da37d21","900ee1a6","4d26a7cc","d1a91df5","ff51f35d","842a8cad","3b7b4837","38f9dde4","1a0f2b11","d9e8c421","413c8b0b","752b81c7","68a80eeb","9967103a","26044c1d","4864a8c9","b6a26d48","f79d0cbd","7abe7d88","4dc435d9","6fbae6eb","7b775e40","9c37b1d5","ef571fc2","da173299","8104328e","c01a1722","d8c29900","bea11354","731b5fa0","6e85830d","49a60b13","86704d72","21c9c3da","0a9abbc9","4ec97df7","f06ca32d","86b35d1b","bdc9e296","2795b9a9","753fc052","992df573","824d004d","1f10d9dd","ae89b59b","34848dc2","7ea7a242","969ccf35","93200b79","1b74291e","0f352f1b","aab58b4c","1ad5fbce","c33b38d7","0111b668","fdb1a8c8","3480a1a2","0c55e47b","2c5ad285","3a52ba52"],"by_year":{"2024":9,"2025":126,"2026":21},"by_genre":{"Drama":122,"Romance":46,"Aventura":165,"Fantasia":70,"Animação":42,"Família":60,"Ação":234,"Thriller":105,"Crime":77,"Ficção científica":106,"Terror":50,"Comédia":163,"História":15,"Guerra":12,"Mistério":25,"Faroeste":5,"Cinema TV":4,"Música":11,"Documentário":1},"genre_avg":{"Drama":7.67,"Romance":7.17,"Aventura":7.42,"Fantasia":7.26,"Animação":7.63,"Família":7.39,"Ação":7.48,"Thriller":7.44,"Crime":7.49,"Ficção científica":7.4,"Terror":7.09,"Comédia":7.46,"História":8.14,"Guerra":8.26,"Mistério":7.19,"Faroeste":7.96,"Cinema TV":6.25,"Música":7.4,"Documentário":6.2}},"USER-009":{"nome":"Bruno","in_ranking":true,"quant":154,"media":8.2,"time_str":"12d 16h 54min","ultima_av":"10/09/2025","pendentes":["FILME-0001","FILME-0003","FILME-0004","FILME-0006","FILME-0007","FILME-0008","FILME-0009","FILME-0010","FILME-0012","FILME-0013","FILME-0019","FILME-0020","FILME-0021","FILME-0022","FILME-0023","FILME-0024","FILME-0025","FILME-0026","FILME-0027","FILME-0028","FILME-0029","FILME-0030","FILME-0032","FILME-0034","FILME-0035","FILME-0036","FILME-0037","FILME-0038","FILME-0039","FILME-0040","FILME-0041","FILME-0043","FILME-0044","FILME-0045","FILME-0046","FILME-0047","FILME-0050","FILME-0051","FILME-0052","FILME-0053","FILME-0054","FILME-0055","FILME-0056","FILME-0057","FILME-0060","FILME-0063","FILME-0064","FILME-0065","FILME-0066","FILME-0067","FILME-0068","FILME-0069","FILME-0070","FILME-0071","FILME-0072","FILME-0073","FILME-0074","FILME-0075","FILME-0076","FILME-0077","FILME-0079","FILME-0080","FILME-0084","FILME-0085","FILME-0087","FILME-0088","FILME-0089","FILME-0091","FILME-0093","FILME-0094","FILME-0095","FILME-0096","FILME-0097","FILME-0098","FILME-0099","FILME-0100","FILME-0101","FILME-0102","FILME-0103","FILME-0105","FILME-0106","FILME-0107","FILME-0108","FILME-0109","FILME-0110","FILME-0111","FILME-0112","FILME-0113","FILME-0114","FILME-0115","FILME-0116","FILME-0117","FILME-0118","FILME-0119","FILME-0120","FILME-0121","FILME-0122","FILME-0123","FILME-0124","FILME-0126","FILME-0127","FILME-0134","FILME-0135","FILME-0136","FILME-0137","FILME-0138","FILME-0139","FILME-0141","FILME-0142","FILME-0143","FILME-0144","FILME-0145","FILME-0146","FILME-0148","FILME-0150","FILME-0151","FILME-0152","FILME-0153","FILME-0154","FILME-0155","FILME-0156","FILME-0157","FILME-0158","FILME-0159","FILME-0161","FILME-0162","FILME-0163","FILME-0164","FILME-0165","FILME-0167","FILME-0169","FILME-0170","FILME-0171","FILME-0172","FILME-0173","FILME-0175","FILME-0177","FILME-0178","FILME-0179","FILME-0181","FILME-0184","FILME-0185","FILME-0187","FILME-0188","FILME-0189","FILME-0191","FILME-0192","FILME-0194","FILME-0196","FILME-0197","FILME-0198","FILME-0199","FILME-0200","FILME-0202","FILME-0205","FILME-0206","FILME-0207","FILME-0208","FILME-0209","FILME-0210","FILME-0211","FILME-0212","FILME-0213","FILME-0214","FILME-0215","FILME-0217","FILME-0221","FILME-0222","FILME-0223","FILME-0227","FILME-0228","FILME-0229","FILME-0230","FILME-0231","FILME-0232","FILME-0233","FILME-0234","FILME-0235","FILME-0237","FILME-0239","FILME-0240","FILME-0241","FILME-0242","FILME-0243","FILME-0244","FILME-0246","FILME-0247","FILME-0248","FILME-0249","FILME-0254","FILME-0255","FILME-0256","FILME-0257","FILME-0258","FILME-0263","FILME-0264","FILME-0266","FILME-0267","FILME-0268","FILME-0269","FILME-0270","FILME-0271","FILME-0272","FILME-0273","FILME-0275","FILME-0276","FILME-0278","FILME-0279","FILME-0280","FILME-0282","FILME-0283","FILME-0284","FILME-0285","FILME-0287","FILME-0288","FILME-0291","FILME-0292","FILME-0293","FILME-0294","FILME-0295","FILME-0296","FILME-0297","FILME-0299","FILME-0300","FILME-0301","FILME-0302","FILME-0303","FILME-0304","FILME-0305","FILME-0306","FILME-0307","FILME-0308","FILME-0309","FILME-0311","FILME-0312","FILME-0313","FILME-0314","FILME-0316","FILME-0317","FILME-0318","FILME-0319","FILME-0320","FILME-0321","FILME-0322","FILME-0323","FILME-0324","FILME-0325","FILME-0326","FILME-0327","FILME-0329","FILME-0330","FILME-0331","FILME-0332","FILME-0333","FILME-0334","FILME-0335","FILME-0336","FILME-0338","FILME-0341","FILME-0342","FILME-0344","FILME-0345","FILME-0346","FILME-0348","FILME-0349","FILME-0351","FILME-0352","FILME-0353","FILME-0354","FILME-0355","FILME-0356","FILME-0357","FILME-0359","FILME-0360","FILME-0363","FILME-0364","FILME-0365","FILME-0366","FILME-0368","FILME-0369","FILME-0370","FILME-0371","FILME-0372","FILME-0373","FILME-0374","FILME-0377","FILME-0379","FILME-0380","FILME-0382","FILME-0383","FILME-0386","FILME-0388","FILME-0389","FILME-0391","FILME-0392","FILME-0393","FILME-0395","FILME-0397","FILME-0398","FILME-0399","FILME-0400","FILME-0401","FILME-0404","FILME-0405","FILME-0406","FILME-0407","FILME-0408","FILME-0409","FILME-0410","FILME-0411","FILME-0412","FILME-0413","FILME-0416","FILME-0417","FILME-0418","FILME-0419","FILME-0420","FILME-0421","FILME-0422","FILME-0423","FILME-0424","FILME-0427","FILME-0428","FILME-0429","FILME-0432","FILME-0433","FILME-0435","FILME-0436","FILME-0437","FILME-0438","FILME-0439","FILME-0440","FILME-0441","FILME-0442","FILME-0443","FILME-0444","FILME-0445","FILME-0446","FILME-0447","FILME-0449","FILME-0450","FILME-0451","FILME-0452","FILME-0453","FILME-0455","FILME-0456","FILME-0457","FILME-0458","FILME-0459","FILME-0460","FILME-0462","FILME-0463","FILME-0464","FILME-0466","FILME-0467","FILME-0468","FILME-0470","FILME-0471","FILME-0472","FILME-0473","FILME-0474","FILME-0475","FILME-0476","FILME-0477","FILME-0478","FILME-0479","FILME-0480","FILME-0481","FILME-0482","FILME-0483","FILME-0484","FILME-0485","FILME-0486","FILME-0487","FILME-0488","FILME-0489","FILME-0490","FILME-0492","FILME-0493","FILME-0495","FILME-0496","FILME-0497","FILME-0499","FILME-0500","FILME-0501","FILME-0503","FILME-0504","FILME-0505","FILME-0507","FILME-0508","FILME-0509","FILME-0510","FILME-0511","FILME-0512","FILME-0513","FILME-0514","FILME-0515","FILME-0517","FILME-0518","FILME-0519","FILME-0520","FILME-0521","FILME-0522","FILME-0523","FILME-0525","FILME-0526","FILME-0527","FILME-0528","FILME-0529","FILME-0530","FILME-0532","FILME-0533","FILME-0535","FILME-0536","FILME-0537","FILME-0538","88f59ca9","5de03b9e","125ed258","606ad458","c3b9ca95","6fc3d59e","21bf9750","33c17a95","34da919e","4f1cc62b","355d0e50","68d79185","323cc492","008d44c5","95582006","706be416","4d26a7cc","3501ef0f","d1a91df5","842a8cad","3b7b4837","38f9dde4","d9e8c421","413c8b0b","752b81c7","7b775e40","08ca5842","23c156bc","41a99830","6b0aa643","1f22b893","46ebd075","1a3c7c14","80f40bb4","00af1ffe","f03dfb3d","6a36d11f","fc7513f5","199a5005","dd74b531","282ca923","cb25ac3f","54f932fd","e950525d","6eb55c52","9c37b1d5","d67b25d1","6f991543","1d51e703","74f11d5b","9c17994b","ef571fc2","acc8788b","bf8b8573","9f9a841e","3fc7ecfc","123f5d9c","2978d5cb","122cfc21","951cbf15","83f62e35","49e33c1b","ed861f85","1f11c40a","bdc83b70","bcfccc26","46469c3b","d6ee905c","33a75b90","1d1e4042","a710f248","6bf32149","7ee04d73","c18a1708","da173299","17cbe284","76cc0ab5","c9f0263c","8104328e","c01a1722","d8c29900","bea11354","23790f18","731b5fa0","6e85830d","49a60b13","86704d72","21c9c3da","0a9abbc9","4ec97df7","f06ca32d","2bd2d1ac","0cd54e14","4747bdc9","d5adbff5","c43cf758","dd387caa","317bd2f8","2eaf65b6","ba2805c8","44f68705","6caf47bd","b7dd12c3","86b35d1b","bdc9e296","91b426c8","9da6bb13","d6ac8e96","1ab824b2","419a36a7","7ee9138f","2795b9a9","adbdcc63","753fc052","992df573","824d004d","1f10d9dd","ae89b59b","34848dc2","03cb0f0d","7ea7a242","04ca5281","969ccf35","93200b79","a473f10a","352744c9","97737039","a2680ad8","69dcef8e","b24f2baa","9d8f5c72","b3b31ec6","1b74291e","37f28f5a","25576111","e6fdff5d","0f352f1b","0dbcca31","e997fb5b","5d647b19","c6f86b0a","5642fde7","a2b8dfc6","297ee096","aab58b4c","fc1b78af","3fad39bb","956cf2c1","04c18ae5","1ad5fbce","c33b38d7","0111b668","10e72e8e","91f32580","ed746207","fdb1a8c8","7b1274a4","d96623f5","cc617d84","4b3a160f","b3ed0b9a","0bf97d6f","07f0763a","f1761b83","50820d58","41323b79","3480a1a2","0c55e47b","2c5ad285","20c68205","f2ba7c92","34344838","8b9b51b0","3f81e944","3a52ba52","c1d2041f","72bc5273","d20be917","60bec810","e3037f05","beabf76b","bdd91db0","e79e4491","3362d3f0","c7216183","18e21c0d"],"nao_quer":["FILME-0337"],"inseridos":["e8c01304","4d87faf5"],"by_year":{"2025":154},"by_genre":{"Drama":54,"Romance":5,"Animação":15,"Família":25,"História":8,"Guerra":7,"Crime":33,"Thriller":41,"Ação":89,"Aventura":53,"Ficção científica":35,"Comédia":42,"Faroeste":2,"Terror":11,"Fantasia":13,"Mistério":6,"Música":2},"genre_avg":{"Drama":8.2,"Romance":8.2,"Animação":8.0,"Família":8.06,"História":8.34,"Guerra":8.33,"Crime":8.54,"Thriller":8.23,"Ação":8.32,"Aventura":8.17,"Ficção científica":8.16,"Comédia":8.05,"Faroeste":8.25,"Terror":7.25,"Fantasia":7.97,"Mistério":7.42,"Música":7.0}}},"recent_ids":["18e21c0d","c7216183"],"anos":["2026","2025","2024","2023"],"all_genres":["Animação","Aventura","Ação","Cinema TV","Comédia","Crime","Documentário","Drama","Família","Fantasia","Faroeste","Ficção científica","Guerra","História","Mistério","Música","Romance","Terror","Thriller"],"global_stats":{"total_filmes":757,"total_avaliacoes":2896,"total_membros":8,"top_month":"Out/2024","top_month_count":100,"total_catalog_days":61,"top_genre":"Ação","genre_counts":{"Ação":323,"Comédia":263,"Drama":236,"Aventura":216,"Thriller":210,"Ficção científica":164,"Crime":125,"Fantasia":99,"Família":89,"Terror":83,"Romance":76,"Animação":63,"Mistério":59,"História":42,"Guerra":22,"Música":19,"Faroeste":8,"Cinema TV":6,"Documentário":1},"avg_nota":7.34},"highlights":{"most_films":{"uid":"USER-002","nome":"Lucas"},"least_films":{"uid":"USER-009","nome":"Bruno"},"highest_avg":{"uid":"USER-009","nome":"Bruno"},"lowest_avg":{"uid":"USER-005","nome":"Catharine"},"most_pending":{"uid":"USER-009","nome":"Bruno"},"most_added":{"uid":"USER-002","nome":"Lucas"},"most_selective":{"uid":"USER-005","nome":"Catharine"}},"monthly_activity":{"2024-02":5,"2024-03":1,"2024-05":1,"2024-08":1,"2024-09":6,"2024-10":10,"2024-11":4,"2024-12":4,"2025-01":3,"2025-02":2,"2025-03":3,"2025-04":2,"2025-05":5,"2025-06":224,"2025-07":80,"2025-08":146,"2025-09":174,"2025-10":13,"2025-11":42,"2025-12":42,"2026-01":188,"2026-02":23,"2026-03":28,"2026-04":3},"user_personal":{"USER-002":{"top5":[{"id":"FILME-0003","nome":"Harry Potter","nota":9.6,"poster":"https://image.tmdb.org/t/p/w500/4rtsbE9aQ1qw4gv7yYwaNYfWFoS.jpg"},{"id":"FILME-0109","nome":"O Jogo da Imitação","nota":9.4,"poster":"https://image.tmdb.org/t/p/w500/bwWCFjhwrs5my4FUoeWdTa2GYlB.jpg"},{"id":"FILME-0138","nome":"Vingadores: Ultimato","nota":9.4,"poster":"https://image.tmdb.org/t/p/w500/7jvlqGsxeMKscskuUZgKk0Kuv99.jpg"},{"id":"FILME-0148","nome":"Deadpool & Wolverine","nota":9.4,"poster":"https://image.tmdb.org/t/p/w500/xq4v7JE8niZ75OYYPDGNn6Gzpyt.jpg"},{"id":"FILME-0031","nome":"John Wick 4: Baba Yaga","nota":9.2,"poster":"https://image.tmdb.org/t/p/w500/dHQEM7aqsvBQnPmjdyTgb5fUG5q.jpg"}],"bot5":[{"id":"2795b9a9","nome":"Corra que a Polícia Vem Aí!","nota":5.0,"poster":"https://image.tmdb.org/t/p/w500/vDN8VDEQjh8QBEeT7C6Ml5Uqln8.jpg"},{"id":"969ccf35","nome":"Matadores de Vampiras Lésbicas","nota":5.0,"poster":"https://image.tmdb.org/t/p/w500/1PrCRxFOs18EKxy2FrqN3tmubA4.jpg"},{"id":"FILME-0056","nome":"Tour do Dopping","nota":3.2,"poster":"https://image.tmdb.org/t/p/w500/nkaIWXBAcptQtIMuwCbwzevXcmu.jpg"},{"id":"FILME-0047","nome":"7 Dias no Inferno","nota":3.0,"poster":"https://image.tmdb.org/t/p/w500/5rjOSU32D8IHdrwRbGqdgdU4K8c.jpg"},{"id":"33c17a95","nome":"Jester: A Morte Sorri","nota":3.0,"poster":"https://image.tmdb.org/t/p/w500/xMvd6QBbXFsRG1LHoEVJafWj6Xj.jpg"}],"fav_genre":"Ação","fav_genre_avg":7.54,"most_active_year":"2025","most_active_year_count":167,"nota_histogram":[0,0,0,3,0,20,91,351,203,14,0],"genre_top5":[{"genre":"Ação","count":300,"avg":7.54},{"genre":"Comédia","count":234,"avg":7.31},{"genre":"Drama","count":219,"avg":7.74},{"genre":"Aventura","count":193,"avg":7.52},{"genre":"Thriller","count":187,"avg":7.43}]},"USER-003":{"top5":[{"id":"FILME-0433","nome":"Homem de Ferro","nota":10.0,"poster":"https://image.tmdb.org/t/p/w500/adSJ0DpgOsMwrpUH78cZpLGOOAk.jpg"},{"id":"FILME-0016","nome":"Pantera Negra: Wakanda Para Sempre","nota":9.5,"poster":"https://image.tmdb.org/t/p/w500/nj9cgMhqXQJkXutKmvVelKNP1Aa.jpg"},{"id":"FILME-0148","nome":"Deadpool & Wolverine","nota":9.5,"poster":"https://image.tmdb.org/t/p/w500/xq4v7JE8niZ75OYYPDGNn6Gzpyt.jpg"},{"id":"FILME-0011","nome":"Até o Último Homem","nota":9.2,"poster":"https://image.tmdb.org/t/p/w500/mPnU3yKuZpmLjkVXGplhkpX31LY.jpg"},{"id":"FILME-0012","nome":"O Rei do Show","nota":9.0,"poster":"https://image.tmdb.org/t/p/w500/NUce1PoO7j0CLLwUQRrBbyKveg.jpg"}],"bot5":[{"id":"FILME-0073","nome":"A Escola do Bem e do Mal","nota":5.2,"poster":"https://image.tmdb.org/t/p/w500/fbo6sHohCSQDOY6RYPQX3zO886y.jpg"},{"id":"FILME-0029","nome":"Tudo em Todo Lugar ao Mesmo Tempo","nota":5.0,"poster":"https://image.tmdb.org/t/p/w500/bW21kbvqAt2kMGlaU8qY86C8kQE.jpg"},{"id":"FILME-0119","nome":"Não Olhe para Cima","nota":5.0,"poster":"https://image.tmdb.org/t/p/w500/6Sc7Tjt7aPsdghYK32mDMFeZkqJ.jpg"},{"id":"FILME-0203","nome":"A Fuga das Galinhas","nota":5.0,"poster":"https://image.tmdb.org/t/p/w500/7vV98bLdct9iLN6oVcPzCjj5YPT.jpg"},{"id":"33c17a95","nome":"Jester: A Morte Sorri","nota":2.5,"poster":"https://image.tmdb.org/t/p/w500/xMvd6QBbXFsRG1LHoEVJafWj6Xj.jpg"}],"fav_genre":"Ação","fav_genre_avg":7.61,"most_active_year":"2025","most_active_year_count":64,"nota_histogram":[0,0,1,0,0,4,44,153,67,9,1],"genre_top5":[{"genre":"Ação","count":143,"avg":7.61},{"genre":"Aventura","count":118,"avg":7.6},{"genre":"Comédia","count":112,"avg":7.36},{"genre":"Ficção científica","count":92,"avg":7.59},{"genre":"Thriller","count":66,"avg":7.37}]},"USER-004":{"top5":[{"id":"1ad5fbce","nome":"O Senhor dos Anéis: A Sociedade do Anel","nota":9.5,"poster":"https://image.tmdb.org/t/p/w500/tlvsNCwWEIgwAM23aNzTmMIcPEZ.jpg"},{"id":"0111b668","nome":"O Senhor dos Anéis: O Retorno do Rei","nota":9.5,"poster":"https://image.tmdb.org/t/p/w500/rU4oIKv5I4C59DpcXKmT7kNwGI0.jpg"},{"id":"c33b38d7","nome":"O Senhor dos Anéis: As Duas Torres","nota":9.2,"poster":"https://image.tmdb.org/t/p/w500/mCs8vxvScCqVM3YFMQIdbrdFEhu.jpg"},{"id":"FILME-0001","nome":"A Lista de Schindler","nota":9.0,"poster":"https://image.tmdb.org/t/p/w500/bGhhNzJYDsuLruNN5bJ2PvLcMiq.jpg"},{"id":"FILME-0138","nome":"Vingadores: Ultimato","nota":9.0,"poster":"https://image.tmdb.org/t/p/w500/7jvlqGsxeMKscskuUZgKk0Kuv99.jpg"}],"bot5":[{"id":"FILME-0146","nome":"Todos Menos Você","nota":5.0,"poster":"https://image.tmdb.org/t/p/w500/iKOEAPkb5EyCPmAgByYNeAoG5uc.jpg"},{"id":"FILME-0410","nome":"Último Alvo","nota":5.0,"poster":"https://image.tmdb.org/t/p/w500/c4T5Mgq6uYK39cjInttIRgTdotq.jpg"},{"id":"2795b9a9","nome":"Corra que a Polícia Vem Aí!","nota":5.0,"poster":"https://image.tmdb.org/t/p/w500/vDN8VDEQjh8QBEeT7C6Ml5Uqln8.jpg"},{"id":"FILME-0073","nome":"A Escola do Bem e do Mal","nota":4.8,"poster":"https://image.tmdb.org/t/p/w500/fbo6sHohCSQDOY6RYPQX3zO886y.jpg"},{"id":"FILME-0371","nome":"Coringa: Delírio a Dois","nota":3.5,"poster":"https://image.tmdb.org/t/p/w500/jNttwl5CYgnxNwQ8157BxyYJqu2.jpg"}],"fav_genre":"Ação","fav_genre_avg":7.45,"most_active_year":"2025","most_active_year_count":153,"nota_histogram":[0,0,0,1,1,22,125,304,151,9,0],"genre_top5":[{"genre":"Ação","count":294,"avg":7.45},{"genre":"Comédia","count":212,"avg":7.19},{"genre":"Aventura","count":193,"avg":7.53},{"genre":"Drama","count":186,"avg":7.58},{"genre":"Thriller","count":160,"avg":7.27}]},"USER-005":{"top5":[{"id":"FILME-0009","nome":"Interestelar","nota":8.7,"poster":"https://image.tmdb.org/t/p/w500/nCbkOyOMTEwlEV0LtCOvCnwEONA.jpg"},{"id":"FILME-0001","nome":"A Lista de Schindler","nota":8.5,"poster":"https://image.tmdb.org/t/p/w500/bGhhNzJYDsuLruNN5bJ2PvLcMiq.jpg"},{"id":"FILME-0109","nome":"O Jogo da Imitação","nota":8.5,"poster":"https://image.tmdb.org/t/p/w500/bwWCFjhwrs5my4FUoeWdTa2GYlB.jpg"},{"id":"FILME-0011","nome":"Até o Último Homem","nota":8.0,"poster":"https://image.tmdb.org/t/p/w500/mPnU3yKuZpmLjkVXGplhkpX31LY.jpg"},{"id":"FILME-0018","nome":"Top Gun: Maverick","nota":8.0,"poster":"https://image.tmdb.org/t/p/w500/8v3lrllHYRrqEdYWLyscH4RGFDO.jpg"}],"bot5":[{"id":"FILME-0528","nome":"Resgate Implacável","nota":4.0,"poster":"https://image.tmdb.org/t/p/w500/8T6N3NJd8p464uj6ydoPbWwprys.jpg"},{"id":"297ee096","nome":"Anaconda","nota":4.0,"poster":"https://image.tmdb.org/t/p/w500/hRzpf8QELtzJnMt4SiDoFUmZ9KM.jpg"},{"id":"34344838","nome":"O Primata","nota":4.0,"poster":"https://image.tmdb.org/t/p/w500/fJd3J9FwWTAI1EZsvaTHfZKKTPy.jpg"},{"id":"FILME-0170","nome":"X-Men: Fênix Negra","nota":2.0,"poster":"https://image.tmdb.org/t/p/w500/w4mvEKtjawXdYaq1bORuodLX6ti.jpg"},{"id":"FILME-0237","nome":"A Saga Crepúsculo: Lua Nova","nota":0.5,"poster":"https://image.tmdb.org/t/p/w500/gF0TjnaoKqsYaSni1YN1snQ8q4z.jpg"}],"fav_genre":"Ação","fav_genre_avg":6.56,"most_active_year":"2026","most_active_year_count":31,"nota_histogram":[1,0,1,0,5,37,126,104,8,0,0],"genre_top5":[{"genre":"Ação","count":142,"avg":6.56},{"genre":"Aventura","count":114,"avg":6.6},{"genre":"Ficção científica","count":94,"avg":6.65},{"genre":"Comédia","count":93,"avg":6.35},{"genre":"Drama","count":61,"avg":6.7}]},"USER-006":{"top5":[{"id":"FILME-0003","nome":"Harry Potter","nota":9.5,"poster":"https://image.tmdb.org/t/p/w500/4rtsbE9aQ1qw4gv7yYwaNYfWFoS.jpg"},{"id":"FILME-0138","nome":"Vingadores: Ultimato","nota":9.5,"poster":"https://image.tmdb.org/t/p/w500/7jvlqGsxeMKscskuUZgKk0Kuv99.jpg"},{"id":"FILME-0148","nome":"Deadpool & Wolverine","nota":9.5,"poster":"https://image.tmdb.org/t/p/w500/xq4v7JE8niZ75OYYPDGNn6Gzpyt.jpg"},{"id":"FILME-0298","nome":"Super-Herói: O Filme","nota":9.5,"poster":"https://image.tmdb.org/t/p/w500/slyJHnhfs2rP6KmCwm0EbKq3hoz.jpg"},{"id":"FILME-0001","nome":"A Lista de Schindler","nota":9.0,"poster":"https://image.tmdb.org/t/p/w500/bGhhNzJYDsuLruNN5bJ2PvLcMiq.jpg"}],"bot5":[{"id":"0dbcca31","nome":"Um Truque de Mestre 3","nota":6.0,"poster":"https://image.tmdb.org/t/p/w500/xUddC5HTjMWmClD007QBWR0BLHY.jpg"},{"id":"297ee096","nome":"Anaconda","nota":6.0,"poster":"https://image.tmdb.org/t/p/w500/hRzpf8QELtzJnMt4SiDoFUmZ9KM.jpg"},{"id":"82f1f683","nome":"Quarteto Fantástico","nota":5.5,"poster":"https://image.tmdb.org/t/p/w500/XJ8jZ4hGyusnN41NnxR0vv5ghS.jpg"},{"id":"FILME-0073","nome":"A Escola do Bem e do Mal","nota":5.0,"poster":"https://image.tmdb.org/t/p/w500/fbo6sHohCSQDOY6RYPQX3zO886y.jpg"},{"id":"34344838","nome":"O Primata","nota":5.0,"poster":"https://image.tmdb.org/t/p/w500/fJd3J9FwWTAI1EZsvaTHfZKKTPy.jpg"}],"fav_genre":"Ação","fav_genre_avg":7.7,"most_active_year":"2025","most_active_year_count":32,"nota_histogram":[0,0,0,0,0,3,23,65,70,17,0],"genre_top5":[{"genre":"Ação","count":103,"avg":7.7},{"genre":"Aventura","count":90,"avg":7.68},{"genre":"Ficção científica","count":75,"avg":7.71},{"genre":"Comédia","count":46,"avg":7.54},{"genre":"Thriller","count":41,"avg":7.61}]},"USER-007":{"top5":[{"id":"FILME-0536","nome":"Lilo & Stitch","nota":10.0,"poster":"https://image.tmdb.org/t/p/w500/toLU4HzWf2iKqPbElKPDypKNGTr.jpg"},{"id":"FILME-0259","nome":"As Crônicas de Nárnia: O Leão, a Feiticeira e o Guarda-Roupa","nota":9.9,"poster":"https://image.tmdb.org/t/p/w500/sLw1gxPAvkqhp5XrdO2A50Q5lTW.jpg"},{"id":"FILME-0003","nome":"Harry Potter","nota":9.5,"poster":"https://image.tmdb.org/t/p/w500/4rtsbE9aQ1qw4gv7yYwaNYfWFoS.jpg"},{"id":"FILME-0143","nome":"Divertida Mente 2","nota":9.5,"poster":"https://image.tmdb.org/t/p/w500/xGvz7nlGQeePcVOpAzOcHsC7kRt.jpg"},{"id":"FILME-0253","nome":"Tarzan","nota":9.5,"poster":"https://image.tmdb.org/t/p/w500/ce4mU4yyubjP1uXcz48fMndCZni.jpg"}],"bot5":[{"id":"c1d2041f","nome":"Quando o Céu se Engana","nota":6.0,"poster":"https://image.tmdb.org/t/p/w500/h90ccrZZzwfSsOgvHTbB76MLw4b.jpg"},{"id":"beabf76b","nome":"O Sétimo Filho","nota":6.0,"poster":"https://image.tmdb.org/t/p/w500/wO28QCMDZ55MiWJCBw4YABftiY2.jpg"},{"id":"FILME-0055","nome":"Baywatch: S.O.S. Malibu","nota":5.0,"poster":"https://image.tmdb.org/t/p/w500/im8xzHCqMAS0RfVeld3cevqNYAc.jpg"},{"id":"FILME-0073","nome":"A Escola do Bem e do Mal","nota":5.0,"poster":"https://image.tmdb.org/t/p/w500/fbo6sHohCSQDOY6RYPQX3zO886y.jpg"},{"id":"6e85830d","nome":"Os Vampiros que Se Mordam","nota":4.0,"poster":"https://image.tmdb.org/t/p/w500/2cVcrkGh24FMMrdnSFEyqZusFp3.jpg"}],"fav_genre":"Aventura","fav_genre_avg":7.85,"most_active_year":"2026","most_active_year_count":84,"nota_histogram":[0,0,0,0,1,2,25,71,105,33,1],"genre_top5":[{"genre":"Aventura","count":137,"avg":7.85},{"genre":"Ação","count":125,"avg":7.67},{"genre":"Ficção científica","count":91,"avg":7.73},{"genre":"Comédia","count":60,"avg":7.83},{"genre":"Fantasia","count":58,"avg":7.72}]},"USER-008":{"top5":[{"id":"FILME-0148","nome":"Deadpool & Wolverine","nota":10.0,"poster":"https://image.tmdb.org/t/p/w500/xq4v7JE8niZ75OYYPDGNn6Gzpyt.jpg"},{"id":"ef571fc2","nome":"Demon Slayer: Kimetsu no Yaiba – Castelo Infinito","nota":9.5,"poster":"https://image.tmdb.org/t/p/w500/c55sXCaQBj3vuHqZe62tv90xCQS.jpg"},{"id":"1ad5fbce","nome":"O Senhor dos Anéis: A Sociedade do Anel","nota":9.5,"poster":"https://image.tmdb.org/t/p/w500/tlvsNCwWEIgwAM23aNzTmMIcPEZ.jpg"},{"id":"FILME-0015","nome":"Avatar: O Caminho da Água","nota":9.2,"poster":"https://image.tmdb.org/t/p/w500/mbYQLLluS651W89jO7MOZcLSCUw.jpg"},{"id":"FILME-0009","nome":"Interestelar","nota":9.0,"poster":"https://image.tmdb.org/t/p/w500/nCbkOyOMTEwlEV0LtCOvCnwEONA.jpg"}],"bot5":[{"id":"FILME-0047","nome":"7 Dias no Inferno","nota":5.0,"poster":"https://image.tmdb.org/t/p/w500/5rjOSU32D8IHdrwRbGqdgdU4K8c.jpg"},{"id":"FILME-0084","nome":"The Flash","nota":5.0,"poster":"https://image.tmdb.org/t/p/w500/itYONYDHpJqTuu8BCXAtHxgpglq.jpg"},{"id":"FILME-0133","nome":"Terror nas Profundezas","nota":5.0,"poster":"https://image.tmdb.org/t/p/w500/1ZZFTMqbQaP59yGTqKOcfqVE7NC.jpg"},{"id":"FILME-0146","nome":"Todos Menos Você","nota":5.0,"poster":"https://image.tmdb.org/t/p/w500/iKOEAPkb5EyCPmAgByYNeAoG5uc.jpg"},{"id":"5de03b9e","nome":"Premonição 6","nota":5.0,"poster":"https://image.tmdb.org/t/p/w500/x3J781PsdMrjenzQKM5eJXqK5Nd.jpg"}],"fav_genre":"Ação","fav_genre_avg":7.48,"most_active_year":"2025","most_active_year_count":126,"nota_histogram":[0,0,0,0,0,7,90,215,144,11,1],"genre_top5":[{"genre":"Ação","count":234,"avg":7.48},{"genre":"Aventura","count":165,"avg":7.42},{"genre":"Comédia","count":163,"avg":7.46},{"genre":"Drama","count":122,"avg":7.67},{"genre":"Ficção científica","count":106,"avg":7.4}]},"USER-009":{"top5":[{"id":"FILME-0016","nome":"Pantera Negra: Wakanda Para Sempre","nota":9.1,"poster":"https://image.tmdb.org/t/p/w500/nj9cgMhqXQJkXutKmvVelKNP1Aa.jpg"},{"id":"FILME-0011","nome":"Até o Último Homem","nota":9.0,"poster":"https://image.tmdb.org/t/p/w500/mPnU3yKuZpmLjkVXGplhkpX31LY.jpg"},{"id":"FILME-0031","nome":"John Wick 4: Baba Yaga","nota":9.0,"poster":"https://image.tmdb.org/t/p/w500/dHQEM7aqsvBQnPmjdyTgb5fUG5q.jpg"},{"id":"FILME-0033","nome":"Creed 3","nota":9.0,"poster":"https://image.tmdb.org/t/p/w500/kLgmZVrRVY41FWCCidi9IqmM473.jpg"},{"id":"FILME-0062","nome":"Resgate","nota":9.0,"poster":"https://image.tmdb.org/t/p/w500/zxahunlqvMPWzUBd1XSRsGawdS9.jpg"}],"bot5":[{"id":"FILME-0402","nome":"O Auto da Compadecida 2","nota":5.5,"poster":"https://image.tmdb.org/t/p/w500/aOiXGcZS6Oqknbw13cBdwO3hWij.jpg"},{"id":"FILME-0133","nome":"Terror nas Profundezas","nota":5.0,"poster":"https://image.tmdb.org/t/p/w500/1ZZFTMqbQaP59yGTqKOcfqVE7NC.jpg"},{"id":"FILME-0195","nome":"O Mundo Depois de Nós","nota":5.0,"poster":"https://image.tmdb.org/t/p/w500/qwHZInQ0MBa1DxHV66ExCCUzBf5.jpg"},{"id":"FILME-0290","nome":"O Poço 2","nota":5.0,"poster":"https://image.tmdb.org/t/p/w500/2fJn438T3W2XDlyBlgNuAeAAHrj.jpg"},{"id":"0da37d21","nome":"Escorpião Rei","nota":5.0,"poster":"https://image.tmdb.org/t/p/w500/2V8lciX8DM9OkDSXjnTTjtj6WaP.jpg"}],"fav_genre":"Ação","fav_genre_avg":8.32,"most_active_year":"2025","most_active_year_count":154,"nota_histogram":[0,0,0,0,0,5,4,18,96,31,0],"genre_top5":[{"genre":"Ação","count":89,"avg":8.32},{"genre":"Drama","count":54,"avg":8.2},{"genre":"Aventura","count":53,"avg":8.17},{"genre":"Comédia","count":42,"avg":8.05},{"genre":"Thriller","count":41,"avg":8.23}]}},"top_films":["FILME-0148","FILME-0293","FILME-0138","FILME-0304","FILME-0396","FILME-0011","FILME-0418","FILME-0003","FILME-0227","4d87faf5","FILME-0168","FILME-0159","FILME-0030","FILME-0139","FILME-0001","FILME-0008","FILME-0294","FILME-0426","FILME-0537","1ad5fbce","FILME-0015","FILME-0109","FILME-0531","FILME-0016","FILME-0054","FILME-0190","FILME-0433","FILME-0092","FILME-0042","da173299","FILME-0376","FILME-0174","FILME-0193","FILME-0078","FILME-0062","FILME-0258","0111b668","e2cb3996","FILME-0032","FILME-0125","FILME-0127","FILME-0207","FILME-0361","FILME-0461","FILME-0033","FILME-0049","FILME-0425","FILME-0099","FILME-0053","FILME-0434","FILME-0222","FILME-0430","FILME-0059","FILME-0187","FILME-0041","FILME-0018","FILME-0424","FILME-0491","5642fde7","FILME-0034","FILME-0201","FILME-0128","FILME-0431","FILME-0391","FILME-0443","FILME-0112","FILME-0069","37f28f5a","FILME-0259","FILME-0216","FILME-0098","FILME-0166","FILME-0281","FILME-0286","c33b38d7","FILME-0009","FILME-0245","FILME-0017","FILME-0454","FILME-0277","FILME-0296","FILME-0519","FILME-0130","FILME-0362","FILME-0058","FILME-0031","FILME-0134","FILME-0333","FILME-0378","FILME-0264","7af37cfb","FILME-0198","FILME-0339","FILME-0316","FILME-0104","FILME-0083","FILME-0282","FILME-0405","FILME-0221","FILME-0140","FILME-0536","FILME-0110","FILME-0048","FILME-0199","FILME-0298","4f1cc62b","FILME-0265","FILME-0147","FILME-0292","FILME-0126","FILME-0394","FILME-0107","FILME-0223","125ed258","FILME-0012","FILME-0005","FILME-0384","FILME-0486","5071b4e3","ed861f85","FILME-0403","FILME-0160","FILME-0465","FILME-0534","1b74291e","FILME-0113","FILME-0167","FILME-0197","FILME-0288","FILME-0529","7b775e40","03cb0f0d","e997fb5b","FILME-0260","FILME-0310","FILME-0233","17cbe284","FILME-0516","FILME-0527","FILME-0071","FILME-0311","FILME-0004","FILME-0006","FILME-0347","FILME-0035","FILME-0320","FILME-0283","FILME-0474","FILME-0526","FILME-0284","FILME-0350","FILME-0141","FILME-0331","FILME-0152","FILME-0129","FILME-0131","FILME-0340","FILME-0143","FILME-0200","68a80eeb","8f8e5bf6","FILME-0079","9da6bb13","FILME-0214","f79d0cbd","FILME-0044","FILME-0375","FILME-0501","FILME-0186","FILME-0120","FILME-0343","752b81c7","FILME-0086","FILME-0068","FILME-0468","FILME-0489","FILME-0328","FILME-0448","FILME-0002","FILME-0380","FILME-0469","900ee1a6","FILME-0136","FILME-0312","FILME-0498","b6a26d48","FILME-0210","FILME-0318","FILME-0153","FILME-0275","FILME-0530","FILME-0019","FILME-0247","FILME-0248","7abe7d88","FILME-0082","26044c1d","FILME-0097","FILME-0400","FILME-0252"],"ranking_exclude":["USER-001"]};
 
-const messaging = firebase.messaging();
+// Films will be populated after Supabase load
+var RAW = {
+  filmes: [],
+  usuarios: STATIC.usuarios,
+  users_stats: STATIC.users_stats,
+  recent_ids: STATIC.recent_ids,
+  anos: STATIC.anos,
+  all_genres: STATIC.all_genres,
+  global_stats: STATIC.global_stats,
+  highlights: STATIC.highlights,
+  monthly_activity: STATIC.monthly_activity,
+  user_personal: STATIC.user_personal,
+  top_films: STATIC.top_films,
+  ranking_exclude: STATIC.ranking_exclude
+};
 
-// Notificação em background (app fechado)
-messaging.onBackgroundMessage(payload => {
-  const { title = 'CineList', body = '' } = payload.notification || {};
-  const data = payload.data || {};
-  self.registration.showNotification(title, {
-    body,
-    icon: './icon-192.png',
-    badge: './icon-192.png',
-    data: { url: data.url || 'https://lbatinga.github.io/cinelist/' },
-    vibrate: [200, 100, 200]
+// Load films from Supabase
+async function loadFilmsFromSupabase() {
+  try {
+    document.getElementById('loaderMsg').textContent = 'Carregando filmes...';
+    
+    // Load films in batches
+    let allFilmes = [];
+    let from = 0;
+    const batchSize = 200;
+    
+    while(true) {
+      const { data: filmes, error } = await Promise.race([
+        supa.from('filmes')
+          .select('id,nome,ano,duracao_str,duracao_min,poster,sinopse,categorias,classificacao,inserido_por,data_cadastro,data_ts')
+          .range(from, from + batchSize - 1)
+          .order('data_ts', { ascending: false }),
+        new Promise((_, rej) => setTimeout(() => rej(new Error('Timeout filmes')), 15000))
+      ]);
+      
+      if(error) throw error;
+      if(!filmes || filmes.length === 0) break;
+      allFilmes = allFilmes.concat(filmes);
+      if(filmes.length < batchSize) break;
+      from += batchSize;
+    }
+    
+    document.getElementById('loaderMsg').textContent = 'Carregando avaliações...';
+    
+    // Load all avaliacoes
+    let allAvaliacoes = [];
+    from = 0;
+    while(true) {
+      const { data: avs, error } = await supa
+        .from('avaliacoes')
+        .select('filme_id,usuario_id,nota,vai_assistir,comentario,data_avaliacao')
+        .range(from, from + 999);
+      
+      if(error) throw error;
+      if(!avs || avs.length === 0) break;
+      allAvaliacoes = allAvaliacoes.concat(avs);
+      if(avs.length < 1000) break;
+      from += 1000;
+    }
+    
+    // Build avaliacoes map
+    const avMap = {};
+    allAvaliacoes.forEach(av => {
+      if(!avMap[av.filme_id]) avMap[av.filme_id] = {};
+      avMap[av.filme_id][av.usuario_id] = {
+        nota: av.nota,
+        vai: av.vai_assistir || '',
+        comentario: av.comentario || '',
+        data: av.data_avaliacao || ''
+      };
+    });
+    
+    // Enrich films with avaliacoes + computed media
+    RAW.filmes = allFilmes.map(f => {
+      const avs = avMap[f.id] || {};
+      const notas = Object.values(avs).map(a => a.nota).filter(n => n !== null);
+      const media = notas.length ? Math.round(100 * notas.reduce((a,b)=>a+b,0)/notas.length)/100 : null;
+      return {
+        ...f,
+        categorias: f.categorias || [],
+        avaliacoes: avs,
+        media: media,
+        num_avaliacoes: notas.length,
+        is_recent: STATIC.recent_ids.includes(f.id)
+      };
+    });
+    
+    // Rebuild FILMES_MAP
+    RAW.filmes.forEach(f => FILMES_MAP[f.id] = f);
+    FILMES.length = 0;
+    RAW.filmes.forEach(f => FILMES.push(f));
+    
+    // Atualiza RECENT_IDS dinamicamente
+    RECENT_IDS = getRecentIds();
+    RAW.recent_ids = RECENT_IDS;
+    
+    // Calcula estatísticas dinâmicas
+    document.getElementById('loaderMsg').textContent = 'Calculando estatísticas...';
+    calcUserStats();
+    
+    document.getElementById('loaderMsg').textContent = 'Pronto!';
+    console.log(`✅ Loaded ${RAW.filmes.length} films, ${allAvaliacoes.length} ratings, ${RECENT_IDS.length} recentes`);
+    return true;
+  } catch(e) {
+    console.error('Error loading films:', e);
+    return false;
+  }
+}
+
+
+// ═══════════════════════════════════════════
+// CÁLCULO DINÂMICO DE ESTATÍSTICAS
+// ═══════════════════════════════════════════
+function calcUserStats(){
+  const uids = Object.keys(USERS).filter(u => u !== 'USER-001');
+  
+  // Mapa de filmes inseridos por usuário
+  const insertedBy = {};
+  FILMES.forEach(f => {
+    const uid = f.inserido_por;
+    if(!insertedBy[uid]) insertedBy[uid] = [];
+    insertedBy[uid].push(f.id);
   });
+
+  uids.forEach(uid => {
+    const s = STATS[uid];
+    if(!s) return;
+
+    // Avaliações deste usuário
+    const minhasAvs = FILMES
+      .filter(f => f.avaliacoes[uid] && f.avaliacoes[uid].nota !== null)
+      .map(f => ({ ...f.avaliacoes[uid], id: f.id, nome: f.nome, poster: f.poster, categorias: f.categorias, ano: f.ano }));
+
+    // Quant e media
+    s.quant = minhasAvs.length;
+    s.media = minhasAvs.length
+      ? Math.round(100 * minhasAvs.reduce((a,b) => a + b.nota, 0) / minhasAvs.length) / 100
+      : null;
+
+    // Inseridos
+    s.inseridos = insertedBy[uid] || [];
+
+    // Pendentes = filmes sem avaliação deste user (excluindo nao_quer)
+    const avSet = new Set(minhasAvs.map(a => a.id));
+    const naoQuerSet = new Set(s.nao_quer || []);
+    s.pendentes = FILMES
+      .filter(f => !avSet.has(f.id) && !naoQuerSet.has(f.id))
+      .map(f => f.id);
+
+    // Ultima avaliação (mais recente)
+    const datas = minhasAvs
+      .filter(a => a.data)
+      .map(a => {
+        const p = a.data.split('/');
+        return p.length === 3 ? new Date(parseInt(p[2]), parseInt(p[1])-1, parseInt(p[0])) : null;
+      }).filter(Boolean);
+    if(datas.length){
+      const maxD = new Date(Math.max(...datas));
+      s.ultima_av = `${String(maxD.getDate()).padStart(2,'0')}/${String(maxD.getMonth()+1).padStart(2,'0')}/${maxD.getFullYear()}`;
+    }
+
+    // Top5 e Bot5
+    const sorted = [...minhasAvs].sort((a,b) => b.nota - a.nota);
+    s.top5_dyn = sorted.slice(0,5).map(a => ({ id:a.id, nome:a.nome, nota:a.nota, poster:a.poster }));
+    s.bot5_dyn = sorted.slice(-5).reverse().map(a => ({ id:a.id, nome:a.nome, nota:a.nota, poster:a.poster }));
+
+    // By year
+    s.by_year = {};
+    minhasAvs.forEach(a => {
+      const ano = a.data ? a.data.split('/')[2] : null;
+      if(ano){ s.by_year[ano] = (s.by_year[ano]||0) + 1; }
+    });
+
+    // By genre e genre_avg
+    s.by_genre = {}; s.genre_avg = {};
+    const genreNotas = {};
+    minhasAvs.forEach(a => {
+      (a.categorias||[]).forEach(g => {
+        s.by_genre[g] = (s.by_genre[g]||0) + 1;
+        if(!genreNotas[g]) genreNotas[g] = [];
+        genreNotas[g].push(a.nota);
+      });
+    });
+    Object.entries(genreNotas).forEach(([g, notas]) => {
+      s.genre_avg[g] = Math.round(100 * notas.reduce((a,b)=>a+b,0) / notas.length) / 100;
+    });
+
+    // Fav genre
+    if(Object.keys(s.by_genre).length){
+      s.fav_genre = Object.entries(s.by_genre).sort((a,b)=>b[1]-a[1])[0][0];
+      s.fav_genre_avg = s.genre_avg[s.fav_genre] || null;
+    }
+  });
+
+  // ── Estatísticas globais dinâmicas ──
+  const gs = RAW.global_stats;
+  gs.total_filmes = FILMES.length;
+  gs.total_avaliacoes = FILMES.reduce((s,f) => s + f.num_avaliacoes, 0);
+  const todasNotas = FILMES.flatMap(f => Object.values(f.avaliacoes).map(a=>a.nota).filter(n=>n!==null));
+  gs.avg_nota = todasNotas.length ? Math.round(100 * todasNotas.reduce((a,b)=>a+b,0)/todasNotas.length)/100 : 0;
+  
+  // Genre counts global
+  gs.genre_counts = {};
+  FILMES.forEach(f => f.categorias.forEach(g => { gs.genre_counts[g] = (gs.genre_counts[g]||0) + 1; }));
+  gs.top_genre = Object.entries(gs.genre_counts).sort((a,b)=>b[1]-a[1])[0]?.[0] || 'Ação';
+
+  // Total tempo de catálogo
+  const totalMin = FILMES.reduce((s,f) => s + (f.duracao_min||0), 0);
+  gs.total_catalog_days = Math.round(totalMin / 1440);
+
+  console.log(`✅ Stats calculadas: ${gs.total_filmes} filmes, ${gs.total_avaliacoes} avaliações`);
+}
+
+var FM = FILMES_MAP; // alias
+// FILMES_MAP populated from Supabase after login
+const USERS = RAW.usuarios;
+const STATS = RAW.users_stats;
+// RECENT_IDS dinâmico: filmes adicionados nos últimos 10 dias
+function parseDataCadastro(f){
+  // data_ts pode ser: ISO string (novos filmes) ou Unix timestamp em segundos (filmes antigos)
+  if(f.data_ts){
+    const ts = f.data_ts;
+    if(typeof ts === 'number' || (!isNaN(ts) && !String(ts).includes('-'))){
+      // Unix timestamp em segundos — multiplica por 1000
+      return new Date(parseFloat(ts) * 1000);
+    }
+    // ISO string
+    return new Date(ts);
+  }
+  if(!f.data_cadastro) return null;
+  const s = String(f.data_cadastro);
+  // Formato dd/mm/yyyy
+  if(s.includes('/')) {
+    const [d,m,y] = s.split('/');
+    return new Date(parseInt(y), parseInt(m)-1, parseInt(d));
+  }
+  // Formato yyyy-mm-dd
+  return new Date(s);
+}
+
+function getRecentIds(){
+  const cutoff = new Date();
+  cutoff.setDate(cutoff.getDate() - 15);
+  return FILMES
+    .filter(f => {
+      const d = parseDataCadastro(f);
+      return d && d >= cutoff;
+    })
+    .sort((a,b) => {
+      const da = parseDataCadastro(a) || new Date(0);
+      const db = parseDataCadastro(b) || new Date(0);
+      return db - da;
+    })
+    .map(f => f.id);
+}
+let RECENT_IDS = RAW.recent_ids; // será atualizado após load
+
+const AC = ['#e50914','#e67e22','#3498db','#9b59b6','#1abc9c','#2ecc71','#e91e63','#00bcd4','#8bc34a'];
+const UK = Object.keys(USERS);
+const aC = uid=>AC[UK.indexOf(uid)%AC.length];
+const ini = name=>name.split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase();
+const nC = n=>{
+  if(!n) return '#666';
+  if(n>=9)   return '#00bcd4'; // azul ciano — ótimo
+  if(n>=7.5) return '#46d369'; // verde — bom
+  if(n>=6)   return '#f5c518'; // amarelo — ok
+  if(n>=4)   return '#ff7043'; // laranja — fraco
+  return '#c0392b';             // vermelho escuro — ruim
+};
+const fmt = n=>n!=null?n.toFixed(2).replace('.',','):'—';
+const INACTIVE_MONTHS = 2;
+function monthsSince(dateStr){
+  if(!dateStr) return 999;
+  const parts = dateStr.split('/');
+  if(parts.length!==3) return 999;
+  const dt = new Date(parseInt(parts[2]), parseInt(parts[1])-1, parseInt(parts[0]));
+  const diff = (new Date(2026,3,4) - dt) / (1000*60*60*24*30.44);
+  return diff;
+}
+function isActive(s){ return monthsSince(s.ultima_av) < INACTIVE_MONTHS; }
+function inactiveSince(s){
+  const m = Math.floor(monthsSince(s.ultima_av));
+  return m >= 12 ? Math.floor(m/12)+'a '+(m%12)+'m' : m+'m';
+}
+const esc = s=>s?s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'):'';
+const classC = c=>{const n=parseInt(c);return n>=18?'#e05555':n>=16?'#f5a623':n>=14?'#f5c518':'#46d369'};
+
+let CU=null, CV='home', AGenre=null, navList=[], searchQ='', rateFilmeId=null, vaiVal='Sim';
+let heroSlides=[], heroIdx=0, heroTimer=null;
+
+// SCROLL
+document.getElementById('appScroll').addEventListener('scroll',function(){
+  document.getElementById('topbar').classList.toggle('scrolled',this.scrollTop>10);
 });
 
-// Ao clicar na notificação, abre o app
-self.addEventListener('notificationclick', e => {
-  e.notification.close();
-  const url = e.notification.data?.url || 'https://lbatinga.github.io/cinelist/';
-  e.waitUntil(
-    clients.matchAll({ type: 'window', includeUncontrolled: true }).then(list => {
-      for (const client of list) {
-        if (client.url.includes('lbatinga.github.io/cinelist') && 'focus' in client) {
-          return client.focus();
+// NAV
+function navigate(view){
+  CV=view; AGenre=null;
+  document.querySelectorAll('.nav-link').forEach(n=>n.classList.remove('active'));
+  document.querySelectorAll('.bn-item').forEach(n=>n.classList.remove('active'));
+  const nl=document.getElementById('nav-'+view), bl=document.getElementById('bn-'+view);
+  if(nl) nl.classList.add('active');
+  if(bl) bl.classList.add('active');
+  document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));
+  const vn='view'+view.charAt(0).toUpperCase()+view.slice(1);
+  document.getElementById(vn).classList.add('active');
+  document.getElementById('appScroll').scrollTop=0;
+  render();
+}
+
+function render(){
+  if(CV==='home') renderHome();
+  else if(CV==='filmes') renderFilmes();
+  else if(CV==='pendentes') renderPendentes();
+  else if(CV==='avaliacoes') renderAvaliacoes();
+  else if(CV==='recentes') renderRecentes();
+  else if(CV==='ranking') renderRanking();
+}
+
+// SEARCH
+function toggleSearch(){
+  const s=document.getElementById('topSearch');
+  s.classList.toggle('open');
+  if(s.classList.contains('open')) s.focus();
+  else{s.value='';searchQ='';render();}
+}
+function handleSearch(){searchQ=document.getElementById('topSearch').value.toLowerCase();render();}
+
+// ── HOME ──
+function renderHome(){
+  const el=document.getElementById('viewHome');
+  // Hero: top 8 films with posters, rotating
+  heroSlides=[...FILMES].filter(f=>f.poster&&f.media&&f.num_avaliacoes>=3)
+    .sort((a,b)=>{
+      if(b.media!==a.media) return b.media-a.media;
+      if(b.num_avaliacoes!==a.num_avaliacoes) return b.num_avaliacoes-a.num_avaliacoes;
+      return (a.data_ts||0)-(b.data_ts||0);
+    }).slice(0,8);
+  
+  const rows = buildRows();
+  el.innerHTML = `
+    <div class="hero" id="heroSection">
+      ${heroSlides.map((f,i)=>`<div class="hero-slide${i===0?' active':''}" id="hslide${i}" style="background-image:url('${esc(f.poster)}')"><div class="hero-gradient"></div></div>`).join('')}
+      <div class="hero-content" id="heroContent">${heroSlideContent(0)}</div>
+      <div class="hero-dots" id="heroDots">${heroSlides.map((_,i)=>`<button class="hero-dot${i===0?' active':''}" onclick="goHeroSlide(${i})"></button>`).join('')}</div>
+    </div>
+    <div class="rows-section">${rows}</div>
+  `;
+  heroIdx=0;
+  clearInterval(heroTimer);
+  heroTimer=setInterval(()=>goHeroSlide((heroIdx+1)%heroSlides.length),6000);
+  navList=FILMES;
+}
+
+function heroSlideContent(i){
+  const f=heroSlides[i];
+  if(!f) return '';
+  return `
+    <div class="hero-title">${esc(f.nome)}</div>
+    <div class="hero-meta">
+      <span class="hero-score" style="color:${nC(f.media)}">★ ${fmt(f.media)}</span>
+      <span>${f.ano}</span><span>${f.duracao_str}</span>
+      <span style="font-size:10px;font-weight:700;padding:2px 7px;border-radius:3px;border:1px solid #666;color:#aaa">${f.classificacao}</span>
+    </div>
+    <div class="hero-desc">${esc(f.sinopse||'')}</div>
+    <div class="hero-btns">
+      <button class="btn-play" onclick="openFilme('${f.id}')">▶ Detalhes</button>
+      <button class="btn-info" onclick="openFilme('${f.id}')">ℹ Mais Info</button>
+    </div>
+  `;
+}
+
+function goHeroSlide(i){
+  heroIdx=i;
+  document.querySelectorAll('.hero-slide').forEach((s,j)=>s.classList.toggle('active',j===i));
+  document.querySelectorAll('.hero-dot').forEach((d,j)=>d.classList.toggle('active',j===i));
+  const hc=document.getElementById('heroContent');
+  if(hc) hc.innerHTML=heroSlideContent(i);
+}
+
+function buildRows(){
+  const topRated=[...FILMES].filter(f=>f.media&&f.num_avaliacoes>=2)
+    .sort((a,b)=>{
+      if(b.media!==a.media) return b.media-a.media;
+      if(b.num_avaliacoes!==a.num_avaliacoes) return b.num_avaliacoes-a.num_avaliacoes;
+      return (a.data_ts||0)-(b.data_ts||0);
+    }).slice(0,20);
+  
+  const recentF=RECENT_IDS.map(id=>FM[id]).filter(Boolean);
+  
+  const byGenre={};
+  FILMES.forEach(f=>f.categorias.forEach(c=>{if(!byGenre[c])byGenre[c]=[];byGenre[c].push(f);}));
+  
+  let html='';
+  if(recentF.length) html+=rowHTML('🆕 Adicionados Recentemente',recentF,true);
+  html+=rowHTML('⭐ Mais Bem Avaliados',topRated);
+  
+  // Top 5 genres by count
+  Object.entries(byGenre).sort((a,b)=>b[1].length-a[1].length).slice(0,5).forEach(([g,films])=>{
+    const sorted=films.filter(f=>f.media).sort((a,b)=>{
+      if(b.media!==a.media) return b.media-a.media;
+      if(b.num_avaliacoes!==a.num_avaliacoes) return b.num_avaliacoes-a.num_avaliacoes;
+      return (a.data_ts||0)-(b.data_ts||0);
+    }).slice(0,15);
+    html+=rowHTML(g,sorted);
+  });
+  return html;
+}
+
+function rowHTML(title,films,showDate){
+  return `<div class="row"><div class="row-title">${title}</div><div class="row-track">${films.map(f=>pCard(f,showDate)).join('')}</div></div>`;
+}
+
+function pCard(f, showDate){
+  const d = parseDataCadastro ? parseDataCadastro(f) : null;
+  const dataCad = d ? `${String(d.getDate()).padStart(2,'0')}/${String(d.getMonth()+1).padStart(2,'0')}/${d.getFullYear()}` : null;
+  return `<div class="poster-card" onclick="openFilme('${f.id}')">
+    ${f.poster?`<img class="poster-img" src="${esc(f.poster)}" loading="lazy" alt="" onerror="this.style.display='none'">`:`<div class="poster-no-img">🎬</div>`}
+    ${f.media?`<div class="poster-badge" style="color:${nC(f.media)}">${fmt(f.media)}</div>`:''}
+    <div class="poster-class">${f.classificacao}</div>
+    ${showDate&&dataCad?`<div style="position:absolute;bottom:0;left:0;right:0;background:rgba(0,0,0,0.75);color:#aaa;font-size:9px;text-align:center;padding:3px 0">📅 ${dataCad}</div>`:''}
+    <div class="poster-overlay"></div>
+    <div class="poster-info">
+      <div class="poster-title">${esc(f.nome)}</div>
+      ${f.media?`<div class="poster-nota" style="color:${nC(f.media)}">★ ${fmt(f.media)}</div>`:''}
+    </div>
+  </div>`;
+}
+
+// ── FILMES ──
+function setGenre(g){
+  AGenre = g;
+  renderFilmes();
+}
+
+function renderFilmes(selectedId, forceGenre){
+  let list=[...FILMES].filter(f=>!searchQ||f.nome.toLowerCase().includes(searchQ));
+  if(AGenre) list=list.filter(f=>f.categorias.includes(AGenre));
+  list.sort((a,b)=>{
+    if((b.media||0)!==(a.media||0)) return (b.media||0)-(a.media||0);
+    if(b.num_avaliacoes!==a.num_avaliacoes) return b.num_avaliacoes-a.num_avaliacoes;
+    return (a.data_ts||0)-(b.data_ts||0);
+  });
+  navList=list;
+  const genres=[...new Set(FILMES.flatMap(f=>f.categorias))].sort();
+  const selId=selectedId||(list[0]?.id);
+  
+  document.getElementById('viewFilmes').innerHTML=`
+    <div class="detail-layout">
+      <div class="detail-list">
+        <div class="tpage" style="padding-bottom:0">
+          <div class="tpage-header">
+            <div class="tpage-title">Filmes <span style="color:var(--muted);font-size:13px;font-weight:400">${list.length}</span></div>
+            <button class="btn-add" onclick="openAdd()">+ Adicionar</button>
+          </div>
+          <div class="genre-pills">
+            <button class="gpill ${!AGenre?'active':''}" onclick="setGenre(null)">Todos</button>
+            ${genres.map(g=>`<button class="gpill ${AGenre===g?'active':''}" onclick="setGenre('${esc(g)}')">${g}</button>`).join('')}
+          </div>
+        </div>
+        <table>
+          <thead><tr><th style="width:60px">Nota</th><th style="width:28px"></th><th>Nome</th><th>Ano</th><th>Duração</th><th>Por</th></tr></thead>
+          <tbody>
+          ${list.map(f=>{
+            const nota=f.media?`<span style="color:${nC(f.media)}">${fmt(f.media)}</span>`:`<span style="color:var(--muted2)">—</span>`;
+            return `<tr class="${f.id===selId?'selected':''}" onclick="openFilmeInPanel('${f.id}')">
+              <td class="td-nota">${nota}</td>
+              <td style="color:var(--muted2);font-size:11px">↗</td>
+              <td class="td-name">${esc(f.nome)}</td>
+              <td class="td-muted">${f.ano}</td>
+              <td class="td-muted">${f.duracao_str}</td>
+              <td class="td-muted" style="max-width:80px;overflow:hidden;text-overflow:ellipsis">${esc(USERS[f.inserido_por]?.nome||f.inserido_por)}</td>
+            </tr>`;
+          }).join('')}
+          </tbody>
+        </table>
+      </div>
+      <div class="detail-panel" id="filmDetailPanel">${selId?filmDetailHTML(selId):'<div class="dp-empty">Selecione um filme</div>'}</div>
+    </div>
+  `;
+}
+
+function openFilmeInPanel(id){
+  document.querySelectorAll('#viewFilmes tr').forEach(r=>r.classList.remove('selected'));
+  event.currentTarget.classList.add('selected');
+  if(window.innerWidth < 769){ openMobileFilmeModal(id); return; }
+  document.getElementById('filmDetailPanel').innerHTML=filmDetailHTML(id);
+  document.getElementById('filmDetailPanel').scrollTop=0;
+  const _f1=FM[id]; if(_f1) setTimeout(()=>loadExtRatings(id,_f1.nome,_f1.ano),0);
+}
+
+function filmDetailHTML(id){
+  const f=FM[id]; if(!f) return '';
+  const idx=navList.findIndex(x=>x.id===id);
+  const prev=idx>0?navList[idx-1].id:null;
+  const next=idx<navList.length-1?navList[idx+1].id:null;
+  const myAv=CU?f.avaliacoes[CU]:null;
+  const isAss=myAv&&myAv.nota!==null;
+  const avList=Object.entries(f.avaliacoes).filter(([,av])=>av.nota!==null)
+    .sort(([,a],[,b])=>b.nota-a.nota);
+  const trailerQ=encodeURIComponent(f.nome+' trailer '+f.ano);
+  const whereQ=encodeURIComponent('onde assistir '+f.nome);
+  const avCount=Object.values(f.avaliacoes).filter(a=>a.nota!==null).length;
+  const topAvs=Object.entries(f.avaliacoes).filter(([,a])=>a.nota!==null).sort(([,a],[,b])=>b.nota-a.nota).slice(0,3);
+  const avStr=topAvs.map(([uid,av])=>`  • ${USERS[uid]?.nome||uid}: ${fmt(av.nota)}`).join('\n');
+  const appUrl='https://lbatinga.github.io/cinelist/cinelist_login_senha.html';
+  const wpp=encodeURIComponent(`🎬 *CineList da Tropa*\n\n*${f.nome}* (${f.ano||'?'})\n⏱ ${f.duracao_str||'—'} · ${f.classificacao||'Livre'}\n🎭 ${f.categorias.slice(0,3).join(', ')||'—'}\n\n${f.media?`⭐ Nota média: *${fmt(f.media)}* (${avCount} avaliação${avCount!==1?'s':''})\n${avStr}`:'📝 Ainda sem avaliações'}\n\n${f.sinopse?f.sinopse.slice(0,150)+(f.sinopse.length>150?'...':''):''}\n\n🔗 Veja no app: ${appUrl}`);
+  return `
+    <div class="dp-backdrop" style="background-image:url('${esc(f.poster)}')">
+      <div class="dp-backdrop-grad"></div>
+      <div class="dp-nav">
+        <button class="dp-nav-btn" onclick="openFilmeInPanel('${prev}')" ${!prev?'disabled':''}>‹</button>
+        <button class="dp-nav-btn" onclick="openFilmeInPanel('${next}')" ${!next?'disabled':''}>›</button>
+      </div>
+    </div>
+    <div class="dp-body">
+      <div class="dp-title">${esc(f.nome)}</div>
+      <div class="dp-meta">
+        ${f.media?`<span class="dp-score" style="color:${nC(f.media)}">★ ${fmt(f.media)}</span>`:''}
+        <span class="dp-meta-item">${f.ano}</span>
+        <span class="dp-meta-item">${f.duracao_str}</span>
+        <span class="dp-class">${f.classificacao}</span>
+        <span class="dp-meta-item">${f.num_avaliacoes} avaliações</span>
+      </div>
+      <div id="extRatings_${f.id}" style="display:flex;gap:6px;margin-bottom:8px;align-items:center;min-height:20px">
+        <span style="font-size:10px;color:#444">carregando...</span>
+      </div>
+      <div class="dp-cats">${f.categorias.map(c=>`<span class="dp-cat">${c}</span>`).join('')}</div>
+      <div class="dp-desc">${esc(f.sinopse||'')}</div>
+      <div class="dp-actions">
+        <div class="dp-btn ${isAss?'dp-btn-green':'dp-btn-grey'}" onclick="openRate('${f.id}')">
+          <span class="dp-btn-icon">${isAss?'✅':'⭐'}</span>
+          <span class="dp-btn-label" style="color:${isAss?'#000':'#fff'}">${isAss?`${fmt(myAv.nota)}`:'Avaliar'}</span>
+        </div>
+        <a href="https://www.youtube.com/results?search_query=${trailerQ}" target="_blank" class="dp-btn dp-btn-grey" style="text-decoration:none">
+          <span class="dp-btn-icon">🎬</span><span class="dp-btn-label">Trailer</span>
+        </a>
+        <div class="dp-btn dp-btn-grey" onclick="openOndeAssistir('${f.id}','${encodeURIComponent(f.nome)}','${f.ano}')">
+          <span class="dp-btn-icon">📺</span><span class="dp-btn-label">Onde assistir?</span>
+        </div>
+        <div class="dp-btn dp-btn-grey" onclick="openMaisInfo('${f.id}','${encodeURIComponent(f.nome)}','${f.ano}')">
+          <span class="dp-btn-icon">ℹ️</span><span class="dp-btn-label">Mais Info</span>
+        </div>
+        <a href="https://wa.me/?text=${wpp}" target="_blank" class="dp-btn dp-btn-grey" style="text-decoration:none">
+          <span class="dp-btn-icon">💬</span><span class="dp-btn-label">WhatsApp</span>
+        </a>
+      </div>
+      ${avList.length?`
+        <div class="dp-section-title">Avaliações do grupo (${avList.length})</div>
+        <div class="dp-ratings">
+          ${avList.map(([uid,av])=>`<div class="dp-rating-row">
+            <div class="dp-r-av" style="background:${aC(uid)}">${ini(USERS[uid]?.nome||'?')}</div>
+            <div class="dp-r-name">
+              ${esc(USERS[uid]?.nome||uid)}
+              ${av.data?`<div style="font-size:10px;color:var(--muted2);margin-top:1px">${av.data}</div>`:''}
+            </div>
+            <div class="dp-r-nota" style="color:${nC(av.nota)}">★ ${fmt(av.nota)}</div>
+          </div>`).join('')}
+        </div>`:''}
+      <div class="dp-footer">
+        <span>Inserido por: <strong style="color:#fff">${esc(USERS[f.inserido_por]?.nome||f.inserido_por)}</strong></span>
+        <span>Cadastro: <strong style="color:#fff">${f.data_cadastro ? (f.data_cadastro.includes('-') ? f.data_cadastro.split('-').reverse().join('/') : f.data_cadastro) : '—'}</strong></span>
+      </div>
+      ${(()=>{
+        const naoQ = Object.entries(STATS).filter(([uid,s])=>(s.nao_quer||[]).includes(f.id)).map(([uid])=> uid===CU ? (USERS[uid]?.nome||uid)+' (você)' : USERS[uid]?.nome||uid);
+        return naoQ.length ? `<div class="dp-footer" style="margin-top:4px;color:#e05555"><span>❌ Não quer assistir: <strong style="color:#e05555">${naoQ.join(', ')}</strong></span></div>` : '';
+      })()}
+    </div>
+  `;
+}
+
+// ── FILM MODAL (for home/ranking click) ──
+function openFilme(id){
+  navigate('filmes');
+  setTimeout(()=>{
+    // find the row and click it
+    const rows = document.querySelectorAll('#viewFilmes tbody tr');
+    const idx = navList.findIndex(f=>f.id===id);
+    if(idx>=0 && rows[idx]){
+      rows[idx].scrollIntoView({block:'center', behavior:'smooth'});
+      rows[idx].click();
+    } else {
+      openFilmeInPanel(id);
+    }
+  },80);
+}
+
+// ── PENDENTES ──
+let pendSortKey='nota';
+function applyPendSort(list){
+  if(pendSortKey==='nota')      list.sort((a,b)=>(b.media||0)-(a.media||0));
+  else if(pendSortKey==='nota_asc') list.sort((a,b)=>(a.media||0)-(b.media||0));
+  else if(pendSortKey==='avals')    list.sort((a,b)=>b.num_avaliacoes-a.num_avaliacoes);
+  else if(pendSortKey==='nome')     list.sort((a,b)=>a.nome.localeCompare(b.nome));
+  else if(pendSortKey==='ano_desc') list.sort((a,b)=>(b.ano||0)-(a.ano||0));
+  else if(pendSortKey==='ano_asc')  list.sort((a,b)=>(a.ano||0)-(b.ano||0));
+}
+function setPendSort(val){ pendSortKey=val; renderPendentes(); }
+
+function renderPendentes(selId){
+  if(!CU){showNeedLogin('viewPendentes');return;}
+  const s=STATS[CU];
+  let list=s.pendentes.map(id=>FM[id]).filter(Boolean);
+  if(searchQ) list=list.filter(f=>f.nome.toLowerCase().includes(searchQ));
+  list.sort((a,b)=>{
+    if((b.media||0)!==(a.media||0)) return (b.media||0)-(a.media||0);
+    if(b.num_avaliacoes!==a.num_avaliacoes) return b.num_avaliacoes-a.num_avaliacoes;
+    return (a.data_ts||0)-(b.data_ts||0);
+  });
+  navList=list;
+  const sid=selId||(list[0]?.id);
+  
+  document.getElementById('viewPendentes').innerHTML=`
+    <div class="detail-layout">
+      <div class="detail-list">
+        <div class="tpage" style="padding-bottom:0">
+          <div class="tpage-header">
+            <div class="tpage-title">Meus Pendentes <span style="color:var(--muted);font-size:13px;font-weight:400">${list.length}</span></div>
+          </div>
+        </div>
+        <table>
+          <thead><tr><th style="width:60px">Nota</th><th style="width:28px"></th><th>Nome</th><th>Ano</th><th>Duração</th><th>Por</th><th>Avals</th></tr></thead>
+          <tbody>
+          ${list.map(f=>{
+            const nota=f.media?`<span style="color:${nC(f.media)}">${fmt(f.media)}</span>`:'<span style="color:var(--muted2)">—</span>';
+            const numAv=Object.values(f.avaliacoes).filter(a=>a.nota!==null).length;
+            return `<tr class="${f.id===sid?'selected':''}" onclick="openPendPanel('${f.id}')">
+              <td class="td-nota">${nota}</td>
+              <td style="color:var(--muted2);font-size:11px">↗</td>
+              <td class="td-name">${esc(f.nome)}</td>
+              <td class="td-muted">${f.ano}</td>
+              <td class="td-muted">${f.duracao_str}</td>
+              <td class="td-muted">${esc(USERS[f.inserido_por]?.nome||f.inserido_por)}</td>
+              <td class="td-muted">${numAv}</td>
+            </tr>`;
+          }).join('')}
+          </tbody>
+        </table>
+      </div>
+      <div class="detail-panel" id="pendDetailPanel">${sid?filmDetailHTML(sid):'<div class="dp-empty">Selecione um filme</div>'}</div>
+    </div>
+  `;
+}
+function openPendPanel(id){
+  document.querySelectorAll('#viewPendentes tr').forEach(r=>r.classList.remove('selected'));
+  event.currentTarget.classList.add('selected');
+  if(window.innerWidth < 769){ openMobileFilmeModal(id); return; }
+  document.getElementById('pendDetailPanel').innerHTML=filmDetailHTML(id);
+  document.getElementById('pendDetailPanel').scrollTop=0;
+  const _fp=FM[id]; if(_fp) setTimeout(()=>loadExtRatings(id,_fp.nome,_fp.ano),0);
+}
+
+// ── AVALIAÇÕES ──
+var avTab = 'avaliadas'; // 'avaliadas' | 'nao_quer'
+
+function renderAvaliacoes(tab){
+  if(!CU){showNeedLogin('viewAvaliacoes');return;}
+  if(tab) avTab = tab;
+
+  const listAv = FILMES.filter(f=>f.avaliacoes[CU]&&f.avaliacoes[CU].nota!==null);
+  const naoQuerIds = new Set(STATS[CU]?.nao_quer||[]);
+  const listNQ = FILMES.filter(f => naoQuerIds.has(f.id));
+
+  let list = avTab === 'nao_quer' ? listNQ : listAv;
+  if(searchQ) list = list.filter(f=>f.nome.toLowerCase().includes(searchQ));
+  if(avTab === 'nao_quer') list.sort((a,b)=>a.nome.localeCompare(b.nome));
+  else list.sort((a,b)=>b.avaliacoes[CU].nota-a.avaliacoes[CU].nota);
+  navList = list;
+  const sel = list[0]?.id;
+
+  document.getElementById('viewAvaliacoes').innerHTML=`
+    <div class="detail-layout">
+      <div class="detail-list">
+        <div class="tpage" style="padding-bottom:0">
+          <div class="tpage-header"><div class="tpage-title">Minhas Avaliações</div></div>
+          <div style="display:flex;gap:0;border-bottom:1px solid var(--border);margin-bottom:12px">
+            <button onclick="renderAvaliacoes('avaliadas')" style="flex:1;padding:8px;border:none;background:none;font-family:inherit;font-size:13px;font-weight:700;cursor:pointer;color:${avTab==='avaliadas'?'#fff':'var(--muted)'};border-bottom:2px solid ${avTab==='avaliadas'?'var(--red)':'transparent'};transition:all .2s">
+              ⭐ Avaliadas <span style="color:var(--muted);font-weight:400">${listAv.length}</span>
+            </button>
+            <button onclick="renderAvaliacoes('nao_quer')" style="flex:1;padding:8px;border:none;background:none;font-family:inherit;font-size:13px;font-weight:700;cursor:pointer;color:${avTab==='nao_quer'?'#fff':'var(--muted)'};border-bottom:2px solid ${avTab==='nao_quer'?'var(--red)':'transparent'};transition:all .2s">
+              ❌ Não quero <span style="color:var(--muted);font-weight:400">${listNQ.length}</span>
+            </button>
+          </div>
+        </div>
+        ${avTab === 'avaliadas' ? `
+        <table>
+          <thead><tr><th>Filme</th><th style="width:70px">Nota ↓</th><th>Data</th></tr></thead>
+          <tbody>
+          ${list.map(f=>{
+            const av=f.avaliacoes[CU];
+            return `<tr class="${f.id===sel?'selected':''}" onclick="openAvPanel('${f.id}')">
+              <td class="td-name">${esc(f.nome)}</td>
+              <td><span style="color:${nC(av.nota)};font-weight:800">${fmt(av.nota)}</span></td>
+              <td class="td-muted">${av.data||''}</td>
+            </tr>`;
+          }).join('')}
+          </tbody>
+        </table>` : `
+        <table>
+          <thead><tr><th>Filme</th><th>Ano</th><th>Ação</th></tr></thead>
+          <tbody>
+          ${list.map(f=>`<tr class="${f.id===sel?'selected':''}" onclick="openAvPanel('${f.id}')">
+              <td class="td-name">${esc(f.nome)}</td>
+              <td class="td-muted">${f.ano}</td>
+              <td><span onclick="event.stopPropagation();mudarDeOpiniao('${f.id}')" style="color:#e05555;font-size:11px;cursor:pointer;font-weight:700">🔄 Mudar</span></td>
+            </tr>`).join('')}
+          </tbody>
+        </table>`}
+      </div>
+      <div class="detail-panel" id="avDetailPanel">${sel?filmDetailHTML(sel):'<div class="dp-empty">Selecione um filme</div>'}</div>
+    </div>
+  `;
+}
+
+function openAvPanel(id){
+  document.querySelectorAll('#viewAvaliacoes tr').forEach(r=>r.classList.remove('selected'));
+  event.currentTarget.classList.add('selected');
+  document.getElementById('avDetailPanel').innerHTML=filmDetailHTML(id);
+  document.getElementById('avDetailPanel').scrollTop=0;
+  const _fa=FM[id]; if(_fa) setTimeout(()=>loadExtRatings(id,_fa.nome,_fa.ano),0);
+}
+
+// ── RECENTES ──
+function renderRecentes(){
+  let list=RECENT_IDS.map(id=>FM[id]).filter(Boolean);
+  if(searchQ) list=list.filter(f=>f.nome.toLowerCase().includes(searchQ));
+  list.sort((a,b)=>(b.media||0)-(a.media||0));
+  navList=list;
+  const el=document.getElementById('viewRecentes');
+  if(!list.length){
+    el.innerHTML=`<div class="tpage"><div class="tpage-header"><div class="tpage-title">Filmes Recentes</div></div><div class="empty-block"><div class="empty-icon">🎬</div><div>Nenhum filme adicionado nos últimos 15 dias.</div></div></div>`;
+    return;
+  }
+  el.innerHTML=`
+    <div class="detail-layout">
+      <div class="detail-list">
+        <div class="tpage" style="padding-bottom:0">
+          <div class="tpage-header"><div class="tpage-title">Filmes Recentes <span style="color:var(--muted);font-size:13px;font-weight:400">${list.length}</span></div></div>
+          <p style="font-size:12px;color:var(--muted);margin-bottom:14px">Adicionados nos últimos 15 dias</p>
+        </div>
+        <table>
+          <thead><tr><th>Nome</th><th>Ano</th><th>Nota</th><th>Adicionado</th><th>Status</th></tr></thead>
+          <tbody>
+          ${list.map(f=>{
+            const hasAv=CU&&f.avaliacoes[CU]&&f.avaliacoes[CU].nota!==null;
+            const dataCad = f.data_cadastro ? (f.data_cadastro.includes('-') ? f.data_cadastro.split('-').reverse().join('/') : f.data_cadastro) : '—';
+            return `<tr class="${f.id===list[0].id?'selected':''}" onclick="openRecentPanel('${f.id}')">
+              <td class="td-name">${esc(f.nome)}</td>
+              <td class="td-muted">${f.ano}</td>
+              <td>${f.media?`<span style="color:${nC(f.media)};font-weight:700">${fmt(f.media)}</span>`:'—'}</td>
+              <td class="td-muted">${dataCad}</td>
+              <td><span style="font-size:11px;font-weight:600;color:${hasAv?'var(--green)':'var(--muted)'}">${hasAv?'✅ Assistido':'⬤ Pendente'}</span></td>
+            </tr>`;
+          }).join('')}
+          </tbody>
+        </table>
+      </div>
+      <div class="detail-panel" id="recentDetailPanel">${filmDetailHTML(list[0].id)}</div>
+    </div>
+  `;
+}
+
+function openRecentPanel(id){
+  document.querySelectorAll('#viewRecentes tr').forEach(r=>r.classList.remove('selected'));
+  event.currentTarget.classList.add('selected');
+  document.getElementById('recentDetailPanel').innerHTML=filmDetailHTML(id);
+  document.getElementById('recentDetailPanel').scrollTop=0;
+  const _fr=FM[id]; if(_fr) setTimeout(()=>loadExtRatings(id,_fr.nome,_fr.ano),0);
+}
+
+// ── RANKING V2 injected ──
+var rankTab = 'geral', rankYear = '2025', rankGenre = 'Ação'; // inicializado cedo
+function renderRanking_old_unused(){
+  let list=Object.entries(STATS).filter(([,s])=>s.in_ranking).map(([uid,s])=>({uid,...s}));
+  if(searchQ) list=list.filter(s=>s.nome.toLowerCase().includes(searchQ));
+  list.sort((a,b)=>b.quant-a.quant);
+  const el=document.getElementById('viewRanking');
+  el.innerHTML=`
+    <div class="rank-section">
+      <div class="tpage-header" style="margin-bottom:20px">
+        <div class="tpage-title">Ranking Geral</div>
+      </div>
+      ${list.map((s,i)=>{
+        const med=i===0?'🥇':i===1?'🥈':i===2?'🥉':'';
+        return `<div class="rank-item" onclick="openUserDetail('${s.uid}')">
+          <div class="rank-num">${med||i+1}</div>
+          <div class="rank-av" style="background:${aC(s.uid)}">${ini(s.nome)}</div>
+          <div class="rank-info">
+            <div class="rank-name">${esc(s.nome)}</div>
+            <div class="rank-sub">${s.time_str} · última: ${s.ultima_av||'—'}</div>
+          </div>
+          <div class="rank-stats">
+            <div class="rstat"><div class="rstat-n" style="color:var(--green)">${s.quant}</div><div class="rstat-l">Assistidos</div></div>
+            <div class="rstat"><div class="rstat-n" style="color:${s.media?nC(s.media):'var(--muted2)'}">${s.media?fmt(s.media):'—'}</div><div class="rstat-l">Média</div></div>
+            <div class="rstat"><div class="rstat-n" style="color:var(--muted)">${s.pendentes.length}</div><div class="rstat-l">Pendentes</div></div>
+          </div>
+        </div>`;
+      }).join('')}
+    </div>
+  `;
+}
+
+
+
+// ── RATE ──
+function openRate(id){
+  if(!CU){alert('Selecione seu perfil primeiro!');return;}
+  rateFilmeId=id;
+  const f=FM[id];
+  const existing=f.avaliacoes[CU];
+  document.getElementById('rateFilmName').textContent=f.nome;
+  document.getElementById('notaInput').value=existing?.nota!=null?existing.fmt(nota):'0.00';
+  setVai(existing?.vai||'Sim');
+  const today=new Date();
+  document.getElementById('rateData').value=today.toISOString().split('T')[0];
+  document.getElementById('rateComent').value=existing?.comentario||'';
+  document.getElementById('rateModal').classList.add('open');
+}
+
+function changeNota(d){
+  const inp=document.getElementById('notaInput');
+  let v=Math.round((parseFloat(inp.value||0)+d)*10)/10;
+  v=Math.max(0,Math.min(10,v));
+  inp.value=v.toFixed(2);
+}
+
+function setVai(v){
+  vaiVal=v;
+  document.getElementById('vaiBtnSim').classList.toggle('active',v==='Sim');
+  document.getElementById('vaiBtnNao').classList.toggle('active',v==='Não');
+  const ns = document.getElementById('notaSection');
+  if(ns) ns.style.display = v==='Sim' ? 'block' : 'none';
+}
+
+async function saveRating(){
+  const isNao = vaiVal === 'Não';
+  const nota = isNao ? null : parseFloat(document.getElementById('notaInput').value);
+  const data = isNao ? new Date().toISOString().split('T')[0] : document.getElementById('rateData').value;
+  const coment = isNao ? '' : document.getElementById('rateComent').value.trim();
+  if(!isNao && !data){showToast('⚠️ Preencha a data de avaliação!');return;}
+  if(!isNao && (nota<0||nota>10)){showToast('⚠️ Nota deve ser entre 0 e 10');return;}
+
+  const btn=document.querySelector('#rateModal .btn-save');
+  if(btn){btn.textContent='Salvando...';btn.disabled=true;}
+
+  try{
+    // Salva no Supabase
+    const {error}=await supa.from('avaliacoes').upsert({
+      filme_id: rateFilmeId,
+      usuario_id: CU,
+      nota: nota,
+      vai_assistir: vaiVal,
+      data_avaliacao: data,
+      comentario: coment
+    },{onConflict:'filme_id,usuario_id'});
+    if(error) throw error;
+
+    // Atualiza memória local
+    const f=FM[rateFilmeId];
+    if(!f.avaliacoes[CU]) f.avaliacoes[CU]={};
+    f.avaliacoes[CU]={nota,vai:vaiVal,data:data.split('-').reverse().join('/'),comentario:coment};
+
+    // Recalc media
+    const notas=Object.values(f.avaliacoes).filter(a=>a.nota!==null).map(a=>a.nota);
+    f.media=notas.length?Math.round(100*notas.reduce((s,n)=>s+n,0)/notas.length)/100:null;
+    f.num_avaliacoes=notas.length;
+
+    // Remove dos pendentes locais
+    const st=STATS[CU];
+    st.pendentes=st.pendentes.filter(id=>id!==rateFilmeId);
+    if(!st.quant) st.quant=0;
+    st.quant++;
+
+    closeModal('rateModal');
+    render();
+    showToast(`✅ Nota ${fmt(nota)} salva!`);
+  }catch(e){
+    showToast('❌ Erro ao salvar: '+e.message);
+  }finally{
+    if(btn){btn.textContent='Salvar';btn.disabled=false;}
+  }
+}
+
+// ── ADD ──
+function openAdd(){
+  if(!CU){alert('Selecione seu perfil primeiro!');return;}
+  document.getElementById('addInsPor').textContent=USERS[CU]?.nome||'—';
+  const now=new Date();
+  document.getElementById('addDataCad').textContent=`${now.getDate().toString().padStart(2,'0')}/${(now.getMonth()+1).toString().padStart(2,'0')}/${now.getFullYear()}`;
+  document.getElementById('addNome').value='';
+  document.getElementById('addAno').value='';
+  document.getElementById('addDur').value='';
+  document.getElementById('tmdbPrev').classList.remove('show');
+  document.getElementById('addModal').classList.add('open');
+}
+
+var tmdbTimer=null;
+var tmdbResult=null;
+const TMDB_KEY='6bceb2e92a51fd680b2cf8a2a2fbc1ff';
+const CERT_MAP={'G':'L','PG':'10','PG-13':'12','R':'16','NC-17':'18'};
+
+function normStr(s){return(s||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-zA-Z0-9 ]/g,'').trim();}
+function getCert(rd){
+  if(!rd?.results)return'';
+  for(const cc of['BR','US']){
+    const r=rd.results.find(x=>x.iso_3166_1===cc);
+    if(r){const c=r.release_dates?.find(x=>x.certification);if(c)return cc==='US'?(CERT_MAP[c.certification]||c.certification):c.certification;}
+  }return'';
+}
+
+async function searchTMDB(nome,ano){
+  const q=encodeURIComponent(normStr(nome));
+  const yp=ano?`&primary_release_year=${ano}`:'';
+  let filmes=[];
+  for(const url of[
+    `https://api.themoviedb.org/3/search/movie?api_key=${TMDB_KEY}&language=pt-BR&query=${q}${yp}`,
+    `https://api.themoviedb.org/3/search/movie?api_key=${TMDB_KEY}&language=pt-BR&query=${q}`,
+    `https://api.themoviedb.org/3/search/movie?api_key=${TMDB_KEY}&language=en-US&query=${q}`
+  ]){
+    if(filmes.length)break;
+    const d=await(await fetch(url)).json();
+    filmes=d.results||[];
+  }
+  if(!filmes.length)return null;
+  if(ano){const by=filmes.filter(f=>f.release_date?.slice(0,4)===String(ano));if(by.length)filmes=by;}
+  const info=await(await fetch(`https://api.themoviedb.org/3/movie/${filmes[0].id}?api_key=${TMDB_KEY}&language=pt-BR&append_to_response=release_dates`)).json();
+  const rt=info.runtime||0,h=Math.floor(rt/60),m=rt%60;
+  return{
+    titulo:info.title||nome, ano:info.release_date?.slice(0,4)||ano||'',
+    poster:info.poster_path?'https://image.tmdb.org/t/p/w500'+info.poster_path:'',
+    sinopse:info.overview||'', categorias:(info.genres||[]).map(g=>g.name),
+    classificacao:getCert(info.release_dates),
+    duracao_str:rt?`${h}h ${m}min`:'', duracao_min:rt,
+    duracao_hhmm:rt?`${h}:${String(m).padStart(2,'0')}`:''
+  };
+}
+
+function onAddNomeInput(){
+  clearTimeout(tmdbTimer);
+  const nome=document.getElementById('addNome').value.trim();
+  const prev=document.getElementById('tmdbPrev');
+  if(nome.length<2){prev.classList.remove('show');tmdbResult=null;return;}
+  document.getElementById('tmdbTitle').textContent='🔍 Buscando...';
+  document.getElementById('tmdbMeta').textContent='';
+  document.getElementById('tmdbThumb').src='';
+  prev.classList.add('show');
+  tmdbTimer=setTimeout(async()=>{
+    const ano=document.getElementById('addAno').value.trim();
+    try{
+      const res=await searchTMDB(nome,ano);
+      if(res){
+        tmdbResult=res;
+        document.getElementById('tmdbThumb').src=res.poster;
+        document.getElementById('tmdbTitle').textContent=res.titulo+(res.ano?` (${res.ano})`:'');
+        document.getElementById('tmdbMeta').innerHTML=`🎬 ${res.categorias.join(', ')||'—'}<br>⏱️ ${res.duracao_str||'—'} &nbsp;|&nbsp; 🔞 ${res.classificacao||'—'}`;
+        if(res.ano)document.getElementById('addAno').value=res.ano;
+        if(res.duracao_hhmm)document.getElementById('addDur').value=res.duracao_hhmm;
+      }else{
+        tmdbResult=null;
+        document.getElementById('tmdbTitle').textContent=nome;
+        document.getElementById('tmdbMeta').innerHTML='⚠️ Não encontrado. Preencha manualmente.';
+      }
+    }catch(e){
+      document.getElementById('tmdbMeta').innerHTML='⚠️ Erro na busca.';
+    }
+  },800);
+}
+
+async function saveFilme(){
+  const nome=document.getElementById('addNome').value.trim();
+  const ano=document.getElementById('addAno').value.trim();
+  const dur=document.getElementById('addDur').value.trim();
+  if(!nome||!ano||!dur){showToast('⚠️ Preencha Nome, Ano e Duração!');return;}
+  
+  // Verificar duplicata
+  const anoInt = parseInt(ano)||null;
+  const duplicado = FILMES.find(f =>
+    f.nome.trim().toLowerCase() === nome.toLowerCase() &&
+    (f.ano === anoInt || !anoInt)
+  );
+  if(duplicado){
+    showToast('⚠️ "' + nome + '" já está cadastrado!');
+    return;
+  }
+
+  const btn=document.getElementById('saveFilmeBtn');
+  if(btn){btn.textContent='Salvando...';btn.disabled=true;}
+  
+  // Se não tem resultado TMDB ainda, tenta buscar
+  let td = tmdbResult;
+  if(!td && nome.length>=2){
+    try{ td = await searchTMDB(nome, ano); }catch(e){}
+  }
+  
+  // Parse duração
+  const parts=dur.split(':');
+  const durMin=parts.length===2?parseInt(parts[0])*60+parseInt(parts[1]):0;
+  const h=Math.floor(durMin/60),m=durMin%60;
+  const durStr=durMin?`${h}h ${m}min`:dur;
+  
+  // Generate UUID for id
+  const newId = 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
+    const r = Math.random()*16|0, v = c=='x'?r:(r&0x3|0x8); return v.toString(16);
+  });
+  
+  const filme={
+    id: newId,
+    nome, 
+    ano: parseInt(ano)||null,
+    duracao_str: durStr, 
+    duracao_min: durMin||null,
+    poster: td?.poster||null,
+    sinopse: td?.sinopse||null,
+    categorias: td?.categorias||[],
+    classificacao: td?.classificacao||null,
+    inserido_por: CU,
+    data_cadastro: (()=>{ const n=new Date(); return `${String(n.getDate()).padStart(2,'0')}/${String(n.getMonth()+1).padStart(2,'0')}/${n.getFullYear()}`; })()
+  };
+  
+  try{
+    const {data,error}=await supa.from('filmes').insert([filme]).select().single();
+    if(error)throw error;
+    
+    // Add to local data
+    const f={...filme, id:data.id||newId, avaliacoes:{}, media:null, num_avaliacoes:0, is_recent:true, data_ts:new Date().toISOString()};
+    FILMES.unshift(f);
+    FILMES_MAP[data.id||newId]=f;
+    RAW.filmes.unshift(f);
+    RECENT_IDS = getRecentIds();
+    RAW.recent_ids = RECENT_IDS;
+    
+    closeModal('addModal');
+    renderHome();
+    showToast(`✅ "${nome}" adicionado! Avalie agora 👇`);
+    // Abrir modal de avaliação automaticamente
+    setTimeout(() => openRate(data.id || newId), 300);
+  }catch(e){
+    showToast('❌ Erro ao salvar: '+e.message);
+  }finally{
+    if(btn){btn.textContent='Salvar';btn.disabled=false;}
+  }
+}
+
+function buildUD(){
+  const el = document.getElementById('udList');
+  if(!el) return;
+  const email = currentSession?.user?.email || '';
+  const nome = USERS[CU]?.nome || '';
+  el.innerHTML = `
+    <div style="padding:6px 10px 2px;font-size:13px;color:#fff;font-weight:600">${esc(nome)}</div>
+    <div style="padding:2px 10px 10px;font-size:11px;color:#666">${email}</div>
+    <div style="height:1px;background:#2a2a2a;margin:4px 0"></div>
+    <div class="ud-item" onclick="openProfile();document.getElementById('userDropdown').classList.remove('open')">✏️ Editar perfil</div>
+    <div class="ud-item" onclick="cadastrarBiometria();document.getElementById('userDropdown').classList.remove('open')">🔐 Cadastrar biometria</div>
+    <div class="ud-item" onclick="openChangePassword();document.getElementById('userDropdown').classList.remove('open')">🔑 Alterar senha</div>
+    ${email === 'lwbarbosab@gmail.com' ? '<div class="ud-item" style="color:#f5c518" onclick="openAdmin();document.getElementById(\'userDropdown\').classList.remove(\'open\')">🛠️ Painel Admin</div>' : ''}
+    ${(typeof Notification !== 'undefined' && Notification.permission !== 'granted') ? '<div class="ud-item" style="color:#00bcd4" onclick="ativarNotificacoes();document.getElementById(\'userDropdown\').classList.remove(\'open\')">🔔 Ativar notificações</div>' : '<div class="ud-item" style="color:#46d369;cursor:default">🔔 Notificações ativas ✓</div>'}
+    <div class="ud-item" onclick="logout()" style="color:#e05555">↩️ Sair</div>
+  `;
+}
+
+function toggleUserMenu(){document.getElementById('userDropdown').classList.toggle('open');}
+document.addEventListener('click',e=>{if(!e.target.closest('.user-menu'))document.getElementById('userDropdown').classList.remove('open');});
+
+function selectUser(uid){
+  CU=uid;
+  const u=USERS[uid];
+  const av=document.getElementById('userAvatar');
+  av.textContent=ini(u.nome);av.style.background=aC(uid);av.style.color='#000';
+  document.getElementById('userDropdown').classList.remove('open');
+  buildUD();
+  render();
+}
+
+function showNeedLogin(vid){
+  document.getElementById(vid).innerHTML=`<div class="empty-block"><div class="empty-icon">👤</div><div style="font-weight:700;font-size:16px;margin-bottom:8px">Selecione seu perfil</div><div style="color:var(--muted);font-size:13px">Clique no avatar no canto superior direito</div></div>`;
+}
+
+// ── MODAL HELPERS ──
+function closeModal(id){document.getElementById(id).classList.remove('open');}
+function closeModalIfBg(id){return e=>{if(e.target===document.getElementById(id))closeModal(id);}}
+
+document.getElementById('rateModal').addEventListener('click',e=>{if(e.target===document.getElementById('rateModal'))closeModal('rateModal');});
+document.getElementById('addModal').addEventListener('click',e=>{if(e.target===document.getElementById('addModal'))closeModal('addModal');});
+
+
+// ═══════════════════════════════════════════
+// BIOMETRIA via Credential Management API
+// O navegador salva email+senha e usa biometria do dispositivo para desbloquear
+// ═══════════════════════════════════════════
+async function checkBiometricAvailable(){
+  try {
+    return !!(window.PasswordCredential || window.FederatedCredential);
+  } catch(e) { return false; }
+}
+
+async function loginBiometrico(){
+  try {
+    const cred = await navigator.credentials.get({
+      password: true,
+      mediation: 'required' // força confirmação biométrica
+    });
+    if(!cred) { showToast('❌ Nenhuma credencial salva.'); return; }
+    
+    document.getElementById('loginEmail').value = cred.id;
+    document.getElementById('loginSenha').value = cred.password;
+    showToast('⏳ Entrando...');
+    await loginEmailSenha();
+  } catch(e) {
+    showToast('❌ Biometria cancelada ou não disponível.');
+  }
+}
+
+async function salvarCredencialNavegador(email, senha){
+  try {
+    if(!window.PasswordCredential) return;
+    const cred = new PasswordCredential({ id: email, password: senha, name: email });
+    await navigator.credentials.store(cred);
+    console.log('Credencial salva no navegador');
+  } catch(e) {
+    console.warn('Não foi possível salvar credencial:', e);
+  }
+}
+
+async function cadastrarBiometria(){
+  showToast('💡 A biometria usa as credenciais salvas no navegador. Faça login normalmente e o navegador vai oferecer salvar — aceite para habilitar o login biométrico!');
+}
+
+async function initBiometricButton(){
+  const available = await checkBiometricAvailable();
+  const wrap = document.getElementById('bioWrap');
+  if(available && wrap){
+    // Verifica se há credencial salva
+    try {
+      const cred = await navigator.credentials.get({ password: true, mediation: 'silent' });
+      if(cred){
+        wrap.innerHTML = `<button onclick="loginBiometrico()" style="width:100%;background:#2a2a2a;border:1px solid #444;color:#fff;padding:12px;border-radius:10px;font-family:inherit;font-size:14px;font-weight:600;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;margin-bottom:12px"><span style="font-size:18px">🔐</span> Entrar com biometria</button>`;
+      }
+    } catch(e) {
+      // Sem credencial salva — não mostra o botão
+    }
+  }
+}
+
+
+// ===== BOTTOM SHEETS =====
+function openBSheet(name){
+  // Support both old bsheet and new profile-overlay style
+  const modal = document.getElementById(name+'Modal');
+  if(modal){ modal.classList.add('open'); }
+  else {
+    const ol = document.getElementById(name+'Overlay');
+    const sh = document.getElementById(name+'Sheet');
+    if(ol) ol.classList.add('open');
+    if(sh) sh.classList.add('open');
+  }
+  history.pushState({bsheet:name},'','');
+}
+function closeBSheet(name){
+  const modal = document.getElementById(name+'Modal');
+  if(modal){ modal.classList.remove('open'); }
+  else {
+    const ol = document.getElementById(name+'Overlay');
+    const sh = document.getElementById(name+'Sheet');
+    if(ol) ol.classList.remove('open');
+    if(sh) sh.classList.remove('open');
+  }
+}
+
+// Back button closes sheets
+window.addEventListener('popstate', e => {
+  if(e.state && e.state.bsheet){ closeBSheet(e.state.bsheet); return; }
+  const mi = document.getElementById('maisInfoSheet');
+  const on = document.getElementById('ondeSheet');
+  const mf = document.getElementById('mobileFilmeModal');
+  if(mi && mi.classList.contains('open')){ closeBSheet('maisInfo'); }
+  else if(on && on.classList.contains('open')){ closeBSheet('onde'); }
+  else if(mf && mf.classList.contains('open')){ closeMobileFilmeModal(); }
+});
+
+// ── ONDE ASSISTIR ──
+async function openOndeAssistir(id, nome, ano){
+  document.getElementById('ondeBody').innerHTML = '<div style="text-align:center;padding:30px;color:#888"><div style="font-size:28px;margin-bottom:8px">⏳</div>Carregando...</div>';
+  openBSheet('onde');
+  try {
+    const sr = await fetch('https://api.themoviedb.org/3/search/movie?api_key='+TMDB_KEY+'&language=pt-BR&query='+nome+'&year='+ano);
+    const sd = await sr.json();
+    const mid = sd.results?.[0]?.id;
+    if(!mid) throw new Error('não encontrado');
+    const wr = await fetch('https://api.themoviedb.org/3/movie/'+mid+'/watch/providers?api_key='+TMDB_KEY);
+    const wd = await wr.json();
+    const br = wd.results?.BR;
+    const stream = br?.flatrate||[], rent = br?.rent||[], buy = br?.buy||[];
+    const link = br?.link || 'https://www.google.com/search?q=onde+assistir+'+nome;
+    if(!stream.length && !rent.length && !buy.length){
+      document.getElementById('ondeBody').innerHTML = '<div style="text-align:center;padding:20px;color:#888"><div style="font-size:32px;margin-bottom:8px">😕</div><div style="margin-bottom:16px">Não disponível em plataformas brasileiras</div><a href="'+link+'" target="_blank" style="background:#2a2a2a;color:#fff;padding:10px 20px;border-radius:8px;text-decoration:none;font-size:13px;font-weight:700">🔍 Buscar no Google</a></div>';
+      return;
+    }
+    const rp = (list, label) => !list.length ? '' : '<div class="bsheet-section"><div class="bsheet-section-title">'+label+'</div><div style="display:flex;gap:10px;flex-wrap:wrap">'+list.map(p=>'<a href="'+link+'" target="_blank"><img class="stream-logo" src="https://image.tmdb.org/t/p/original'+p.logo_path+'" title="'+p.provider_name+'" alt="'+p.provider_name+'"></a>').join('')+'</div></div>';
+    let html = rp(stream,'▶️ Incluído na assinatura') + rp(rent,'💰 Aluguel') + rp(buy,'🛒 Compra');
+    html += '<div style="margin-top:16px;text-align:center"><a href="'+link+'" target="_blank" style="color:#888;font-size:12px">Ver no JustWatch ↗</a></div>';
+    document.getElementById('ondeBody').innerHTML = html;
+  } catch(e){
+    document.getElementById('ondeBody').innerHTML = '<div style="text-align:center;padding:20px;color:#888">Não foi possível carregar<br><br><a href="https://www.google.com/search?q=onde+assistir+'+nome+'" target="_blank" style="background:#2a2a2a;color:#fff;padding:10px 20px;border-radius:8px;text-decoration:none;font-size:13px;font-weight:700">🔍 Buscar no Google</a></div>';
+  }
+}
+
+// ── MAIS INFO ──
+async function openMaisInfo(id, nome, ano){
+  document.getElementById('maisInfoBody').innerHTML = '<div style="text-align:center;padding:30px;color:#888"><div style="font-size:28px;margin-bottom:8px">⏳</div>Carregando...</div>';
+  openBSheet('maisInfo');
+  const OMDB = '419a30fd';
+  try {
+    const nomeD = decodeURIComponent(nome);
+    const [tmdbRes, omdbRes] = await Promise.all([
+      fetch('https://api.themoviedb.org/3/search/movie?api_key='+TMDB_KEY+'&language=pt-BR&query='+nome+'&year='+ano).then(r=>r.json()),
+      fetch('https://www.omdbapi.com/?t='+encodeURIComponent(nomeD)+'&y='+ano+'&apikey='+OMDB).then(r=>r.json())
+    ]);
+    const tmdbMovie = tmdbRes.results?.[0];
+    let tmdbD = null, tmdbC = null;
+    if(tmdbMovie){
+      [tmdbD, tmdbC] = await Promise.all([
+        fetch('https://api.themoviedb.org/3/movie/'+tmdbMovie.id+'?api_key='+TMDB_KEY+'&language=pt-BR').then(r=>r.json()),
+        fetch('https://api.themoviedb.org/3/movie/'+tmdbMovie.id+'/credits?api_key='+TMDB_KEY+'&language=pt-BR').then(r=>r.json())
+      ]);
+    }
+    const omdb = omdbRes.Response==='True' ? omdbRes : null;
+    const ta = s => !s||s==='N/A' ? null : s.replace(/Won (\d+) Oscar(s?)/g,'Ganhou $1 Oscar$2').replace(/Nominated for (\d+) Oscar(s?)/g,'Indicado para $1 Oscar$2').replace(/Won (\d+)/g,'Ganhou $1').replace(/Nominated for (\d+)/g,'Indicado para $1').replace(/(\d+) wins? & (\d+) nominations? total/g,'$1 vitórias e $2 indicações no total').replace(/(\d+) wins? & (\d+) nominations?/g,'$1 vitórias e $2 indicações').replace(/(\d+) wins?/g,'$1 vitórias').replace(/(\d+) nominations?/g,'$1 indicações');
+    let html = '';
+    const awards = ta(omdb?.Awards);
+    if(awards) html += '<div class="bsheet-section"><div class="bsheet-section-title">🏆 Prêmios</div><div style="font-size:14px;color:#f5c518;font-weight:600">'+esc(awards)+'</div></div>';
+    const dir = omdb?.Director && omdb.Director!=='N/A' ? omdb.Director : null;
+    const wri = omdb?.Writer && omdb.Writer!=='N/A' ? omdb.Writer.split(',').slice(0,2).join(', ') : null;
+    if(dir||wri) html += '<div class="bsheet-section"><div class="bsheet-section-title">🎬 Direção e Roteiro</div>'+(dir?'<div style="margin-bottom:6px"><span style="color:#888;font-size:11px">Diretor</span><br><span style="font-size:14px;font-weight:600">'+esc(dir)+'</span></div>':'')+(wri?'<div><span style="color:#888;font-size:11px">Roteiro</span><br><span style="font-size:13px">'+esc(wri)+'</span></div>':'')+'</div>';
+    const cast = tmdbC?.cast?.slice(0,6)||[];
+    if(cast.length) html += '<div class="bsheet-section"><div class="bsheet-section-title">🎭 Elenco Principal</div><div style="display:flex;gap:10px;overflow-x:auto;padding-bottom:4px">'+cast.map(a=>'<div style="text-align:center;min-width:60px"><div style="width:52px;height:52px;border-radius:50%;overflow:hidden;margin:0 auto 4px;background:#2a2a2a">'+(a.profile_path?'<img src="https://image.tmdb.org/t/p/w200'+a.profile_path+'" style="width:100%;height:100%;object-fit:cover">':'<div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;font-size:18px">👤</div>')+'</div><div style="font-size:9px;font-weight:600;line-height:1.2">'+esc(a.name.split(' ').slice(0,2).join(' '))+'</div></div>').join('')+'</div></div>';
+    const countryMap = {'United States of America':'Estados Unidos','United Kingdom':'Reino Unido','France':'França','Germany':'Alemanha','Italy':'Itália','Spain':'Espanha','Japan':'Japão','South Korea':'Coreia do Sul','China':'China','Brazil':'Brasil','Australia':'Austrália','Canada':'Canadá','India':'Índia','Mexico':'México','Argentina':'Argentina','New Zealand':'Nova Zelândia','Ireland':'Irlanda','Sweden':'Suécia','Denmark':'Dinamarca','Norway':'Noruega','Russia':'Rússia','South Africa':'África do Sul'};
+    const countries = tmdbD?.production_countries?.map(p=>countryMap[p.name]||p.name)||[];
+    if(countries.length) html += '<div class="bsheet-section"><div class="bsheet-section-title">🌍 País de Produção</div><div style="font-size:13px">'+esc(countries.join(', '))+'</div></div>';
+    const bud = tmdbD?.budget, rev = tmdbD?.revenue;
+    const fm = n => n>=1e6?'US$ '+(n/1e6).toFixed(1)+'M':n>=1e3?'US$ '+(n/1e3).toFixed(0)+'K':'US$ '+n;
+    if(bud>0||rev>0) html += '<div class="bsheet-section"><div class="bsheet-section-title">💰 Financeiro</div><div style="display:flex;gap:16px">'+(bud>0?'<div><span style="color:#888;font-size:11px">Orçamento</span><br><span style="font-size:14px;font-weight:700">'+fm(bud)+'</span></div>':'')+(rev>0?'<div><span style="color:#888;font-size:11px">Bilheteria</span><br><span style="font-size:14px;font-weight:700;color:#46d369">'+fm(rev)+'</span></div>':'')+'</div></div>';
+    if(!html) html = '<div style="text-align:center;padding:20px;color:#888">Informações não disponíveis</div>';
+    document.getElementById('maisInfoBody').innerHTML = html;
+  } catch(e){
+    document.getElementById('maisInfoBody').innerHTML = '<div style="text-align:center;padding:20px;color:#888">Erro ao carregar informações</div>';
+  }
+}
+
+// ── EXTERNAL RATINGS (IMDb + RT) ──
+const _extRC = {};
+async function loadExtRatings(filmId, nome, ano){
+  const el = document.getElementById('extRatings_'+filmId);
+  if(!el) return;
+  if(_extRC[filmId] !== undefined){ el.innerHTML = _extRC[filmId]; return; }
+  const OMDB = '419a30fd';
+  try {
+    const r = await fetch('https://www.omdbapi.com/?t='+encodeURIComponent(decodeURIComponent(nome))+'&y='+ano+'&apikey='+OMDB);
+    const d = await r.json();
+    if(d.Response!=='True'){ el.innerHTML=''; _extRC[filmId]=''; return; }
+    const imdb = d.imdbRating!=='N/A' ? d.imdbRating : null;
+    const rt = d.Ratings?.find(r=>r.Source==='Rotten Tomatoes')?.Value||null;
+    let html = '';
+    if(imdb) html += '<span style="background:#f5c518;color:#000;font-size:11px;font-weight:800;padding:3px 8px;border-radius:6px;display:inline-flex;align-items:center;gap:3px">IMDb '+imdb+'</span>';
+    if(rt){ const pct=parseInt(rt); const col=pct>=75?'#46d369':pct>=60?'#f5c518':'#e05555'; html += '<span style="background:'+col+';color:#000;font-size:11px;font-weight:800;padding:3px 8px;border-radius:6px">🍅 '+rt+'</span>'; }
+    _extRC[filmId] = html;
+    el.innerHTML = html;
+  } catch(e){ el.innerHTML=''; }
+}
+
+// INIT — registra Service Worker imediatamente para PWA funcionar
+if('serviceWorker' in navigator){
+  navigator.serviceWorker.register('./sw.js').catch(e => console.warn('SW:', e));
+}
+showAuthScreen();
+
+// ── RANKING V2 ──
+// rankTab já declarado acima
+
+function renderRanking(){
+  const el = document.getElementById('viewRanking');
+  el.innerHTML = `
+    <div class="rank-section">
+      <div class="tpage-header" style="margin-bottom:16px">
+        <div class="tpage-title">Ranking</div>
+      </div>
+      <div class="rtabs-wrap"><div class="rtabs">
+        <div class="rtab ${rankTab==='geral'?'active':''}" onclick="setRankTab('geral')">🏆 Geral</div>
+        <div class="rtab ${rankTab==='ano'?'active':''}" onclick="setRankTab('ano')">📅 Por Ano</div>
+        <div class="rtab ${rankTab==='filmes'?'active':''}" onclick="setRankTab('filmes')">⭐ Top Filmes</div>
+        <div class="rtab ${rankTab==='genero'?'active':''}" onclick="setRankTab('genero')">🎭 Por Gênero</div>
+        <div class="rtab ${rankTab==='stats'?'active':''}" onclick="setRankTab('stats')">📊 Estatísticas</div>
+      </div></div>
+      <div id="rankTabContent"></div>
+    </div>
+  `;
+  renderRankTab();
+}
+
+function setRankTab(tab){ rankTab=tab; renderRanking(); }
+
+function renderRankTab(){
+  const el = document.getElementById('rankTabContent');
+  if(rankTab==='geral') el.innerHTML = rankGeralHTML();
+  else if(rankTab==='ano') el.innerHTML = rankAnoHTML();
+  else if(rankTab==='filmes') el.innerHTML = rankFilmesHTML();
+  else if(rankTab==='genero') el.innerHTML = rankGeneroHTML();
+  else if(rankTab==='stats') el.innerHTML = rankStatsHTML();
+}
+
+// GERAL
+function rankGeralHTML(){
+  let list = Object.entries(RAW.users_stats).filter(([,s])=>s.in_ranking).map(([uid,s])=>({uid,...s}));
+  list.sort((a,b)=>b.quant-a.quant);
+  return list.map((s,i)=>{
+    const med=i===0?'🥇':i===1?'🥈':i===2?'🥉':'';
+    return `<div class="rank-item" onclick="openUserDetail('${s.uid}')">
+      <div class="rank-num">${med||i+1}</div>
+      <div class="rank-av" style="background:${aC(s.uid)}">${ini(s.nome)}</div>
+      <div class="rank-info">
+        <div class="rank-name">${esc(s.nome)}</div>
+        <div class="rank-sub">${s.time_str} · última: ${s.ultima_av||'—'}</div>
+      </div>
+      <div class="rank-stats">
+        <div class="rstat"><div class="rstat-n" style="color:var(--green)">${s.quant}</div><div class="rstat-l">Assistidos</div></div>
+        <div class="rstat"><div class="rstat-n" style="color:${s.media?nC(s.media):'var(--muted2)'}">${s.media?fmt(s.media):'—'}</div><div class="rstat-l">Média</div></div>
+        <div class="rstat"><div class="rstat-n" style="color:var(--muted)">${s.pendentes.length}</div><div class="rstat-l">Pendentes</div></div>
+        <div class="rstat"><div class="rstat-n" style="color:#e05555">${(s.nao_quer||[]).length}</div><div class="rstat-l">Não quer</div></div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+// POR ANO
+function rankAnoHTML(){
+  const anos = RAW.anos;
+  // Build per-year member stats
+  let members = Object.entries(RAW.users_stats).filter(([,s])=>s.in_ranking).map(([uid,s])=>{
+    const cnt = (s.by_year||{})[rankYear]||0;
+    return {uid, nome:s.nome, cnt};
+  }).sort((a,b)=>b.cnt-a.cnt);
+  
+  // Films added in that year
+  const yearFilms = FILMES.filter(f=>{
+    // Films rated (avaliação date) in rankYear with at least 1 rating
+    const ratedThisYear = Object.values(f.avaliacoes).some(av=>av.nota!==null&&av.data&&av.data.split('/')[2]===rankYear);
+    return ratedThisYear && f.media && f.num_avaliacoes>=1;
+  })
+    .sort((a,b)=>{
+      if(b.media!==a.media) return b.media-a.media;
+      if(b.num_avaliacoes!==a.num_avaliacoes) return b.num_avaliacoes-a.num_avaliacoes;
+      return (a.data_ts||0)-(b.data_ts||0);
+    }).slice(0,10);
+  
+  return `
+    <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px;flex-wrap:wrap">
+      <label style="font-size:13px;color:var(--muted);font-weight:600">Ano:</label>
+      <select class="year-sel" onchange="rankYear=this.value;renderRankTab()">
+        ${anos.map(a=>`<option value="${a}" ${a===rankYear?'selected':''}>${a}</option>`).join('')}
+      </select>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+      <div>
+        <div style="font-size:14px;font-weight:700;margin-bottom:10px;color:#e5e5e5">👥 Membros — filmes avaliados em ${rankYear}</div>
+        ${members.map((m,i)=>{
+          const max=members[0].cnt||1;
+          const med=i===0?'🥇':i===1?'🥈':i===2?'🥉':i+1+'.';
+          return `<div class="rank-item" style="margin-bottom:6px;padding:10px 14px" onclick="openUserYearDetail('${m.uid}','${rankYear}')">
+            <div style="font-size:16px;width:32px;text-align:center;flex-shrink:0">${med}</div>
+            <div class="rank-av" style="background:${aC(m.uid)};width:36px;height:36px;font-size:12px">${ini(m.nome)}</div>
+            <div style="flex:1;min-width:0">
+              <div style="font-size:13px;font-weight:700">${esc(m.nome)}</div>
+              <div style="margin-top:4px;background:var(--surface2);border-radius:3px;overflow:hidden;height:4px">
+                <div style="height:100%;width:${max?Math.round(m.cnt/max*100):0}%;background:linear-gradient(90deg,var(--red),var(--yellow));border-radius:3px"></div>
+              </div>
+            </div>
+            <div style="font-size:20px;font-weight:900;color:var(--green);flex-shrink:0">${m.cnt}</div>
+          </div>`;
+        }).join('')}
+      </div>
+      <div>
+        <div style="font-size:14px;font-weight:700;margin-bottom:10px;color:#e5e5e5">🎬 Filmes avaliados em ${rankYear}</div>
+        ${yearFilms.length ? yearFilms.map((f,i)=>`
+          <div class="film-rank-item" onclick="openFilme('${f.id}')">
+            <div class="fr-num ${i<3?'top3':''}">${i<3?['🥇','🥈','🥉'][i]:i+1}</div>
+            ${f.poster?`<img class="fr-poster" src="${esc(f.poster)}" loading="lazy" onerror="this.style.display='none'">`:'<div class="fr-poster"></div>'}
+            <div class="fr-info">
+              <div class="fr-title">${esc(f.nome)}</div>
+              <div class="fr-sub">${f.categorias.slice(0,2).join(', ')} · ${f.num_avaliacoes} avals</div>
+            </div>
+            <div class="fr-nota" style="color:${nC(f.media)}">${fmt(f.media)}</div>
+          </div>`).join('') : `<div style="color:var(--muted);font-size:13px;padding:20px 0">Nenhum filme avaliado em ${rankYear}.</div>`}
+      </div>
+    </div>
+  `;
+}
+
+function openUserYearDetail(uid, year){
+  const s = RAW.users_stats[uid];
+  const avList = FILMES.filter(f=>f.avaliacoes[uid]&&f.avaliacoes[uid].nota!==null&&f.avaliacoes[uid].data&&f.avaliacoes[uid].data.split('/')[2]===year)
+    .sort((a,b)=>b.avaliacoes[uid].nota-a.avaliacoes[uid].nota);
+  
+  document.getElementById('rankTabContent').innerHTML = `
+    <button onclick="renderRankTab()" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:13px;margin-bottom:16px">← Voltar</button>
+    <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px">
+      <div style="width:44px;height:44px;border-radius:8px;background:${aC(uid)};color:#000;font-weight:800;font-size:16px;display:flex;align-items:center;justify-content:center">${ini(s.nome)}</div>
+      <div>
+        <div style="font-size:18px;font-weight:800">${esc(s.nome)} em ${year}</div>
+        <div style="font-size:12px;color:var(--muted)">${avList.length} filmes assistidos</div>
+      </div>
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(110px,1fr));gap:8px">
+      ${avList.map(f=>`<div style="cursor:pointer;border-radius:6px;overflow:hidden;background:var(--surface)" onclick="openFilme('${f.id}')">
+        ${f.poster?`<img src="${esc(f.poster)}" style="width:100%;aspect-ratio:2/3;object-fit:cover" loading="lazy" onerror="this.style.display='none'">`:''}
+        <div style="padding:5px 7px">
+          <div style="font-size:10px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(f.nome)}</div>
+          <div style="font-size:13px;font-weight:800;color:${nC(f.avaliacoes[uid].nota)}">★ ${fmt(f.avaliacoes[uid].nota)}</div>
+        </div>
+      </div>`).join('')}
+    </div>
+  `;
+}
+
+// TOP FILMES
+function rankFilmesHTML(){
+  const topIds = RAW.top_films;
+  const list = topIds.map(id=>FM[id]).filter(Boolean).slice(0,100);
+  return `
+    <div style="font-size:13px;color:var(--muted);margin-bottom:14px">Top 100 filmes mais bem avaliados pelo grupo (mín. 2 avaliações)</div>
+    ${list.map((f,i)=>`
+      <div class="film-rank-item" onclick="openFilme('${f.id}')">
+        <div class="fr-num ${i<3?'top3':''}">${i<3?['🥇','🥈','🥉'][i]:i+1}</div>
+        ${f.poster?`<img class="fr-poster" src="${esc(f.poster)}" loading="lazy" onerror="this.style.display='none'">`:'<div class="fr-poster"></div>'}
+        <div class="fr-info">
+          <div class="fr-title">${esc(f.nome)}</div>
+          <div class="fr-sub">${f.ano} · ${f.categorias.slice(0,2).join(', ')} · ${f.num_avaliacoes} avaliações</div>
+        </div>
+        <div class="fr-bar">
+          <div style="font-size:9px;color:var(--muted2);text-align:right;margin-bottom:3px">${fmt(f.media)}/10</div>
+          <div class="fr-bar-track"><div class="fr-bar-fill" style="width:${f.media*10}%"></div></div>
+        </div>
+        <div class="fr-nota" style="color:${nC(f.media)}">${fmt(f.media)}</div>
+      </div>`).join('')}
+  `;
+}
+
+// POR GÊNERO
+function rankGeneroHTML(){
+  const genres = RAW.all_genres;
+  // For selected genre, rank members by count
+  const genreMembers = Object.entries(RAW.users_stats).filter(([,s])=>s.in_ranking).map(([uid,s])=>({
+    uid, nome:s.nome, cnt:(s.by_genre||{})[rankGenre]||0, avg:(s.genre_avg||{})[rankGenre]||null
+  })).sort((a,b)=>b.cnt-a.cnt);
+  
+  // Top films of that genre
+  const genreFilms = FILMES.filter(f=>f.categorias.includes(rankGenre)&&f.media&&f.num_avaliacoes>=2)
+    .sort((a,b)=>{
+      if(b.media!==a.media) return b.media-a.media;
+      if(b.num_avaliacoes!==a.num_avaliacoes) return b.num_avaliacoes-a.num_avaliacoes;
+      return (a.data_ts||0)-(b.data_ts||0);
+    }).slice(0,8);
+  
+  const maxCnt = genreMembers[0]?.cnt||1;
+  
+  return `
+    <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px;flex-wrap:wrap">
+      <label style="font-size:13px;color:var(--muted);font-weight:600">Gênero:</label>
+      <select class="genre-sel" onchange="rankGenre=this.value;renderRankTab()">
+        ${genres.map(g=>`<option value="${esc(g)}" ${g===rankGenre?'selected':''}>${g}</option>`).join('')}
+      </select>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+      <div>
+        <div style="font-size:14px;font-weight:700;margin-bottom:10px;color:#e5e5e5">👥 Quem mais assistiu ${rankGenre}</div>
+        ${genreMembers.map((m,i)=>{
+          const medal=i===0?'🥇':i===1?'🥈':i===2?'🥉':i+1+'.';
+          return `<div class="rank-item" style="margin-bottom:6px;padding:10px 14px">
+            <div style="font-size:16px;width:28px;text-align:center;flex-shrink:0">${medal}</div>
+            <div class="rank-av" style="background:${aC(m.uid)};width:34px;height:34px;font-size:11px">${ini(m.nome)}</div>
+            <div style="flex:1;min-width:0">
+              <div style="font-size:13px;font-weight:700">${esc(m.nome)}</div>
+              <div style="margin-top:4px;background:var(--surface2);border-radius:3px;overflow:hidden;height:4px">
+                <div style="height:100%;width:${Math.round(m.cnt/maxCnt*100)}%;background:linear-gradient(90deg,var(--red),var(--yellow));border-radius:3px"></div>
+              </div>
+            </div>
+            <div style="text-align:right;flex-shrink:0">
+              <div style="font-size:18px;font-weight:900;color:var(--green)">${m.cnt}</div>
+              ${m.avg?`<div style="font-size:10px;color:${nC(m.avg)}">média ${m.avg}</div>`:''}
+            </div>
+          </div>`;
+        }).join('')}
+      </div>
+      <div>
+        <div style="font-size:14px;font-weight:700;margin-bottom:10px;color:#e5e5e5">🎬 Top ${rankGenre}</div>
+        ${genreFilms.map((f,i)=>`
+          <div class="film-rank-item" onclick="openFilme('${f.id}')">
+            <div class="fr-num ${i<3?'top3':''}">${i<3?['🥇','🥈','🥉'][i]:i+1}</div>
+            ${f.poster?`<img class="fr-poster" src="${esc(f.poster)}" loading="lazy" onerror="this.style.display='none'">`:'<div class="fr-poster"></div>'}
+            <div class="fr-info">
+              <div class="fr-title">${esc(f.nome)}</div>
+              <div class="fr-sub">${f.ano} · ${f.num_avaliacoes} avals</div>
+            </div>
+            <div class="fr-nota" style="color:${nC(f.media)}">${fmt(f.media)}</div>
+          </div>`).join('')}
+      </div>
+    </div>
+  `;
+}
+
+// ESTATÍSTICAS
+function rankStatsHTML(){
+  const gs = RAW.global_stats;
+  const members = Object.entries(RAW.users_stats).filter(([,s])=>s.in_ranking).map(([uid,s])=>({uid,...s}));
+  const activeM = members.filter(m=>isActive(m));
+  // Compute highlights using ACTIVE members only
+  const rankM = Object.entries(RAW.users_stats).filter(([,s])=>s.in_ranking).map(([uid,s])=>({uid,...s}));
+  const activeOnly = rankM.filter(m=>isActive(m));
+  const src = activeOnly.length ? activeOnly : rankM; // fallback to all if everyone inactive
+  const H = {
+    most_films:   src.reduce((a,b)=>b.quant>a.quant?b:a, src[0]),
+    least_films:  src.reduce((a,b)=>b.quant<a.quant?b:a, src[0]),
+    highest_avg:  src.filter(m=>m.media).reduce((a,b)=>b.media>a.media?b:a, src.find(m=>m.media)||src[0]),
+    lowest_avg:   src.filter(m=>m.media).reduce((a,b)=>b.media<a.media?b:a, src.find(m=>m.media)||src[0]),
+    most_pending: src.reduce((a,b)=>b.pendentes.length>a.pendentes.length?b:a, src[0]),
+    most_added:   src.reduce((a,b)=>b.inseridos.length>a.inseridos.length?b:a, src[0]),
+    longest_away: src.filter(m=>m.ultima_av).reduce((a,b)=>monthsSince(b.ultima_av)>monthsSince(a.ultima_av)?b:a, src.find(m=>m.ultima_av)||src[0]),
+  };
+  const un = uid => esc(RAW.users_stats[uid]?.nome||'—');
+
+  // Monthly activity chart data
+  const monthData = RAW.monthly_activity||{};
+  const monthEntries = Object.entries(monthData).sort((a,b)=>a[0].localeCompare(b[0]));
+  const maxMonthVal = Math.max(...monthEntries.map(([,v])=>v), 1);
+  const monthNames = {
+    '01':'Jan','02':'Fev','03':'Mar','04':'Abr','05':'Mai','06':'Jun',
+    '07':'Jul','08':'Ago','09':'Set','10':'Out','11':'Nov','12':'Dez'
+  };
+
+  // Personal stats
+  const personal = CU && RAW.user_personal?.[CU];
+      const ps_dyn = CU && STATS[CU];
+      // Usa top5/bot5 dinâmicos se disponíveis
+      if(ps_dyn && ps_dyn.top5_dyn) {
+        if(!personal) {} else {
+          personal.top5 = ps_dyn.top5_dyn;
+          personal.bot5 = ps_dyn.bot5_dyn;
+          personal.fav_genre = ps_dyn.fav_genre || personal.fav_genre;
+          personal.fav_genre_avg = ps_dyn.fav_genre_avg || personal.fav_genre_avg;
         }
       }
-      return clients.openWindow(url);
-    })
-  );
+  const ps = CU ? RAW.users_stats[CU] : null;
+
+  return `
+    <!-- TABS: Geral / Pessoal -->
+    <div style="display:flex;gap:0;border-bottom:1px solid var(--border);margin-bottom:20px">
+      <div id="stab-geral" onclick="setStatTab('geral')" style="padding:8px 18px;font-size:13px;font-weight:700;cursor:pointer;border-bottom:2px solid var(--red);color:#fff">Geral</div>
+      <div id="stab-pessoal" onclick="setStatTab('pessoal')" style="padding:8px 18px;font-size:13px;font-weight:600;cursor:pointer;border-bottom:2px solid transparent;color:var(--muted)">Meu Perfil</div>
+    </div>
+    <div id="stat-geral-content">
+      <!-- 4 key numbers -->
+      <div class="stats-grid" style="grid-template-columns:repeat(4,1fr)">
+        <div class="stat-card">
+          <div class="stat-card-n" style="color:var(--red)">${gs.total_filmes}</div>
+          <div class="stat-card-l">Filmes</div>
+          <div class="stat-card-sub">${gs.total_catalog_days} dias de conteúdo</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-card-n" style="color:var(--green)">${gs.total_avaliacoes}</div>
+          <div class="stat-card-l">Avaliações</div>
+          <div class="stat-card-sub">média geral ${fmt(gs.avg_nota)}</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-card-n" style="color:var(--yellow)">${activeM.length}<span style="font-size:16px;color:var(--muted2)">/${members.length}</span></div>
+          <div class="stat-card-l">Membros ativos</div>
+          <div class="stat-card-sub">${members.filter(m=>!isActive(m)).length} inativo${members.filter(m=>!isActive(m)).length!==1?'s':''} (+${INACTIVE_MONTHS}m)</div>
+        </div>
+      
+      </div>
+
+      <!-- Destaques positivos e negativos -->
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px">
+        <div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:16px">
+          <div style="font-size:13px;font-weight:700;margin-bottom:14px;display:flex;align-items:center;gap:6px">🏅 Destaques positivos</div>
+          ${[
+            ['🎬','Cinéfilo do grupo', H.most_films?.uid, H.most_films?.quant+' filmes assistidos'],
+            ['⭐','Nota mais generosa', H.highest_avg?.uid, 'média '+fmt(H.highest_avg?.media)],
+            ['➕','Maior contribuidor', H.most_added?.uid, H.most_added?.inseridos?.length+' filmes inseridos'],
+            ['🎭','Gênero favorito do clube', null, gs.top_genre+' ('+gs.genre_counts[gs.top_genre]+' filmes)'],
+          ].map(([icon,label,uid,val])=>`
+            <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">
+              <span style="font-size:18px;width:24px;text-align:center">${icon}</span>
+              <div style="flex:1;min-width:0">
+                <div style="font-size:10px;color:var(--muted2);text-transform:uppercase;letter-spacing:.3px">${label}</div>
+                <div style="font-size:13px;font-weight:700">${uid?`<span style="display:inline-flex;align-items:center;gap:5px"><span style="width:18px;height:18px;border-radius:4px;background:${aC(uid)};color:#000;font-size:9px;font-weight:800;display:inline-flex;align-items:center;justify-content:center">${ini(RAW.users_stats[uid]?.nome||'?')}</span>${esc(RAW.users_stats[uid]?.nome||'?')}</span>`:''} <span style="color:var(--green);font-size:12px">${val}</span></div>
+              </div>
+            </div>`).join('')}
+        </div>
+        <div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:16px">
+          <div style="font-size:13px;font-weight:700;margin-bottom:14px;display:flex;align-items:center;gap:6px">😅 Destaques curiosos</div>
+          ${[
+            ['😴','Menos filmes assistidos', H.least_films?.uid, H.least_films?.quant+' filmes'],
+            ['🔪','Nota mais crítica', H.lowest_avg?.uid, 'média '+fmt(H.lowest_avg?.media)],
+            ['⏳','Mais filmes pendentes', H.most_pending?.uid, H.most_pending?.pendentes?.length+' pendentes'],
+            ['📅','Há mais tempo sem avaliar', H.longest_away?.uid, H.longest_away ? inactiveSince(H.longest_away) : '—'],
+          ].map(([icon,label,uid,val])=>`
+            <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">
+              <span style="font-size:18px;width:24px;text-align:center">${icon}</span>
+              <div style="flex:1;min-width:0">
+                <div style="font-size:10px;color:var(--muted2);text-transform:uppercase;letter-spacing:.3px">${label}</div>
+                <div style="font-size:13px;font-weight:700">${uid?`<span style="display:inline-flex;align-items:center;gap:5px"><span style="width:18px;height:18px;border-radius:4px;background:${aC(uid)};color:#000;font-size:9px;font-weight:800;display:inline-flex;align-items:center;justify-content:center">${ini(RAW.users_stats[uid]?.nome||'?')}</span>${esc(RAW.users_stats[uid]?.nome||'?')}</span>`:''} <span style="color:var(--yellow);font-size:12px">${val}</span></div>
+              </div>
+            </div>`).join('')}
+        </div>
+      </div>
+
+      <!-- Top 10 meses mais ativos -->
+      <div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:16px;margin-bottom:16px">
+        <div style="font-size:13px;font-weight:700;margin-bottom:14px">📅 Top 10 meses mais ativos</div>
+        ${(()=>{
+          const monthNames = {'01':'Jan','02':'Fev','03':'Mar','04':'Abr','05':'Mai','06':'Jun','07':'Jul','08':'Ago','09':'Set','10':'Out','11':'Nov','12':'Dez'};
+          const ma = STATIC.monthly_activity || {};
+          const sorted = Object.entries(ma).sort(([,a],[,b])=>b-a).slice(0,10);
+          const maxVal = sorted[0]?.[1]||1;
+          return sorted.map(([ym,n],i)=>{
+            const [y,m] = ym.split('-');
+            const label = (monthNames[m]||m)+'/'+y.slice(2);
+            const pct = Math.round(n/maxVal*100);
+            const color = i===0?'var(--red)':i<3?'var(--yellow)':'#4fc3f7';
+            return '<div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">'
+              +'<div style="font-size:11px;color:var(--muted);min-width:44px;text-align:right">'+label+'</div>'
+              +'<div style="flex:1;height:8px;background:var(--surface2);border-radius:4px;overflow:hidden">'
+              +'<div style="height:100%;width:'+pct+'%;background:'+color+';border-radius:4px;transition:width .5s"></div>'
+              +'</div>'
+              +'<div style="font-size:12px;font-weight:700;min-width:28px;color:'+color+'">'+n+'</div>'
+              +'</div>';
+          }).join('');
+        })()}
+      </div>
+
+      <!-- Gêneros + Quadro geral -->
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px">
+        <div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:16px">
+          <div style="font-size:13px;font-weight:700;margin-bottom:12px">🎭 Gêneros mais assistidos</div>
+          ${Object.entries(gs.genre_counts).sort((a,b)=>b[1]-a[1]).slice(0,8).map(([g,n])=>{
+            const maxG=Object.values(gs.genre_counts).reduce((a,b)=>Math.max(a,b),1);
+            return `<div class="genre-bar-row">
+              <div class="genre-bar-label">${g}</div>
+              <div class="genre-bar-track"><div class="genre-bar-fill" style="width:${Math.round(n/maxG*100)}%"></div></div>
+              <div class="genre-bar-n">${n}</div>
+            </div>`;
+          }).join('')}
+        </div>
+        <div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:16px;overflow-x:auto">
+          <div style="font-size:13px;font-weight:700;margin-bottom:12px">📊 Quadro por membro</div>
+          <table class="uyt">
+            <thead><tr>
+              <th style="text-align:left">Membro</th>
+              <th>Status</th><th>Assistidos</th><th>Média</th><th>Pendentes</th>
+            </tr></thead>
+            <tbody>
+            ${members.sort((a,b)=>b.quant-a.quant).map(m=>`<tr style="${!isActive(m)?'opacity:.55':''}">
+              <td style="text-align:left;font-weight:700">${esc(m.nome)}</td>
+              <td><span style="font-size:10px;font-weight:700;padding:2px 7px;border-radius:10px;background:${isActive(m)?'rgba(70,211,105,.15)':'rgba(100,100,100,.2)'};color:${isActive(m)?'var(--green)':'var(--muted)'}">${isActive(m)?'●':'○'}</span></td>
+              <td style="color:var(--green)">${m.quant}</td>
+              <td style="color:var(--yellow)">${m.media?fmt(m.media):'—'}</td>
+              <td style="color:var(--muted)">${m.pendentes.length}</td>
+            </tr>`).join('')}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- PESSOAL (hidden by default, shown via tab) -->
+    <div id="stat-pessoal-content" style="display:none">
+      ${!CU ? `<div class="empty-block"><div class="empty-icon">👤</div><div>Selecione seu perfil para ver suas estatísticas pessoais.</div></div>` : `
+        <div style="display:flex;align-items:center;gap:14px;margin-bottom:20px;padding:16px;background:var(--surface);border-radius:10px;border:1px solid var(--border)">
+          <div style="width:52px;height:52px;border-radius:10px;background:${aC(CU)};color:#000;font-weight:800;font-size:20px;display:flex;align-items:center;justify-content:center">${ini(USERS[CU]?.nome||'?')}</div>
+          <div>
+            <div style="font-size:20px;font-weight:900">${esc(USERS[CU]?.nome||'?')}</div>
+            <div style="font-size:12px;color:var(--muted);margin-top:2px">${ps?.quant||0} filmes · média ${ps?.media?fmt(ps.media):'—'} · última avaliação ${ps?.ultima_av||'—'}</div>
+          </div>
+          <div style="margin-left:auto">
+            <span style="font-size:11px;font-weight:700;padding:4px 12px;border-radius:20px;background:${isActive(ps)?'rgba(70,211,105,.15)':'rgba(100,100,100,.2)'};color:${isActive(ps)?'var(--green)':'var(--muted)'}">
+              ${isActive(ps)?'● Ativo':'● Inativo há '+inactiveSince(ps)}
+            </span>
+          </div>
+        </div>
+
+        <div class="stats-grid" style="grid-template-columns:repeat(4,1fr);margin-bottom:16px">
+          <div class="stat-card"><div class="stat-card-n" style="color:var(--green)">${ps?.quant||0}</div><div class="stat-card-l">Assistidos</div></div>
+          <div class="stat-card"><div class="stat-card-n" style="color:var(--yellow)">${ps?.media?fmt(ps.media):'—'}</div><div class="stat-card-l">Média geral</div></div>
+          <div class="stat-card"><div class="stat-card-n" style="color:#3498db">${ps?.inseridos?.length||0}</div><div class="stat-card-l">Inseridos</div></div>
+          <div class="stat-card"><div class="stat-card-n" style="color:var(--muted)">${ps?.pendentes?.length||0}</div><div class="stat-card-l">Pendentes</div></div>
+        </div>
+
+        ${personal ? `
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px">
+          <div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:16px">
+            <div style="font-size:13px;font-weight:700;margin-bottom:12px">⭐ Seus top 5 filmes</div>
+            ${personal.top5.map((f,i)=>`<div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;cursor:pointer" onclick="openFilme('${f.id}')">
+              <div style="font-size:14px;font-weight:900;width:20px;text-align:center;color:var(--muted2)">${i+1}</div>
+              ${f.poster?`<img src="${esc(f.poster)}" style="width:28px;height:42px;object-fit:cover;border-radius:3px;flex-shrink:0" onerror="this.style.display='none'">`:''}
+              <div style="flex:1;min-width:0"><div style="font-size:12px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(f.nome)}</div></div>
+              <div style="font-size:15px;font-weight:800;color:${nC(f.nota)}">${fmt(f.nota)}</div>
+            </div>`).join('')}
+          </div>
+          <div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:16px">
+            <div style="font-size:13px;font-weight:700;margin-bottom:12px">😬 Seus 5 piores</div>
+            ${personal.bot5.map((f,i)=>`<div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;cursor:pointer" onclick="openFilme('${f.id}')">
+              <div style="font-size:14px;font-weight:900;width:20px;text-align:center;color:var(--muted2)">${i+1}</div>
+              ${f.poster?`<img src="${esc(f.poster)}" style="width:28px;height:42px;object-fit:cover;border-radius:3px;flex-shrink:0" onerror="this.style.display='none'">`:''}
+              <div style="flex:1;min-width:0"><div style="font-size:12px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(f.nome)}</div></div>
+              <div style="font-size:15px;font-weight:800;color:${nC(f.nota)}">${fmt(f.nota)}</div>
+            </div>`).join('')}
+          </div>
+        </div>
+
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px">
+          <div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:16px">
+            <div style="font-size:13px;font-weight:700;margin-bottom:12px">🎭 Seus gêneros favoritos</div>
+            ${personal.genre_top5.map(g=>`<div class="genre-bar-row">
+              <div class="genre-bar-label">${g.genre}</div>
+              <div class="genre-bar-track"><div class="genre-bar-fill" style="width:${Math.round(g.count/personal.genre_top5[0].count*100)}%"></div></div>
+              <div class="genre-bar-n">${g.count}</div>
+            </div>`).join('')}
+          </div>
+          <div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:16px">
+            <div style="font-size:13px;font-weight:700;margin-bottom:16px">📌 Destaques pessoais</div>
+            ${[
+              ['🎭','Gênero favorito', personal.fav_genre + (personal.fav_genre_avg?' · média '+fmt(personal.fav_genre_avg):'')],
+              ['📅','Ano mais ativo', personal.most_active_year+' ('+personal.most_active_year_count+' filmes)'],
+              ['⭐','Maior nota dada', fmt(Math.max(...personal.top5.map(f=>f.nota)))],
+              ['💀','Menor nota dada', fmt(Math.min(...personal.bot5.map(f=>f.nota)))],
+            ].map(([icon,label,val])=>`
+              <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">
+                <span style="font-size:18px">${icon}</span>
+                <div><div style="font-size:10px;color:var(--muted2);text-transform:uppercase;letter-spacing:.3px">${label}</div>
+                <div style="font-size:13px;font-weight:700;color:var(--text)">${val}</div></div>
+              </div>`).join('')}
+          </div>
+        </div>
+        ` : ''}
+      `}
+    </div>
+  `;
+}
+
+function setStatTab(tab){
+  document.getElementById('stab-geral').style.cssText='padding:8px 18px;font-size:13px;font-weight:'+(tab==='geral'?'700':'600')+';cursor:pointer;border-bottom:2px solid '+(tab==='geral'?'var(--red)':'transparent')+';color:'+(tab==='geral'?'#fff':'var(--muted)');
+  document.getElementById('stab-pessoal').style.cssText='padding:8px 18px;font-size:13px;font-weight:'+(tab==='pessoal'?'700':'600')+';cursor:pointer;border-bottom:2px solid '+(tab==='pessoal'?'var(--red)':'transparent')+';color:'+(tab==='pessoal'?'#fff':'var(--muted)');
+  document.getElementById('stat-geral-content').style.display=tab==='geral'?'block':'none';
+  document.getElementById('stat-pessoal-content').style.display=tab==='pessoal'?'block':'none';
+}
+
+
+
+// ── SUPABASE SETUP (supa initialized at top) ──
+const SUPA_URL = SUPA_URL2;
+const SUPA_KEY = SUPA_KEY2;
+
+// vars hoisted above
+
+// AUTH
+async function initAuth(){
+  // Apenas detecta logout
+  supa.auth.onAuthStateChange((event, session) => {
+    if(event === 'SIGNED_OUT') showAuthScreen();
+  });
+  showAuthScreen();
+}
+
+async function loginEmailSenha(){
+  const email = document.getElementById('loginEmail').value.trim();
+  const senha = document.getElementById('loginSenha').value;
+  const errEl = document.getElementById('authError');
+  if(errEl) errEl.style.display = 'none';
+  if(!email || !senha) {
+    if(errEl){ errEl.textContent = 'Preencha e-mail e senha.'; errEl.style.display = 'block'; }
+    return;
+  }
+  const btn = document.querySelector('.auth-btn-google');
+  if(btn){ btn.textContent = 'Entrando...'; btn.disabled = true; }
+  const { data, error } = await supa.auth.signInWithPassword({ email, password: senha });
+  if(btn){ btn.textContent = 'Entrar'; btn.disabled = false; }
+  if(error) {
+    if(errEl){ errEl.textContent = 'E-mail ou senha incorretos.'; errEl.style.display = 'block'; }
+    return;
+  }
+  if(data.session){
+    await salvarCredencialNavegador(email, senha);
+    await onLogin(data.session);
+  }
+}
+async function loginGoogle(){ loginEmailSenha(); }
+
+async function loginMicrosoft(){ loginEmailSenha(); }
+
+async function logout(){
+  await supa.auth.signOut();
+  location.reload();
+}
+
+async function onLogin(session){
+  if(!session) return;
+  currentSession = session;
+  const email = session.user.email;
+  
+  // Show loading state in auth box
+  const box = document.getElementById('authBox');
+  if(box) box.innerHTML = `
+    <div class="auth-loading">
+      <div class="auth-logo"><svg width="160" height="48" viewBox="0 0 160 48" xmlns="http://www.w3.org/2000/svg">
+  <rect x="2" y="20" width="36" height="26" rx="2" fill="none" stroke="#fff" stroke-width="1.6"/>
+  <line x1="8" y1="29" x2="33" y2="29" stroke="#fff" stroke-width="0.7" stroke-opacity="0.35"/>
+  <line x1="8" y1="36" x2="33" y2="36" stroke="#fff" stroke-width="0.7" stroke-opacity="0.35"/>
+  <g transform="rotate(-26, 2, 20)">
+    <rect x="2" y="11" width="36" height="10" rx="2" fill="#111" stroke="#fff" stroke-width="1.6"/>
+    <rect x="1"  y="11" width="5" height="10" fill="#fff" fill-opacity="0.72"/>
+    <rect x="10" y="11" width="5" height="10" fill="#fff" fill-opacity="0.72"/>
+    <rect x="19" y="11" width="5" height="10" fill="#fff" fill-opacity="0.72"/>
+    <rect x="28" y="11" width="5" height="10" fill="#fff" fill-opacity="0.72"/>
+  </g>
+  <circle cx="2" cy="20" r="2.2" fill="#fff" fill-opacity="0.55"/>
+  <text x="46" y="35" font-family="Georgia,serif" font-size="28" font-weight="400" fill="#fff" letter-spacing="0.4">Cine<tspan font-style="italic" fill="#ccc">List</tspan></text>
+</svg></div>
+      <div class="auth-spinner"></div>
+      <div style="color:#888;font-size:13px">Entrando como ${email}...</div>
+    </div>
+  `;
+
+  try {
+    // Timeout de 10s para não travar infinitamente
+    const fetchWithTimeout = (promise, ms) => Promise.race([
+      promise,
+      new Promise((_, rej) => setTimeout(() => rej(new Error('Timeout - verifique sua conexão')), ms))
+    ]);
+
+    const { data: usuario, error } = await fetchWithTimeout(
+      supa.from('usuarios').select('*').eq('email', email).maybeSingle(),
+      10000
+    );
+
+    if(error) {
+      console.error('DB error:', error);
+      showAuthError('Erro ao buscar usuário. Verifique sua conexão.');
+      return;
+    }
+
+    if(!usuario) {
+      showAuthError('E-mail não cadastrado: ' + email + '\nApenas membros cadastrados têm acesso.');
+      return;
+    }
+
+    supaProfile = usuario;
+    CU = usuario.legacy_id;
+    if(!CU || !USERS[CU]) {
+      showAuthError('Perfil não configurado para ' + email + '. Fale com o administrador.');
+      return;
+    }
+    history.replaceState(null, '', window.location.pathname);
+    hideAuthScreen();
+    window.CU_EMAIL = email;
+    window.dispatchEvent(new Event('cinelist:login'));
+
+    // Mostra o app imediatamente com dados em memória
+    loadProfiles();
+    applyUserToUI();
+    buildUD();
+    renderHome();
+
+    // Carrega dados frescos em background
+    loadFilmsFromSupabase().then(() => {
+      try {
+        buildUD();
+        renderHome();
+        checkBirthdays();
+      } catch(e) {
+        console.error('Render error:', e);
+      }
+    }).catch(e => {
+      console.warn('Erro ao carregar filmes:', e);
+      showToast('⚠️ Alguns dados podem estar desatualizados');
+    });
+
+  } catch(e) {
+    showAuthError('Erro: ' + e.message);
+  }
+}
+
+function showAuthScreen(){
+  const loader = document.getElementById('startLoader');
+  if(loader) loader.style.display = 'none';
+  const authScreen = document.getElementById('authScreen');
+  if(!authScreen) return;
+  authScreen.style.display = 'flex';
+  const authBox = document.getElementById('authBox');
+  if(!authBox) return;
+  authBox.innerHTML = `
+    <div class="auth-logo"><svg width="160" height="48" viewBox="0 0 160 48" xmlns="http://www.w3.org/2000/svg">
+  <rect x="2" y="20" width="36" height="26" rx="2" fill="none" stroke="#fff" stroke-width="1.6"/>
+  <line x1="8" y1="29" x2="33" y2="29" stroke="#fff" stroke-width="0.7" stroke-opacity="0.35"/>
+  <line x1="8" y1="36" x2="33" y2="36" stroke="#fff" stroke-width="0.7" stroke-opacity="0.35"/>
+  <g transform="rotate(-26, 2, 20)">
+    <rect x="2" y="11" width="36" height="10" rx="2" fill="#111" stroke="#fff" stroke-width="1.6"/>
+    <rect x="1"  y="11" width="5" height="10" fill="#fff" fill-opacity="0.72"/>
+    <rect x="10" y="11" width="5" height="10" fill="#fff" fill-opacity="0.72"/>
+    <rect x="19" y="11" width="5" height="10" fill="#fff" fill-opacity="0.72"/>
+    <rect x="28" y="11" width="5" height="10" fill="#fff" fill-opacity="0.72"/>
+  </g>
+  <circle cx="2" cy="20" r="2.2" fill="#fff" fill-opacity="0.55"/>
+  <text x="46" y="35" font-family="Georgia,serif" font-size="28" font-weight="400" fill="#fff" letter-spacing="0.4">Cine<tspan font-style="italic" fill="#ccc">List</tspan></text>
+</svg></div>
+    <div class="auth-tagline">O catálogo de filmes da tropa 🎬</div>
+    <div id="authError" style="display:none;background:rgba(229,9,20,.15);border:1px solid var(--red);color:#ff6b6b;padding:10px 14px;border-radius:8px;font-size:13px;margin-bottom:12px;text-align:left"></div>
+    <input class="form-input" id="loginEmail" type="email" placeholder="Seu e-mail" style="margin-bottom:10px;display:block;width:100%;background:#2a2a2a;border:1px solid #333;color:#fff;padding:12px 14px;border-radius:8px;font-family:inherit;font-size:14px;outline:none">
+    <input class="form-input" id="loginSenha" type="password" placeholder="Senha" style="margin-bottom:16px;display:block;width:100%;background:#2a2a2a;border:1px solid #333;color:#fff;padding:12px 14px;border-radius:8px;font-family:inherit;font-size:14px;outline:none" onkeydown="if(event.key==='Enter')loginEmailSenha()">
+    <button class="auth-btn auth-btn-google" onclick="loginEmailSenha()" style="justify-content:center;font-size:15px;font-weight:700">
+      Entrar
+    </button>
+    <div style="margin-top:12px" id="bioWrap"></div>
+    <div class="auth-footer">Apenas membros cadastrados têm acesso.</div>
+  `;
+  initBiometricButton();
+}
+
+function showAuthLoading(){
+  const box = document.getElementById('authBox');
+  if(box) box.innerHTML = `
+    <div class="auth-loading">
+      <div class="auth-logo"><svg width="160" height="48" viewBox="0 0 160 48" xmlns="http://www.w3.org/2000/svg">
+  <rect x="2" y="20" width="36" height="26" rx="2" fill="none" stroke="#fff" stroke-width="1.6"/>
+  <line x1="8" y1="29" x2="33" y2="29" stroke="#fff" stroke-width="0.7" stroke-opacity="0.35"/>
+  <line x1="8" y1="36" x2="33" y2="36" stroke="#fff" stroke-width="0.7" stroke-opacity="0.35"/>
+  <g transform="rotate(-26, 2, 20)">
+    <rect x="2" y="11" width="36" height="10" rx="2" fill="#111" stroke="#fff" stroke-width="1.6"/>
+    <rect x="1"  y="11" width="5" height="10" fill="#fff" fill-opacity="0.72"/>
+    <rect x="10" y="11" width="5" height="10" fill="#fff" fill-opacity="0.72"/>
+    <rect x="19" y="11" width="5" height="10" fill="#fff" fill-opacity="0.72"/>
+    <rect x="28" y="11" width="5" height="10" fill="#fff" fill-opacity="0.72"/>
+  </g>
+  <circle cx="2" cy="20" r="2.2" fill="#fff" fill-opacity="0.55"/>
+  <text x="46" y="35" font-family="Georgia,serif" font-size="28" font-weight="400" fill="#fff" letter-spacing="0.4">Cine<tspan font-style="italic" fill="#ccc">List</tspan></text>
+</svg></div>
+      <div class="auth-spinner"></div>
+      <div style="color:#666;font-size:14px">Redirecionando para o Google...</div>
+    </div>
+  `;
+}
+
+function showAuthError(msg){
+  try {
+    const authScreen = document.getElementById('authScreen');
+    if(authScreen) authScreen.style.display = 'flex';
+    const authBox = document.getElementById('authBox');
+    if(!authBox) return;
+    authBox.innerHTML = `
+      <div style="text-align:center;padding:20px">
+        <div style="font-size:40px;margin-bottom:16px">⚠️</div>
+        <div style="color:#e05555;font-size:14px;font-weight:700;margin-bottom:12px">Erro ao entrar</div>
+        <div style="color:#888;font-size:12px;margin-bottom:24px;word-break:break-word">${esc(String(msg||'Erro desconhecido'))}</div>
+        <button class="auth-btn auth-btn-ms" onclick="showAuthScreen()" style="width:auto;padding:10px 20px">← Tentar novamente</button>
+      </div>
+    `;
+  } catch(e2) {
+    console.error('showAuthError falhou:', e2);
+    location.reload();
+  }
+}
+
+function hideAuthScreen(){
+  const loader = document.getElementById('startLoader');
+  if(loader) loader.style.display = 'none';
+  document.getElementById('authScreen').style.display = 'none';
+}
+
+function applyUserToUI(){
+  if(!CU) return;
+  const p = (typeof getProfile === 'function') ? getProfile(CU) : {};
+  const u = USERS[CU];
+  if(!u) return;
+  const av = document.getElementById('userAvatar');
+  if(!av) return;
+  const color = p.color || aC(CU);
+  const name = p.apelido || u.nome;
+  av.style.background = color;
+  av.style.color = '#000';
+  av.textContent = ini(name);
+}
+
+// SAVE RATING TO SUPABASE
+async function saveRatingToSupabase(filmeId, nota, vai, data, comentario){
+  const uid = CU;
+  const { error } = await supa.from('avaliacoes').upsert({
+    filme_id: filmeId,
+    usuario_id: uid,
+    nota: nota,
+    vai_assistir: vai,
+    data_avaliacao: data,
+    comentario: comentario
+  }, { onConflict: 'filme_id,usuario_id' });
+  return !error;
+}
+
+// Override saveRating to also persist to Supabase
+const _origSaveRating = typeof saveRating !== 'undefined' ? saveRating : null;
+
+// Replace logout option in user dropdown
+
+
+// Helper para converter VAPID key
+function urlBase64ToUint8Array(base64String) {
+  const padding = '='.repeat((4 - base64String.length % 4) % 4);
+  const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
+  const rawData = window.atob(base64);
+  return Uint8Array.from([...rawData].map(c => c.charCodeAt(0)));
+}
+
+// ===== NOTIFICAÇÕES =====
+async function ativarNotificacoes() {
+  if (!('Notification' in window)) {
+    showToast('⚠️ Seu navegador não suporta notificações.');
+    return;
+  }
+  if (!('serviceWorker' in navigator)) {
+    showToast('⚠️ Service Worker não disponível.');
+    return;
+  }
+
+  try {
+    // iOS exige que o pedido venha de uma ação direta do usuário
+    const perm = await Notification.requestPermission();
+    if (perm !== 'granted') {
+      showToast('❌ Permissão de notificação negada.');
+      buildUD();
+      return;
+    }
+
+    showToast('⏳ Registrando notificações...');
+
+    const swReg = await navigator.serviceWorker.register('./sw.js');
+    await navigator.serviceWorker.ready;
+
+    const VAPID = 'BFxhuP8nULdLvH6IwV7OwIXxyAjTaFB68lfPCNLjAaF9Vff1G58NOC0cvXiPlcX2u6TskdwGAgqJ4oC88-ApeWo';
+
+    let token = null;
+    if (window.fbMessaging) {
+      // SDK compat: getToken é método direto da instância
+      token = await window.fbMessaging.getToken({ vapidKey: VAPID, serviceWorkerRegistration: swReg });
+    } else {
+      showToast('⚠️ Firebase não carregou. Tente reabrir o app.');
+      return;
+    }
+
+    if (token) {
+      const email = currentSession?.user?.email || window.CU_EMAIL || '';
+      if (email && window.supa) {
+        await window.supa.from('fcm_tokens').upsert({
+          email, token, updated_at: new Date().toISOString()
+        }, { onConflict: 'email' });
+      }
+      showToast('✅ Notificações ativadas!');
+    } else {
+      showToast('⚠️ Permissão concedida, mas não foi possível registrar o dispositivo. Tente reabrir o app.');
+    }
+
+    buildUD(); // atualiza o menu
+  } catch(e) {
+    console.warn('Erro ao ativar notificações:', e);
+    showToast('⚠️ Erro: ' + e.message);
+  }
+}
+
+// INIT — call initAuth instead of buildUD+renderHome
+
+
+// ── PROFILE ──
+const PALETTE = ['#e50914', '#e67e22', '#f5c518', '#2ecc71', '#1abc9c', '#3498db', '#9b59b6', '#e91e63', '#00bcd4', '#ff5722', '#8bc34a', '#607d8b', '#ff9800', '#673ab7', '#009688'];
+var profileData = {};
+var profilePhoto = {};
+
+function loadProfiles(){
+  try {
+    const s = localStorage.getItem('cinelist_profiles');
+    if(s) profileData = JSON.parse(s);
+  } catch(e) {}
+  // Carrega do Supabase em background
+  loadProfilesFromSupabase();
+}
+
+async function loadProfilesFromSupabase(){
+  try {
+    const { data, error } = await supa.from('perfis').select('*');
+    if(error || !data) return;
+    data.forEach(p => {
+      profileData[p.legacy_id] = {
+        apelido: p.apelido || '',
+        bday: p.bday || '',
+        favFilme: p.fav_filme || '',
+        bio: p.bio || '',
+        color: p.avatar_color || '',
+        photo: p.avatar_url || null
+      };
+    });
+    try { localStorage.setItem('cinelist_profiles', JSON.stringify(profileData)); } catch(e) {}
+    updateTopbarAvatar();
+    applyUserToUI();
+  } catch(e) {
+    console.warn('Erro ao carregar perfis:', e);
+  }
+}
+
+async function saveProfiles(){
+  // Salva localmente como fallback
+  try { localStorage.setItem('cinelist_profiles', JSON.stringify(profileData)); } catch(e) {}
+  // Salva no Supabase na tabela perfis
+  if(!CU) return;
+  const p = profileData[CU] || {};
+  try {
+    await supa.from('perfis').upsert({
+      legacy_id: CU,
+      apelido: p.apelido || null,
+      bday: p.bday || null,
+      fav_filme: p.favFilme || null,
+      bio: p.bio || null,
+      avatar_color: p.color || null,
+      avatar_url: p.photo || null,
+      updated_at: new Date().toISOString()
+    }, { onConflict: 'legacy_id' });
+  } catch(e) {
+    console.warn('Erro ao salvar perfil no Supabase:', e);
+  }
+}
+
+function getProfile(uid){ return profileData[uid] || {}; }
+
+function openProfile(){
+  if(!CU) return;
+  const p = getProfile(CU);
+  document.getElementById('pmApelido').value = p.apelido || '';
+  document.getElementById('pmBday').value = p.bday || '';
+  document.getElementById('pmFavFilme').value = p.favFilme || '';
+  document.getElementById('pmBio').value = p.bio || '';
+  const cp = document.getElementById('colorPicker');
+  const cur = p.color || aC(CU);
+  cp.innerHTML = PALETTE.map(c => `<div class="color-opt ${c===cur?'selected':''}" style="background:${c}" onclick="document.querySelectorAll('.color-opt').forEach(b=>b.classList.remove('selected'));this.classList.add('selected');updateAvatarPreviewColor('${c}')"></div>`).join('');
+  document.getElementById('profileModal').classList.add('open');
+  setTimeout(updateAvatarPreview, 50);
+}
+
+function updateAvatarPreviewColor(color) {
+  const prev = document.getElementById('pmAvatarPreview');
+  if(prev && !prev._photo) { prev.style.background = color; }
+}
+
+function closeProfile(){ document.getElementById('profileModal').classList.remove('open'); }
+
+function saveProfile(){
+  if(!CU) return;
+  const color = document.querySelector('.color-opt.selected')?.style.background || aC(CU);
+  const prev = document.getElementById('pmAvatarPreview');
+  const photo = prev?._photo || profileData[CU]?.photo || null;
+  profileData[CU] = {
+    apelido: document.getElementById('pmApelido').value.trim(),
+    bday: document.getElementById('pmBday').value,
+    favFilme: document.getElementById('pmFavFilme').value.trim(),
+    bio: document.getElementById('pmBio').value.trim(),
+    color, photo
+  };
+  saveProfiles();
+  updateTopbarAvatar();
+  closeProfile();
+  showToast('✅ Perfil salvo!');
+}
+
+function updateTopbarAvatar(){
+  if(!CU) return;
+  const p = getProfile(CU);
+  const av = document.getElementById('userAvatar');
+  if(!av) return;
+  if(p.photo) {
+    av.style.background = 'transparent';
+    av.style.padding = '0';
+    av.innerHTML = `<img src="${p.photo}" style="width:36px;height:36px;border-radius:50%;object-fit:cover">`;
+  } else {
+    const color = p.color || aC(CU);
+    const name = p.apelido || USERS[CU]?.nome || '?';
+    av.style.background = color;
+    av.innerHTML = '';
+    av.textContent = ini(name);
+  }
+}
+
+function showToast(msg){
+  const t = document.createElement('div');
+  t.style.cssText = 'position:fixed;bottom:80px;left:50%;transform:translateX(-50%);background:#181818;border:1px solid #333;color:#fff;font-size:13px;font-weight:600;padding:10px 20px;border-radius:30px;z-index:900;white-space:nowrap';
+  t.textContent = msg;
+  document.body.appendChild(t);
+  setTimeout(()=>t.remove(), 2500);
+}
+
+// ── CHANGE PASSWORD ──
+function openChangePassword(){
+  document.getElementById('pwNova').value = '';
+  document.getElementById('pwConfirm').value = '';
+  document.getElementById('pwError').style.display = 'none';
+  document.getElementById('pwSuccess').style.display = 'none';
+  document.getElementById('pwModal').classList.add('open');
+}
+
+function closePwModal(){ document.getElementById('pwModal').classList.remove('open'); }
+
+async function savePassword(){
+  const nova = document.getElementById('pwNova').value;
+  const conf = document.getElementById('pwConfirm').value;
+  const errEl = document.getElementById('pwError');
+  const okEl = document.getElementById('pwSuccess');
+  const btn = document.getElementById('pwSaveBtn');
+  errEl.style.display = 'none'; okEl.style.display = 'none';
+  
+  if(nova.length < 6) { errEl.textContent = 'Senha deve ter pelo menos 6 caracteres.'; errEl.style.display = 'block'; return; }
+  if(nova !== conf) { errEl.textContent = 'As senhas não coincidem.'; errEl.style.display = 'block'; return; }
+  
+  btn.textContent = 'Salvando...'; btn.disabled = true;
+  const { error } = await supa.auth.updateUser({ password: nova });
+  btn.textContent = 'Salvar'; btn.disabled = false;
+  
+  if(error) { errEl.textContent = 'Erro: ' + error.message; errEl.style.display = 'block'; }
+  else { okEl.textContent = '✅ Senha alterada com sucesso!'; okEl.style.display = 'block'; setTimeout(()=>closePwModal(), 2000); }
+}
+
+
+// ── PHOTO PROFILE ──
+function handlePhotoUpload(event) {
+  const file = event.target.files[0];
+  if(!file) return;
+  if(file.size > 500000) { showToast('⚠️ Foto muito grande! Use menos de 500KB.'); return; }
+  const reader = new FileReader();
+  reader.onload = function(e) {
+    const b64 = e.target.result;
+    document.getElementById('pmAvatarPreview').innerHTML = `<img src="${b64}" style="width:100%;height:100%;object-fit:cover">`;
+    document.getElementById('pmAvatarPreview')._photo = b64;
+  };
+  reader.readAsDataURL(file);
+}
+
+function removePhoto() {
+  const prev = document.getElementById('pmAvatarPreview');
+  prev._photo = null;
+  const p = getProfile(CU);
+  const color = document.querySelector('.color-opt.selected')?.style.background || aC(CU);
+  prev.innerHTML = ini(USERS[CU]?.nome || '?');
+  prev.style.background = color;
+}
+
+function updateAvatarPreview() {
+  const prev = document.getElementById('pmAvatarPreview');
+  if(!prev) return;
+  const p = getProfile(CU);
+  if(p.photo) {
+    prev.innerHTML = `<img src="${p.photo}" style="width:100%;height:100%;object-fit:cover">`;
+    prev._photo = p.photo;
+    prev.style.background = 'transparent';
+  } else {
+    const color = p.color || aC(CU);
+    prev.style.background = color;
+    prev.innerHTML = ini(USERS[CU]?.nome || '?');
+    prev._photo = null;
+  }
+}
+
+
+function checkBirthdays(){
+  try {
+    const today = new Date();
+    const dd = String(today.getDate()).padStart(2,'0');
+    const mm = String(today.getMonth()+1).padStart(2,'0');
+    Object.entries(profileData||{}).forEach(([uid, p]) => {
+      if(!p.bday) return;
+      const parts = p.bday.split('-');
+      if(parts.length < 3) return;
+      if(parts[1] === mm && parts[2] === dd && uid !== CU) {
+        const nome = USERS[uid]?.nome || uid;
+        showToast('🎂 Hoje é aniversário de ' + nome + '!');
+      }
+    });
+  } catch(e) {}
+}
+
+
+// ===== ADMIN PANEL =====
+const ADMIN_EMAIL = 'lwbarbosab@gmail.com';
+var _adminTab = 'duplicatas';
+
+function openAdmin(){
+  if(currentSession?.user?.email !== ADMIN_EMAIL){ showToast('⛔ Acesso negado.'); return; }
+  document.getElementById('adminModal').classList.add('open');
+  adminTab('duplicatas');
+}
+
+function closeAdmin(){
+  document.getElementById('adminModal').classList.remove('open');
+}
+
+function adminTab(tab){
+  _adminTab = tab;
+  // Highlight active tab
+  document.querySelectorAll('[id^="atab-"]').forEach(b => {
+    b.style.background = b.id === 'atab-'+tab ? 'var(--red)' : '#2a2a2a';
+  });
+  const body = document.getElementById('adminBody');
+  body.innerHTML = '<div style="color:#888;text-align:center;padding:30px">Carregando...</div>';
+  if(tab === 'duplicatas') renderAdminDuplicatas();
+  else if(tab === 'membros') renderAdminMembros();
+  else if(tab === 'sem_avaliacao') renderAdminSemAvaliacao();
+  else if(tab === 'stats') renderAdminStats();
+  else if(tab === 'notificacao') renderAdminNotificacao();
+}
+
+// ── ABA: DUPLICATAS ──
+function renderAdminDuplicatas(){
+  const body = document.getElementById('adminBody');
+  const grupos = {};
+  FILMES.forEach(f => {
+    const key = f.nome.trim().toLowerCase() + '|' + (f.ano || '');
+    if(!grupos[key]) grupos[key] = [];
+    grupos[key].push(f);
+  });
+  const duplicatas = Object.values(grupos).filter(g => g.length > 1);
+
+  if(!duplicatas.length){
+    body.innerHTML = '<div style="color:#46d369;text-align:center;padding:30px;font-size:15px">✅ Nenhum filme duplicado encontrado!</div>';
+    return;
+  }
+
+  let html = `<div style="color:#f5c518;font-size:13px;margin-bottom:16px;font-weight:700;padding:4px 0">${duplicatas.length} grupo(s) de duplicatas encontrados</div>`;
+  duplicatas.forEach(grupo => {
+    const sorted = [...grupo].sort((a,b) => new Date(a.data_cadastro||0) - new Date(b.data_cadastro||0));
+    const original = sorted[0];
+    html += `<div style="background:#1a1a1a;border:1px solid #2a2a2a;border-radius:10px;padding:14px;margin-bottom:12px">
+      <div style="font-size:14px;font-weight:800;color:#fff;margin-bottom:6px">🎬 ${esc(original.nome)} (${original.ano||'—'})</div>
+      <div style="font-size:11px;color:#46d369;margin-bottom:8px">✅ MANTER — id: ${original.id} · por ${esc(USERS[original.inserido_por]?.nome||original.inserido_por)}</div>`;
+    sorted.slice(1).forEach(d => {
+      const nAv = Object.keys(d.avaliacoes||{}).length;
+      html += `<div style="display:flex;align-items:center;justify-content:space-between;background:#111;border:1px solid #333;border-radius:8px;padding:10px;margin-top:6px">
+        <div>
+          <span style="font-size:11px;color:#e05555;font-weight:700">❌ DUPLICATA</span>
+          <span style="font-size:10px;color:#888;margin-left:6px">id: ${d.id}</span>
+          ${nAv ? `<span style="font-size:10px;color:#f5c518;margin-left:6px">⚠️ ${nAv} avaliação(ões)</span>` : ''}
+        </div>
+        <button onclick="deleteFilmeAdmin('${d.id}',this)" style="background:#e50914;color:#fff;border:none;border-radius:6px;padding:5px 12px;cursor:pointer;font-size:12px;font-weight:700">Excluir</button>
+      </div>`;
+    });
+    html += '</div>';
+  });
+  body.innerHTML = html;
+}
+
+async function deleteFilmeAdmin(id, btn){
+  if(!confirm('Excluir este filme? Ação irreversível.')) return;
+  btn.textContent = '...'; btn.disabled = true;
+  try {
+    const {error} = await supa.from('filmes').delete().eq('id', id);
+    if(error) throw error;
+    const idx = FILMES.findIndex(f => f.id === id);
+    if(idx > -1) FILMES.splice(idx, 1);
+    delete FILMES_MAP[id];
+    RAW.filmes = RAW.filmes.filter(f => f.id !== id);
+    renderHome();
+    showToast('🗑️ Filme excluído!');
+    renderAdminDuplicatas();
+  } catch(e) {
+    showToast('❌ Erro: ' + e.message);
+    btn.textContent = 'Excluir'; btn.disabled = false;
+  }
+}
+
+// ── ABA: MEMBROS ──
+function renderAdminMembros(){
+  const body = document.getElementById('adminBody');
+  const membros = Object.entries(USERS).filter(([uid]) => uid !== 'USER-001');
+  let html = `
+    <div style="margin-bottom:16px">
+      <div style="font-size:13px;font-weight:700;color:#f5c518;margin-bottom:12px">👥 ${membros.length} membros cadastrados</div>
+      ${membros.map(([uid, u]) => {
+        const s = STATS[uid] || {};
+        return `<div style="background:#1a1a1a;border:1px solid #2a2a2a;border-radius:10px;padding:12px;margin-bottom:8px;display:flex;align-items:center;gap:12px">
+          <div style="width:36px;height:36px;border-radius:8px;background:${aC(uid)};color:#000;font-weight:800;font-size:14px;display:flex;align-items:center;justify-content:center;flex-shrink:0">${ini(u.nome)}</div>
+          <div style="flex:1">
+            <div style="font-size:14px;font-weight:700">${esc(u.nome)} <span style="font-size:10px;color:#666">${uid}</span></div>
+            <div style="font-size:11px;color:#888">${s.quant||0} assistidos · média ${s.media?fmt(s.media):'—'} · ${(s.pendentes||[]).length} pendentes</div>
+          </div>
+          <div style="font-size:11px;color:#666">${s.ultima_av||'—'}</div>
+        </div>`;
+      }).join('')}
+    </div>
+    <div style="border-top:1px solid #2a2a2a;padding-top:16px">
+      <div style="font-size:13px;font-weight:700;color:#46d369;margin-bottom:12px">➕ Adicionar novo membro</div>
+      <div style="display:flex;flex-direction:column;gap:10px">
+        <input id="newMemberNome" class="pm-input" placeholder="Nome (ex: João)">
+        <input id="newMemberEmail" class="pm-input" type="email" placeholder="E-mail">
+        <input id="newMemberSenha" class="pm-input" type="password" placeholder="Senha inicial">
+        <input id="newMemberLegacy" class="pm-input" placeholder="Legacy ID (ex: USER-010)">
+        <button onclick="addNewMember()" style="background:var(--green);color:#000;border:none;border-radius:8px;padding:10px;font-family:inherit;font-size:14px;font-weight:800;cursor:pointer">Criar membro</button>
+      </div>
+      <div id="newMemberMsg" style="margin-top:10px;font-size:12px;text-align:center"></div>
+    </div>`;
+  body.innerHTML = html;
+}
+
+async function addNewMember(){
+  const nome = document.getElementById('newMemberNome').value.trim();
+  const email = document.getElementById('newMemberEmail').value.trim();
+  const senha = document.getElementById('newMemberSenha').value;
+  const legacy = document.getElementById('newMemberLegacy').value.trim();
+  const msg = document.getElementById('newMemberMsg');
+
+  if(!nome||!email||!senha||!legacy){ msg.style.color='#e05555'; msg.textContent='⚠️ Preencha todos os campos.'; return; }
+  if(Object.values(USERS).some(u=>u.nome.toLowerCase()===nome.toLowerCase())){ msg.style.color='#e05555'; msg.textContent='⚠️ Já existe um membro com esse nome.'; return; }
+
+  msg.style.color='#888'; msg.textContent='⏳ Criando...';
+
+  try {
+    // Cria usuário no Auth (via Admin API — precisaria de service role, então usamos signup)
+    const { data: authData, error: authErr } = await supa.auth.admin.createUser({
+      email, password: senha, email_confirm: true
+    });
+    if(authErr) throw authErr;
+
+    const auth_id = authData.user.id;
+
+    // Insere na tabela usuarios
+    const { error: dbErr } = await supa.from('usuarios').insert({
+      nome, email, legacy_id: legacy, auth_id
+    });
+    if(dbErr) throw dbErr;
+
+    msg.style.color='#46d369';
+    msg.textContent=`✅ Membro "${nome}" criado com sucesso! Atualize o STATIC no código.`;
+
+    // Atualiza localmente
+    USERS[legacy] = { nome };
+    STATS[legacy] = { nome, in_ranking:true, quant:0, media:null, pendentes:[], nao_quer:[], inseridos:[], by_year:{}, by_genre:{}, genre_avg:{} };
+
+  } catch(e) {
+    msg.style.color='#e05555';
+    msg.textContent='❌ Erro: ' + e.message;
+  }
+}
+
+// ── ABA: SEM AVALIAÇÃO ──
+function renderAdminSemAvaliacao(){
+  const body = document.getElementById('adminBody');
+  const membros = Object.keys(USERS).filter(uid => uid !== 'USER-001' && STATS[uid]?.in_ranking);
+
+  // Filmes que nenhum membro avaliou
+  const semNinguem = FILMES.filter(f => {
+    const notas = Object.values(f.avaliacoes||{}).filter(a => a.nota !== null);
+    return notas.length === 0;
+  }).sort((a,b) => a.nome.localeCompare(b.nome));
+
+  // Filmes que apenas 1 membro avaliou
+  const poucoAvaliados = FILMES.filter(f => {
+    const notas = Object.values(f.avaliacoes||{}).filter(a => a.nota !== null);
+    return notas.length === 1;
+  }).sort((a,b) => a.nome.localeCompare(b.nome));
+
+  let html = `
+    <div style="font-size:13px;font-weight:700;color:#e05555;margin-bottom:12px">🎬 ${semNinguem.length} filmes sem nenhuma avaliação</div>
+    ${semNinguem.slice(0,30).map(f=>`<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid #1a1a1a">
+      <div>
+        <div style="font-size:13px;font-weight:600">${esc(f.nome)}</div>
+        <div style="font-size:10px;color:#888">${f.ano} · por ${esc(USERS[f.inserido_por]?.nome||f.inserido_por)}</div>
+      </div>
+      <button onclick="closeAdmin();openFilme('${f.id}')" style="background:#2a2a2a;color:#fff;border:none;border-radius:6px;padding:4px 10px;cursor:pointer;font-size:11px">Ver</button>
+    </div>`).join('')}
+    ${semNinguem.length > 30 ? `<div style="color:#888;font-size:12px;text-align:center;padding:8px">...e mais ${semNinguem.length-30}</div>` : ''}
+
+    <div style="font-size:13px;font-weight:700;color:#f5c518;margin-top:20px;margin-bottom:12px">⭐ ${poucoAvaliados.length} filmes com apenas 1 avaliação</div>
+    ${poucoAvaliados.slice(0,20).map(f=>{
+      const av = Object.entries(f.avaliacoes).find(([,a])=>a.nota!==null);
+      return `<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid #1a1a1a">
+        <div>
+          <div style="font-size:13px;font-weight:600">${esc(f.nome)}</div>
+          <div style="font-size:10px;color:#888">${f.ano} · avaliado por ${av?esc(USERS[av[0]]?.nome||av[0]):'?'} (${av?fmt(av[1].nota):'?'})</div>
+        </div>
+        <button onclick="closeAdmin();openFilme('${f.id}')" style="background:#2a2a2a;color:#fff;border:none;border-radius:6px;padding:4px 10px;cursor:pointer;font-size:11px">Ver</button>
+      </div>`;
+    }).join('')}`;
+
+  body.innerHTML = html;
+}
+
+// ── ABA: STATS ──
+function renderAdminStats(){
+  const body = document.getElementById('adminBody');
+  const gs = RAW.global_stats || {};
+  const totalAv = FILMES.reduce((s,f)=>s+f.num_avaliacoes,0);
+  const semAv = FILMES.filter(f=>f.num_avaliacoes===0).length;
+  const membrosAtivos = Object.values(STATS).filter(s=>s.in_ranking && s.quant > 0);
+
+  // FCM tokens count
+  supa.from('fcm_tokens').select('email', {count:'exact'}).then(({count}) => {
+    document.getElementById('fcmCount').textContent = count || '?';
+  });
+
+  body.innerHTML = `
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:20px">
+      ${[
+        ['🎬 Total de filmes', FILMES.length, '#46d369'],
+        ['⭐ Total de avaliações', totalAv, '#f5c518'],
+        ['😶 Filmes sem avaliação', semAv, '#e05555'],
+        ['👥 Membros ativos', membrosAtivos.length + '/' + Object.keys(STATS).filter(u=>u!=='USER-001').length, '#4fc3f7'],
+        ['📱 Dispositivos com push', '<span id="fcmCount">...</span>', '#ce93d8'],
+        ['📅 Dias de catálogo', gs.total_catalog_days || '—', '#80cbc4'],
+      ].map(([label, val, color]) => `
+        <div style="background:#1a1a1a;border:1px solid #2a2a2a;border-radius:10px;padding:14px;text-align:center">
+          <div style="font-size:22px;font-weight:900;color:${color}">${val}</div>
+          <div style="font-size:11px;color:#888;margin-top:4px">${label}</div>
+        </div>`).join('')}
+    </div>
+    <div style="font-size:13px;font-weight:700;color:#fff;margin-bottom:10px">📊 Por membro</div>
+    <table style="width:100%;border-collapse:collapse;font-size:12px">
+      <thead><tr style="color:#888;border-bottom:1px solid #2a2a2a">
+        <th style="text-align:left;padding:6px">Membro</th>
+        <th style="text-align:center;padding:6px">Assistidos</th>
+        <th style="text-align:center;padding:6px">Média</th>
+        <th style="text-align:center;padding:6px">Pendentes</th>
+        <th style="text-align:center;padding:6px">Não quer</th>
+        <th style="text-align:center;padding:6px">Inseridos</th>
+      </tr></thead>
+      <tbody>
+      ${Object.entries(STATS).filter(([uid])=>uid!=='USER-001'&&STATS[uid].in_ranking).sort(([,a],[,b])=>b.quant-a.quant).map(([uid,s])=>`
+        <tr style="border-bottom:1px solid #1a1a1a">
+          <td style="padding:8px;font-weight:600">${esc(s.nome)}</td>
+          <td style="text-align:center;color:#46d369">${s.quant||0}</td>
+          <td style="text-align:center;color:${s.media?nC(s.media):'#888'}">${s.media?fmt(s.media):'—'}</td>
+          <td style="text-align:center;color:#888">${(s.pendentes||[]).length}</td>
+          <td style="text-align:center;color:#e05555">${(s.nao_quer||[]).length}</td>
+          <td style="text-align:center;color:#888">${(s.inseridos||[]).length}</td>
+        </tr>`).join('')}
+      </tbody>
+    </table>`;
+}
+
+// ── ABA: NOTIFICAÇÃO MANUAL ──
+function renderAdminNotificacao(){
+  const body = document.getElementById('adminBody');
+  body.innerHTML = `
+    <div style="font-size:13px;color:#888;margin-bottom:16px">Envie uma notificação push para todos os membros com o app instalado.</div>
+    <div style="display:flex;flex-direction:column;gap:12px">
+      <div>
+        <label style="font-size:12px;color:#888;font-weight:700;display:block;margin-bottom:6px">TÍTULO</label>
+        <input id="notifTitulo" class="pm-input" placeholder="Ex: 🎬 CineList" value="🎬 CineList">
+      </div>
+      <div>
+        <label style="font-size:12px;color:#888;font-weight:700;display:block;margin-bottom:6px">MENSAGEM</label>
+        <input id="notifBody" class="pm-input" placeholder="Ex: Novo filme adicionado!">
+      </div>
+      <button onclick="enviarNotificacaoManual()" style="background:var(--red);color:#fff;border:none;border-radius:8px;padding:12px;font-family:inherit;font-size:14px;font-weight:800;cursor:pointer">🔔 Enviar para todos</button>
+      <div id="notifMsg" style="font-size:12px;text-align:center;color:#888"></div>
+    </div>`;
+}
+
+async function enviarNotificacaoManual(){
+  const titulo = document.getElementById('notifTitulo').value.trim();
+  const body = document.getElementById('notifBody').value.trim();
+  const msg = document.getElementById('notifMsg');
+  if(!titulo||!body){ msg.style.color='#e05555'; msg.textContent='⚠️ Preencha título e mensagem.'; return; }
+
+  msg.style.color='#888'; msg.textContent='⏳ Enviando...';
+  try {
+    const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbyOBpxJ2PQOxMsOQyVjcxw4Y8F1_MprYHTSqoGOc5-ErqZHajCEKLC_fVCHmTJUi4Rr/exec';
+    // Use GET with params to avoid CORS issues with Apps Script
+    const params = new URLSearchParams({ titulo, body, manual: '1' });
+    await fetch(APPS_SCRIPT_URL + '?' + params.toString(), {
+      method: 'GET',
+      mode: 'no-cors'
+    });
+    msg.style.color='#46d369'; msg.textContent='✅ Notificação enviada!';
+  } catch(e) {
+    msg.style.color='#e05555'; msg.textContent='❌ Erro: ' + e.message;
+  }
+}
+
+// ===== MOBILE FILME MODAL =====
+function openMobileFilmeModal(id){
+  const f=FM[id]; if(!f) return;
+  document.getElementById('mfmTitle').textContent=f.nome;
+  document.getElementById('mfmContent').innerHTML=filmDetailHTML(id);
+  const _fm=FM[id]; if(_fm) setTimeout(()=>loadExtRatings(id,_fm.nome,_fm.ano),0);
+  document.getElementById('mobileFilmeModal').classList.add('open');
+  document.getElementById('mobileFilmeModal').scrollTop=0;
+  document.body.style.overflow='hidden';
+}
+function closeMobileFilmeModal(){
+  document.getElementById('mobileFilmeModal').classList.remove('open');
+  document.body.style.overflow='';
+}
+window.addEventListener('popstate',()=>{
+  if(document.getElementById('mobileFilmeModal').classList.contains('open')) closeMobileFilmeModal();
 });
 
-// SEM CACHE — sempre busca a versão mais recente da rede
-const CACHE = 'cinelist-v3';
 
-self.addEventListener('install', e => {
-  self.skipWaiting(); // Ativa imediatamente sem esperar fechar o app
-});
+// Drag-to-scroll para as filas de posters
+(function(){
+  let isDown=false, slider=null, startX=0, scrollLeft=0;
+  document.addEventListener('mousedown',e=>{
+    const t=e.target.closest('.row-track');
+    if(!t) return;
+    isDown=true; slider=t;
+    startX=e.pageX-t.offsetLeft;
+    scrollLeft=t.scrollLeft;
+    t.style.cursor='grabbing';
+  });
+  document.addEventListener('mouseup',()=>{ isDown=false; if(slider){slider.style.cursor='grab';slider=null;} });
+  document.addEventListener('mouseleave',()=>{ isDown=false; if(slider){slider.style.cursor='grab';slider=null;} });
+  document.addEventListener('mousemove',e=>{
+    if(!isDown||!slider) return;
+    e.preventDefault();
+    const x=e.pageX-slider.offsetLeft;
+    slider.scrollLeft=scrollLeft-(x-startX)*1.2;
+  });
+})();
+</script>
 
-self.addEventListener('activate', e => {
-  e.waitUntil(
-    caches.keys().then(keys =>
-      Promise.all(keys.map(k => caches.delete(k))) // Limpa TODO o cache antigo
-    ).then(() => self.clients.claim()) // Toma controle imediatamente
-  );
-});
+<!-- AUTH SCREEN -->
+<div class="auth-screen" id="authScreen">
+  <div class="auth-box" id="authBox">
+    <div class="auth-logo"><svg width="160" height="48" viewBox="0 0 160 48" xmlns="http://www.w3.org/2000/svg">
+  <rect x="2" y="20" width="36" height="26" rx="2" fill="none" stroke="#fff" stroke-width="1.6"/>
+  <line x1="8" y1="29" x2="33" y2="29" stroke="#fff" stroke-width="0.7" stroke-opacity="0.35"/>
+  <line x1="8" y1="36" x2="33" y2="36" stroke="#fff" stroke-width="0.7" stroke-opacity="0.35"/>
+  <g transform="rotate(-26, 2, 20)">
+    <rect x="2" y="11" width="36" height="10" rx="2" fill="#111" stroke="#fff" stroke-width="1.6"/>
+    <rect x="1"  y="11" width="5" height="10" fill="#fff" fill-opacity="0.72"/>
+    <rect x="10" y="11" width="5" height="10" fill="#fff" fill-opacity="0.72"/>
+    <rect x="19" y="11" width="5" height="10" fill="#fff" fill-opacity="0.72"/>
+    <rect x="28" y="11" width="5" height="10" fill="#fff" fill-opacity="0.72"/>
+  </g>
+  <circle cx="2" cy="20" r="2.2" fill="#fff" fill-opacity="0.55"/>
+  <text x="46" y="35" font-family="Georgia,serif" font-size="28" font-weight="400" fill="#fff" letter-spacing="0.4">Cine<tspan font-style="italic" fill="#ccc">List</tspan></text>
+</svg></div>
+    <div class="auth-tagline">O catálogo de filmes da tropa 🎬</div>
+    <div id="authError" style="display:none;background:rgba(229,9,20,.15);border:1px solid var(--red);color:#ff6b6b;padding:10px 14px;border-radius:8px;font-size:13px;margin-bottom:12px;text-align:left"></div>
+    <input class="form-input" id="loginEmail" type="email" placeholder="Seu e-mail" style="margin-bottom:10px;display:block;width:100%;background:#2a2a2a;border:1px solid #333;color:#fff;padding:12px 14px;border-radius:8px;font-family:inherit;font-size:14px;outline:none">
+    <input class="form-input" id="loginSenha" type="password" placeholder="Senha" style="margin-bottom:16px;display:block;width:100%;background:#2a2a2a;border:1px solid #333;color:#fff;padding:12px 14px;border-radius:8px;font-family:inherit;font-size:14px;outline:none" onkeydown="if(event.key==='Enter')loginEmailSenha()">
+    <button class="auth-btn auth-btn-google" onclick="loginEmailSenha()" style="justify-content:center;font-size:15px;font-weight:700">
+      Entrar
+    </button>
+    <div style="margin-top:12px">
+    <button id="biometricBtn" onclick="loginBiometrico()" style="display:none;width:100%;background:#2a2a2a;border:1px solid #444;color:#fff;padding:12px;border-radius:10px;font-family:inherit;font-size:14px;font-weight:600;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px">
+      <span style="font-size:18px">🔐</span> Entrar com biometria
+    </button>
+  </div>
+    <div class="auth-footer">Apenas membros cadastrados têm acesso.</div>
+  </div>
+</div>
 
-self.addEventListener('fetch', e => {
-  // Nunca serve cache — sempre vai para a rede
-  // Só ignora requisições externas (Supabase, Firebase)
-  if (
-    e.request.url.includes('supabase.co') ||
-    e.request.url.includes('gstatic.com') ||
-    e.request.url.includes('firebase') ||
-    e.request.url.includes('tmdb.org')
-  ) return;
 
-  e.respondWith(
-    fetch(e.request).catch(() => caches.match(e.request))
-  );
-});
+<!-- PROFILE MODAL -->
+<div class="profile-overlay" id="profileModal" onclick="if(event.target===this)closeProfile()">
+  <div class="profile-modal">
+    <div class="pm-header">
+      <div class="pm-title">Meu Perfil</div>
+      <button class="pm-close" onclick="closeProfile()">×</button>
+    </div>
+    <div class="pm-body">
+      <div class="pm-field" style="display:flex;align-items:center;gap:16px">
+        <div id="pmAvatarPreview" style="width:64px;height:64px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:24px;font-weight:800;flex-shrink:0;cursor:pointer;overflow:hidden;border:2px solid #333" onclick="document.getElementById('pmPhotoInput').click()">
+        </div>
+        <div>
+          <div style="font-size:13px;font-weight:600;margin-bottom:4px">Foto de Perfil</div>
+          <div style="font-size:11px;color:#888;margin-bottom:8px">Clique no avatar para trocar</div>
+          <input type="file" id="pmPhotoInput" accept="image/*" style="display:none" onchange="handlePhotoUpload(event)">
+          <button onclick="document.getElementById('pmPhotoInput').click()" style="background:#2a2a2a;border:1px solid #444;color:#fff;padding:6px 12px;border-radius:6px;cursor:pointer;font-size:12px">📷 Escolher foto</button>
+          <button onclick="removePhoto()" style="background:transparent;border:none;color:#888;padding:6px 8px;cursor:pointer;font-size:12px">✕ Remover</button>
+        </div>
+      </div>
+      <div class="pm-field">
+        <label class="pm-label">Apelido</label>
+        <input class="pm-input" id="pmApelido" placeholder="Como quer ser chamado?">
+      </div>
+      <div class="pm-field">
+        <label class="pm-label">🎂 Data de Aniversário</label>
+        <input class="pm-input" id="pmBday" type="date">
+      </div>
+      <div class="pm-field">
+        <label class="pm-label">🎬 Filme favorito</label>
+        <input class="pm-input" id="pmFavFilme" placeholder="Fora do catálogo...">
+      </div>
+      <div class="pm-field">
+        <label class="pm-label">📝 Bio</label>
+        <input class="pm-input" id="pmBio" placeholder="Uma frase sobre seu gosto...">
+      </div>
+      <div class="pm-field">
+        <label class="pm-label">🎨 Cor do avatar</label>
+        <div class="color-picker" id="colorPicker"></div>
+      </div>
+    </div>
+    <div class="pm-footer">
+      <button class="pm-cancel" onclick="closeProfile()">Cancelar</button>
+      <button class="pm-save" onclick="saveProfile()">Salvar</button>
+    </div>
+  </div>
+</div>
+
+<!-- CHANGE PASSWORD MODAL -->
+<div class="profile-overlay" id="pwModal" onclick="if(event.target===this)closePwModal()">
+  <div class="profile-modal">
+    <div class="pm-header">
+      <div class="pm-title">Alterar Senha</div>
+      <button class="pm-close" onclick="closePwModal()">×</button>
+    </div>
+    <div class="pm-body">
+      <div id="pwError" style="display:none;background:rgba(229,9,20,.15);border:1px solid #e50914;color:#ff6b6b;padding:10px 14px;border-radius:8px;font-size:13px;margin-bottom:12px"></div>
+      <div id="pwSuccess" style="display:none;background:rgba(70,211,105,.1);border:1px solid #46d369;color:#46d369;padding:10px 14px;border-radius:8px;font-size:13px;margin-bottom:12px"></div>
+      <div class="pm-field">
+        <label class="pm-label">Nova Senha</label>
+        <input class="pm-input" id="pwNova" type="password" placeholder="Mínimo 6 caracteres">
+      </div>
+      <div class="pm-field">
+        <label class="pm-label">Confirmar Nova Senha</label>
+        <input class="pm-input" id="pwConfirm" type="password" placeholder="Repita a senha">
+      </div>
+    </div>
+    <div class="pm-footer">
+      <button class="pm-cancel" onclick="closePwModal()">Cancelar</button>
+      <button class="pm-save" id="pwSaveBtn" onclick="savePassword()">Salvar</button>
+    </div>
+  </div>
+</div>
+
+<!-- ADMIN MODAL -->
+<div class="profile-overlay" id="adminModal" onclick="if(event.target===this)closeAdmin()">
+  <div class="profile-modal" style="max-width:720px;width:95%">
+    <div class="pm-header">
+      <div class="pm-title">🛠️ Painel Admin</div>
+      <button class="pm-close" onclick="closeAdmin()">×</button>
+    </div>
+    <div style="display:flex;gap:6px;padding:0 20px 12px;flex-wrap:wrap">
+      <button onclick="adminTab('duplicatas')" id="atab-duplicatas" style="flex:1;min-width:100px;padding:7px;border-radius:8px;border:none;cursor:pointer;font-size:12px;font-weight:700;font-family:inherit;background:#2a2a2a;color:#fff">🔁 Duplicatas</button>
+      <button onclick="adminTab('membros')" id="atab-membros" style="flex:1;min-width:100px;padding:7px;border-radius:8px;border:none;cursor:pointer;font-size:12px;font-weight:700;font-family:inherit;background:#2a2a2a;color:#fff">👥 Membros</button>
+      <button onclick="adminTab('sem_avaliacao')" id="atab-sem_avaliacao" style="flex:1;min-width:100px;padding:7px;border-radius:8px;border:none;cursor:pointer;font-size:12px;font-weight:700;font-family:inherit;background:#2a2a2a;color:#fff">⭐ Sem avaliação</button>
+      <button onclick="adminTab('stats')" id="atab-stats" style="flex:1;min-width:100px;padding:7px;border-radius:8px;border:none;cursor:pointer;font-size:12px;font-weight:700;font-family:inherit;background:#2a2a2a;color:#fff">📊 Stats</button>
+      <button onclick="adminTab('notificacao')" id="atab-notificacao" style="flex:1;min-width:100px;padding:7px;border-radius:8px;border:none;cursor:pointer;font-size:12px;font-weight:700;font-family:inherit;background:#2a2a2a;color:#fff">🔔 Notificação</button>
+    </div>
+    <div class="pm-body" id="adminBody" style="max-height:65vh;overflow-y:auto"></div>
+    <div class="pm-footer"><button class="pm-cancel" onclick="closeAdmin()">Fechar</button></div>
+  </div>
+</div>
+
+<!-- MOBILE FILME MODAL -->
+<div id="mobileFilmeModal">
+  <div class="mfm-close">
+    <button class="mfm-close-btn" onclick="closeMobileFilmeModal()">‹</button>
+    <div class="mfm-close-title" id="mfmTitle"></div>
+  </div>
+  <div id="mfmContent"></div>
+</div>
+
+
+
+<!-- MODAL: MAIS INFO -->
+<div class="profile-overlay" id="maisInfoModal" onclick="if(event.target===this)closeBSheet('maisInfo')">
+  <div class="profile-modal" style="max-width:480px">
+    <div class="pm-header">
+      <div class="pm-title">ℹ️ Mais Informações</div>
+      <button class="pm-close" onclick="closeBSheet('maisInfo')">×</button>
+    </div>
+    <div class="pm-body" id="maisInfoBody" style="padding:16px;max-height:70vh;overflow-y:auto"></div>
+  </div>
+</div>
+<!-- MODAL: ONDE ASSISTIR -->
+<div class="profile-overlay" id="ondeModal" onclick="if(event.target===this)closeBSheet('onde')">
+  <div class="profile-modal" style="max-width:420px">
+    <div class="pm-header">
+      <div class="pm-title">📺 Onde Assistir</div>
+      <button class="pm-close" onclick="closeBSheet('onde')">×</button>
+    </div>
+    <div class="pm-body" id="ondeBody" style="padding:16px"></div>
+  </div>
+</div>
+
+</body>
+</html>
