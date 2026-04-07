@@ -1002,7 +1002,6 @@ function filmDetailHTML(id){
   const next=idx<navList.length-1?navList[idx+1].id:null;
   const myAv=CU?f.avaliacoes[CU]:null;
   const isAss=myAv&&myAv.nota!==null;
-  const myNaoQuer=CU && (STATS[CU]?.nao_quer||[]).includes(f.id);
   const avList=Object.entries(f.avaliacoes).filter(([,av])=>av.nota!==null)
     .sort(([,a],[,b])=>b.nota-a.nota);
   const trailerQ=encodeURIComponent(f.nome+' trailer '+f.ano);
@@ -1032,16 +1031,10 @@ function filmDetailHTML(id){
       <div class="dp-cats">${f.categorias.map(c=>`<span class="dp-cat">${c}</span>`).join('')}</div>
       <div class="dp-desc">${esc(f.sinopse||'')}</div>
       <div class="dp-actions">
-        ${myNaoQuer
-          ? `<div class="dp-btn dp-btn-red" onclick="mudarDeOpiniao('${f.id}')" style="background:#c0392b">
-              <span class="dp-btn-icon">🔄</span>
-              <span class="dp-btn-label">Mudar de opinião</span>
-            </div>`
-          : `<div class="dp-btn ${isAss?'dp-btn-green':'dp-btn-grey'}" onclick="openRate('${f.id}')">
-              <span class="dp-btn-icon">${isAss?'✅':'⭐'}</span>
-              <span class="dp-btn-label" style="color:${isAss?'#000':'#fff'}">${isAss?fmt(myAv.nota):'Avaliar'}</span>
-            </div>`
-        }
+        <div class="dp-btn ${isAss?'dp-btn-green':'dp-btn-grey'}" onclick="openRate('${f.id}')">
+          <span class="dp-btn-icon">${isAss?'✅':'⭐'}</span>
+          <span class="dp-btn-label" style="color:${isAss?'#000':'#fff'}">${isAss?`${fmt(myAv.nota)}`:'Avaliar'}</span>
+        </div>
         <a href="https://www.youtube.com/results?search_query=${trailerQ}" target="_blank" class="dp-btn dp-btn-grey" style="text-decoration:none">
           <span class="dp-btn-icon">🎬</span><span class="dp-btn-label">Trailer</span>
         </a>
@@ -1069,9 +1062,7 @@ function filmDetailHTML(id){
         <span>Cadastro: <strong style="color:#fff">${f.data_cadastro ? (f.data_cadastro.includes('-') ? f.data_cadastro.split('-').reverse().join('/') : f.data_cadastro) : '—'}</strong></span>
       </div>
       ${(()=>{
-        const naoQ = Object.entries(STATS)
-          .filter(([uid,s]) => (s.nao_quer||[]).includes(f.id) && uid !== CU)
-          .map(([uid])=>USERS[uid]?.nome||uid);
+        const naoQ = Object.entries(STATS).filter(([uid,s])=>(s.nao_quer||[]).includes(f.id)).map(([uid])=> uid===CU ? (USERS[uid]?.nome||uid)+' (você)' : USERS[uid]?.nome||uid);
         return naoQ.length ? `<div class="dp-footer" style="margin-top:4px;color:#e05555"><span>❌ Não quer assistir: <strong style="color:#e05555">${naoQ.join(', ')}</strong></span></div>` : '';
       })()}
     </div>
@@ -1159,20 +1150,38 @@ function openPendPanel(id){
 }
 
 // ── AVALIAÇÕES ──
-function renderAvaliacoes(){
+var avTab = 'avaliadas'; // 'avaliadas' | 'nao_quer'
+
+function renderAvaliacoes(tab){
   if(!CU){showNeedLogin('viewAvaliacoes');return;}
-  let list=FILMES.filter(f=>f.avaliacoes[CU]&&f.avaliacoes[CU].nota!==null);
-  if(searchQ) list=list.filter(f=>f.nome.toLowerCase().includes(searchQ));
-  list.sort((a,b)=>b.avaliacoes[CU].nota-a.avaliacoes[CU].nota);
-  navList=list;
-  const sel=list[0]?.id;
-  
+  if(tab) avTab = tab;
+
+  const listAv = FILMES.filter(f=>f.avaliacoes[CU]&&f.avaliacoes[CU].nota!==null);
+  const naoQuerIds = new Set(STATS[CU]?.nao_quer||[]);
+  const listNQ = FILMES.filter(f => naoQuerIds.has(f.id));
+
+  let list = avTab === 'nao_quer' ? listNQ : listAv;
+  if(searchQ) list = list.filter(f=>f.nome.toLowerCase().includes(searchQ));
+  if(avTab === 'nao_quer') list.sort((a,b)=>a.nome.localeCompare(b.nome));
+  else list.sort((a,b)=>b.avaliacoes[CU].nota-a.avaliacoes[CU].nota);
+  navList = list;
+  const sel = list[0]?.id;
+
   document.getElementById('viewAvaliacoes').innerHTML=`
     <div class="detail-layout">
       <div class="detail-list">
         <div class="tpage" style="padding-bottom:0">
-          <div class="tpage-header"><div class="tpage-title">Minhas Avaliações <span style="color:var(--muted);font-size:13px;font-weight:400">${list.length}</span></div></div>
+          <div class="tpage-header"><div class="tpage-title">Minhas Avaliações</div></div>
+          <div style="display:flex;gap:0;border-bottom:1px solid var(--border);margin-bottom:12px">
+            <button onclick="renderAvaliacoes('avaliadas')" style="flex:1;padding:8px;border:none;background:none;font-family:inherit;font-size:13px;font-weight:700;cursor:pointer;color:${avTab==='avaliadas'?'#fff':'var(--muted)'};border-bottom:2px solid ${avTab==='avaliadas'?'var(--red)':'transparent'};transition:all .2s">
+              ⭐ Avaliadas <span style="color:var(--muted);font-weight:400">${listAv.length}</span>
+            </button>
+            <button onclick="renderAvaliacoes('nao_quer')" style="flex:1;padding:8px;border:none;background:none;font-family:inherit;font-size:13px;font-weight:700;cursor:pointer;color:${avTab==='nao_quer'?'#fff':'var(--muted)'};border-bottom:2px solid ${avTab==='nao_quer'?'var(--red)':'transparent'};transition:all .2s">
+              ❌ Não quero <span style="color:var(--muted);font-weight:400">${listNQ.length}</span>
+            </button>
+          </div>
         </div>
+        ${avTab === 'avaliadas' ? `
         <table>
           <thead><tr><th>Filme</th><th style="width:70px">Nota ↓</th><th>Data</th></tr></thead>
           <tbody>
@@ -1185,7 +1194,17 @@ function renderAvaliacoes(){
             </tr>`;
           }).join('')}
           </tbody>
-        </table>
+        </table>` : `
+        <table>
+          <thead><tr><th>Filme</th><th>Ano</th><th>Ação</th></tr></thead>
+          <tbody>
+          ${list.map(f=>`<tr class="${f.id===sel?'selected':''}" onclick="openAvPanel('${f.id}')">
+              <td class="td-name">${esc(f.nome)}</td>
+              <td class="td-muted">${f.ano}</td>
+              <td><span onclick="event.stopPropagation();mudarDeOpiniao('${f.id}')" style="color:#e05555;font-size:11px;cursor:pointer;font-weight:700">🔄 Mudar</span></td>
+            </tr>`).join('')}
+          </tbody>
+        </table>`}
       </div>
       <div class="detail-panel" id="avDetailPanel">${sel?filmDetailHTML(sel):'<div class="dp-empty">Selecione um filme</div>'}</div>
     </div>
@@ -1281,52 +1300,6 @@ function renderRanking_old_unused(){
 
 
 // ── RATE ──
-
-// ═══════════════════════════════════════════
-// MUDAR DE OPINIÃO — desfaz "não quero assistir" e abre modal de avaliação
-// ═══════════════════════════════════════════
-async function mudarDeOpiniao(id){
-  if(!CU) return;
-  const f = FM[id];
-  if(!f) return;
-
-  // Remove do nao_quer localmente
-  const s = STATS[CU];
-  if(s && s.nao_quer){
-    s.nao_quer = s.nao_quer.filter(x => x !== id);
-  }
-
-  // Remove do Supabase (atualiza avaliação para vai_assistir=Sim, nota=null)
-  try {
-    const { error } = await supa.from('avaliacoes')
-      .upsert({
-        filme_id: id,
-        usuario_id: CU,
-        vai_assistir: 'Sim',
-        nota: null,
-        comentario: null,
-        data_avaliacao: null
-      }, { onConflict: 'filme_id,usuario_id' });
-
-    if(error) throw error;
-
-    // Atualiza em memória
-    if(f.avaliacoes[CU]) {
-      f.avaliacoes[CU] = { nota: null, vai: 'Sim', data: '', comentario: '' };
-    } else {
-      f.avaliacoes[CU] = { nota: null, vai: 'Sim', data: '', comentario: '' };
-    }
-
-    showToast('✅ Removido dos "não quero"! Agora avalie o filme:');
-
-    // Abre o modal de avaliação já com Sim selecionado
-    setTimeout(() => openRate(id), 500);
-
-  } catch(e) {
-    showToast('❌ Erro: ' + e.message);
-  }
-}
-
 function openRate(id){
   if(!CU){alert('Selecione seu perfil primeiro!');return;}
   rateFilmeId=id;
