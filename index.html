@@ -2456,10 +2456,52 @@ function loadProfiles(){
     const s = localStorage.getItem('cinelist_profiles');
     if(s) profileData = JSON.parse(s);
   } catch(e) {}
+  // Carrega do Supabase em background
+  loadProfilesFromSupabase();
 }
 
-function saveProfiles(){
+async function loadProfilesFromSupabase(){
+  try {
+    const { data, error } = await supa.from('perfis').select('*');
+    if(error || !data) return;
+    data.forEach(p => {
+      profileData[p.legacy_id] = {
+        apelido: p.apelido || '',
+        bday: p.bday || '',
+        favFilme: p.fav_filme || '',
+        bio: p.bio || '',
+        color: p.avatar_color || '',
+        photo: p.avatar_url || null
+      };
+    });
+    try { localStorage.setItem('cinelist_profiles', JSON.stringify(profileData)); } catch(e) {}
+    updateTopbarAvatar();
+    applyUserToUI();
+  } catch(e) {
+    console.warn('Erro ao carregar perfis:', e);
+  }
+}
+
+async function saveProfiles(){
+  // Salva localmente como fallback
   try { localStorage.setItem('cinelist_profiles', JSON.stringify(profileData)); } catch(e) {}
+  // Salva no Supabase na tabela perfis
+  if(!CU) return;
+  const p = profileData[CU] || {};
+  try {
+    await supa.from('perfis').upsert({
+      legacy_id: CU,
+      apelido: p.apelido || null,
+      bday: p.bday || null,
+      fav_filme: p.favFilme || null,
+      bio: p.bio || null,
+      avatar_color: p.color || null,
+      avatar_url: p.photo || null,
+      updated_at: new Date().toISOString()
+    }, { onConflict: 'legacy_id' });
+  } catch(e) {
+    console.warn('Erro ao salvar perfil no Supabase:', e);
+  }
 }
 
 function getProfile(uid){ return profileData[uid] || {}; }
