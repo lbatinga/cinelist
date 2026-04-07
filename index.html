@@ -724,10 +724,18 @@ const USERS = RAW.usuarios;
 const STATS = RAW.users_stats;
 // RECENT_IDS dinâmico: filmes adicionados nos últimos 10 dias
 function parseDataCadastro(f){
-  // Tenta data_ts primeiro (ISO format, mais confiável)
-  if(f.data_ts) return new Date(f.data_ts);
+  // data_ts pode ser: ISO string (novos filmes) ou Unix timestamp em segundos (filmes antigos)
+  if(f.data_ts){
+    const ts = f.data_ts;
+    if(typeof ts === 'number' || (!isNaN(ts) && !String(ts).includes('-'))){
+      // Unix timestamp em segundos — multiplica por 1000
+      return new Date(parseFloat(ts) * 1000);
+    }
+    // ISO string
+    return new Date(ts);
+  }
   if(!f.data_cadastro) return null;
-  const s = f.data_cadastro;
+  const s = String(f.data_cadastro);
   // Formato dd/mm/yyyy
   if(s.includes('/')) {
     const [d,m,y] = s.split('/');
