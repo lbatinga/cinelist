@@ -202,7 +202,7 @@ tr.selected td{background:rgba(229,9,20,.05)}
 .form-row{display:grid;grid-template-columns:1fr 1fr;gap:12px}
 
 /* ── RANKING ── */
-.rank-section{padding:20px 40px 40px}
+.rank-section{padding:20px 40px 40px;overflow-x:hidden}
 .rank-item{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:14px 18px;display:flex;align-items:center;gap:14px;cursor:pointer;transition:all .2s;margin-bottom:8px}
 .rank-item:hover{background:var(--surface2);border-color:rgba(255,255,255,.2)}
 .rank-num{font-size:22px;font-weight:900;width:36px;text-align:center;color:var(--muted2);flex-shrink:0}
@@ -365,9 +365,9 @@ tr.selected td{background:rgba(229,9,20,.05)}
   .rank-name{font-size:14px!important}
   /* Grids de 2 colunas do Ranking ficam em 1 coluna no mobile */
   .rank-two-col { grid-template-columns: 1fr !important; }
-  /* Evita corte lateral nos itens de gênero/ano */
-  .rank-two-col .rank-item { overflow:visible !important; }
-  .rank-two-col .rank-item > div:last-child { min-width:52px; }
+  /* Compacta gap e impede overflow nos itens dentro de colunas únicas */
+  .rank-two-col .rank-item { gap:8px !important; overflow:hidden !important; }
+  .rank-two-col .rank-item > div:last-child { flex-shrink:1 !important; min-width:0 !important; }
 }
 /* RTABS FADE */
 #maisInfoModal, #ondeModal { z-index: 900; }
@@ -1943,7 +1943,9 @@ function rankAnoHTML(){
                 <div style="height:100%;width:${max?Math.round(m.cnt/max*100):0}%;background:linear-gradient(90deg,var(--red),var(--yellow));border-radius:3px"></div>
               </div>
             </div>
-            <div style="font-size:20px;font-weight:900;color:var(--green);flex-shrink:0">${m.cnt}</div>
+            <div style="text-align:right;flex-shrink:0;min-width:36px">
+              <div style="font-size:16px;font-weight:900;color:var(--green)">${m.cnt}</div>
+            </div>
           </div>`;
         }).join('')}
       </div>
@@ -2052,9 +2054,9 @@ function rankGeneroHTML(){
                 <div style="height:100%;width:${Math.round(m.cnt/maxCnt*100)}%;background:linear-gradient(90deg,var(--red),var(--yellow));border-radius:3px"></div>
               </div>
             </div>
-            <div style="text-align:right;flex-shrink:0">
-              <div style="font-size:18px;font-weight:900;color:var(--green)">${m.cnt}</div>
-              ${m.avg?`<div style="font-size:10px;color:${nC(m.avg)}">média ${m.avg}</div>`:''}
+            <div style="text-align:right;flex-shrink:0;min-width:44px">
+              <div style="font-size:15px;font-weight:900;color:var(--green)">${m.cnt}</div>
+              ${m.avg?`<div style="font-size:9px;color:${nC(m.avg)};white-space:nowrap">média ${m.avg}</div>`:''}
             </div>
           </div>`;
         }).join('')}
