@@ -1577,9 +1577,12 @@ async function saveFilme(){
     const r = Math.random()*16|0, v = c=='x'?r:(r&0x3|0x8); return v.toString(16);
   });
   
+  // Usar nome oficial do TMDB se disponível, senão o que foi digitado
+  const nomeOficial = td?.titulo || nome;
+
   const filme={
     id: newId,
-    nome, 
+    nome: nomeOficial, 
     ano: parseInt(ano)||null,
     duracao_str: durStr, 
     duracao_min: durMin||null,
@@ -1605,13 +1608,30 @@ async function saveFilme(){
     
     closeModal('addModal');
     renderHome();
-    showToast(`✅ "${nome}" adicionado! Avalie agora 👇`);
+    showToast(`✅ "${nomeOficial}" adicionado! Avalie agora 👇`);
+    // Notificar grupo automaticamente
+    const nomeUsuario = USERS[CU]?.nome || 'Alguém';
+    enviarNotifFilme(nomeOficial, nomeUsuario);
     // Abrir modal de avaliação automaticamente
     setTimeout(() => openRate(data.id || newId), 300);
   }catch(e){
     showToast('❌ Erro ao salvar: '+e.message);
   }finally{
     if(btn){btn.textContent='Salvar';btn.disabled=false;}
+  }
+}
+
+async function enviarNotifFilme(nomeFilme, nomeUsuario) {
+  try {
+    const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbyOBpxJ2PQOxMsOQyVjcxw4Y8F1_MprYHTSqoGOc5-ErqZHajCEKLC_fVCHmTJUi4Rr/exec';
+    const params = new URLSearchParams({
+      titulo: '🎬 CineList — Novo Filme!',
+      body: `${nomeUsuario} adicionou "${nomeFilme}" ao catálogo`,
+      manual: '0'
+    });
+    await fetch(APPS_SCRIPT_URL + '?' + params.toString(), { method: 'GET', mode: 'no-cors' });
+  } catch(e) {
+    console.warn('Notif auto erro:', e);
   }
 }
 
