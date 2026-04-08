@@ -62,7 +62,7 @@ body{background:var(--bg);color:var(--text);font-family:'Inter',sans-serif;displ
 .ud-check{color:var(--green);font-size:14px}
 
 /* ── MAIN SCROLL ── */
-.app-scroll{flex:1;overflow-y:auto;padding-top:60px;padding-bottom:var(--safe-bottom)}
+.app-scroll{flex:1;overflow-y:auto;overflow-x:hidden;padding-top:60px;padding-bottom:var(--safe-bottom)}
 .app-scroll::-webkit-scrollbar{width:4px}
 .app-scroll::-webkit-scrollbar-thumb{background:var(--surface3);border-radius:2px}
 
@@ -365,7 +365,9 @@ tr.selected td{background:rgba(229,9,20,.05)}
   .rank-name{font-size:14px!important}
   /* Grids de 2 colunas do Ranking ficam em 1 coluna no mobile */
   .rank-two-col { grid-template-columns: 1fr !important; }
-  /* Compacta gap e impede overflow nos itens dentro de colunas únicas */
+  /* Remove coluna de medalha/posição no mobile — posição é óbvia pela ordem */
+  .rank-two-col .rank-medal { display:none !important; }
+  /* Garante que lado direito não transborde */
   .rank-two-col .rank-item { gap:8px !important; overflow:hidden !important; }
   .rank-two-col .rank-item > div:last-child { flex-shrink:1 !important; min-width:0 !important; }
 }
@@ -1935,7 +1937,7 @@ function rankAnoHTML(){
           const max=members[0].cnt||1;
           const med=i===0?'🥇':i===1?'🥈':i===2?'🥉':i+1+'.';
           return `<div class="rank-item" style="margin-bottom:6px;padding:10px 14px" onclick="openUserYearDetail('${m.uid}','${rankYear}')">
-            <div style="font-size:16px;width:32px;text-align:center;flex-shrink:0">${med}</div>
+            <div class="rank-medal" style="font-size:16px;width:32px;text-align:center;flex-shrink:0">${med}</div>
             <div class="rank-av" style="background:${aC(m.uid)};width:36px;height:36px;font-size:12px">${ini(m.nome)}</div>
             <div style="flex:1;min-width:0">
               <div style="font-size:13px;font-weight:700">${esc(m.nome)}</div>
@@ -2046,7 +2048,7 @@ function rankGeneroHTML(){
         ${genreMembers.map((m,i)=>{
           const medal=i===0?'🥇':i===1?'🥈':i===2?'🥉':i+1+'.';
           return `<div class="rank-item" style="margin-bottom:6px;padding:10px 14px">
-            <div style="font-size:16px;width:28px;text-align:center;flex-shrink:0">${medal}</div>
+            <div class="rank-medal" style="font-size:16px;width:28px;text-align:center;flex-shrink:0">${medal}</div>
             <div class="rank-av" style="background:${aC(m.uid)};width:34px;height:34px;font-size:11px">${ini(m.nome)}</div>
             <div style="flex:1;min-width:0">
               <div style="font-size:13px;font-weight:700">${esc(m.nome)}</div>
