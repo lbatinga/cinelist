@@ -1936,17 +1936,17 @@ function rankAnoHTML(){
         ${members.map((m,i)=>{
           const max=members[0].cnt||1;
           const med=i===0?'🥇':i===1?'🥈':i===2?'🥉':i+1+'.';
-          return `<div class="rank-item" style="margin-bottom:6px;padding:10px 14px" onclick="openUserYearDetail('${m.uid}','${rankYear}')">
-            <div class="rank-medal" style="font-size:16px;width:32px;text-align:center;flex-shrink:0">${med}</div>
-            <div class="rank-av" style="background:${aC(m.uid)};width:36px;height:36px;font-size:12px">${ini(m.nome)}</div>
+          return `<div class="rank-item" style="margin-bottom:6px;padding:10px 12px" onclick="openUserYearDetail('${m.uid}','${rankYear}')">
+            <div class="rank-medal" style="font-size:16px;width:28px;text-align:center;flex-shrink:0">${med}</div>
+            <div class="rank-av" style="background:${aC(m.uid)};width:34px;height:34px;font-size:12px;flex-shrink:0">${ini(m.nome)}</div>
             <div style="flex:1;min-width:0">
-              <div style="font-size:13px;font-weight:700">${esc(m.nome)}</div>
-              <div style="margin-top:4px;background:var(--surface2);border-radius:3px;overflow:hidden;height:4px">
+              <div style="display:flex;align-items:center;justify-content:space-between;gap:6px;margin-bottom:4px">
+                <div style="font-size:13px;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1">${esc(m.nome)}</div>
+                <div style="font-size:15px;font-weight:900;color:var(--green);flex-shrink:0">${m.cnt}</div>
+              </div>
+              <div style="background:var(--surface2);border-radius:3px;overflow:hidden;height:4px">
                 <div style="height:100%;width:${max?Math.round(m.cnt/max*100):0}%;background:linear-gradient(90deg,var(--red),var(--yellow));border-radius:3px"></div>
               </div>
-            </div>
-            <div style="text-align:right;flex-shrink:0;min-width:36px">
-              <div style="font-size:16px;font-weight:900;color:var(--green)">${m.cnt}</div>
             </div>
           </div>`;
         }).join('')}
@@ -2047,18 +2047,20 @@ function rankGeneroHTML(){
         <div style="font-size:14px;font-weight:700;margin-bottom:10px;color:#e5e5e5">👥 Quem mais assistiu ${rankGenre}</div>
         ${genreMembers.map((m,i)=>{
           const medal=i===0?'🥇':i===1?'🥈':i===2?'🥉':i+1+'.';
-          return `<div class="rank-item" style="margin-bottom:6px;padding:10px 14px">
+          return `<div class="rank-item" style="margin-bottom:6px;padding:10px 12px">
             <div class="rank-medal" style="font-size:16px;width:28px;text-align:center;flex-shrink:0">${medal}</div>
-            <div class="rank-av" style="background:${aC(m.uid)};width:34px;height:34px;font-size:11px">${ini(m.nome)}</div>
+            <div class="rank-av" style="background:${aC(m.uid)};width:34px;height:34px;font-size:11px;flex-shrink:0">${ini(m.nome)}</div>
             <div style="flex:1;min-width:0">
-              <div style="font-size:13px;font-weight:700">${esc(m.nome)}</div>
-              <div style="margin-top:4px;background:var(--surface2);border-radius:3px;overflow:hidden;height:4px">
+              <div style="display:flex;align-items:center;justify-content:space-between;gap:6px;margin-bottom:4px">
+                <div style="font-size:13px;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1">${esc(m.nome)}</div>
+                <div style="text-align:right;flex-shrink:0">
+                  <div style="font-size:15px;font-weight:900;color:var(--green);line-height:1">${m.cnt}</div>
+                  ${m.avg?`<div style="font-size:9px;color:${nC(m.avg)}">m ${fmt(m.avg)}</div>`:''}
+                </div>
+              </div>
+              <div style="background:var(--surface2);border-radius:3px;overflow:hidden;height:4px">
                 <div style="height:100%;width:${Math.round(m.cnt/maxCnt*100)}%;background:linear-gradient(90deg,var(--red),var(--yellow));border-radius:3px"></div>
               </div>
-            </div>
-            <div style="text-align:right;flex-shrink:0;min-width:44px">
-              <div style="font-size:15px;font-weight:900;color:var(--green)">${m.cnt}</div>
-              ${m.avg?`<div style="font-size:9px;color:${nC(m.avg)};white-space:nowrap">média ${m.avg}</div>`:''}
             </div>
           </div>`;
         }).join('')}
