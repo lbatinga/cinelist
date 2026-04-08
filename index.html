@@ -387,6 +387,7 @@ tr.selected td{background:rgba(229,9,20,.05)}
 
 .rtabs-wrap::after{content:'';position:absolute;right:0;top:0;bottom:2px;width:40px;background:linear-gradient(to right,transparent,var(--bg));pointer-events:none}
 
+@keyframes shimmer{0%{opacity:.4}50%{opacity:.9}100%{opacity:.4}}
 </style>
 <script>
 // ── FIREBASE INIT ──
@@ -1843,23 +1844,69 @@ async function openMaisInfo(id, nome, ano){
 
 // ── EXTERNAL RATINGS (IMDb + RT) ──
 const _extRC = {};
+const _extLoading = new Set();
+
 async function loadExtRatings(filmId, nome, ano){
   const el = document.getElementById('extRatings_'+filmId);
   if(!el) return;
+  // Cache hit
   if(_extRC[filmId] !== undefined){ el.innerHTML = _extRC[filmId]; return; }
+  // Já está carregando
+  if(_extLoading.has(filmId)) return;
+  _extLoading.add(filmId);
+
+  // Shimmer enquanto carrega
+  el.innerHTML = '<span style="display:inline-flex;gap:6px">'
+    + '<span style="width:58px;height:20px;background:rgba(255,255,255,.08);border-radius:6px;animation:shimmer 1.2s infinite"></span>'
+    + '<span style="width:52px;height:20px;background:rgba(255,255,255,.08);border-radius:6px;animation:shimmer 1.2s infinite 0.2s"></span>'
+    + '</span>';
+
   const OMDB = '419a30fd';
+  const timeout = (ms) => new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), ms));
+
   try {
-    const r = await fetch('https://www.omdbapi.com/?t='+encodeURIComponent(decodeURIComponent(nome))+'&y='+ano+'&apikey='+OMDB);
-    const d = await r.json();
+    let imdbId = null;
+    // 1. Tenta pegar o IMDb ID via TMDB (muito mais preciso que buscar por título)
+    try {
+      const tmdbSearch = await Promise.race([
+        fetch(`https://api.themoviedb.org/3/search/movie?api_key=${TMDB_KEY}&language=pt-BR&query=${encodeURIComponent(nome)}&year=${ano||''}`).then(r=>r.json()),
+        timeout(3000)
+      ]);
+      const tmdbId = tmdbSearch.results?.[0]?.id;
+      if(tmdbId){
+        const extIds = await Promise.race([
+          fetch(`https://api.themoviedb.org/3/movie/${tmdbId}/external_ids?api_key=${TMDB_KEY}`).then(r=>r.json()),
+          timeout(3000)
+        ]);
+        imdbId = extIds.imdb_id || null;
+      }
+    } catch(e){}
+
+    // 2. Busca na OMDB — por IMDb ID se disponível, senão por título
+    const omdbUrl = imdbId
+      ? `https://www.omdbapi.com/?i=${imdbId}&apikey=${OMDB}`
+      : `https://www.omdbapi.com/?t=${encodeURIComponent(decodeURIComponent(nome))}&y=${ano}&apikey=${OMDB}`;
+
+    const d = await Promise.race([
+      fetch(omdbUrl).then(r=>r.json()),
+      timeout(4000)
+    ]);
+
     if(d.Response!=='True'){ el.innerHTML=''; _extRC[filmId]=''; return; }
+
     const imdb = d.imdbRating!=='N/A' ? d.imdbRating : null;
     const rt = d.Ratings?.find(r=>r.Source==='Rotten Tomatoes')?.Value||null;
     let html = '';
-    if(imdb) html += '<span style="background:#f5c518;color:#000;font-size:11px;font-weight:800;padding:3px 8px;border-radius:6px;display:inline-flex;align-items:center;gap:3px">IMDb '+imdb+'</span>';
+    if(imdb) html += '<span style="background:#f5c518;color:#000;font-size:11px;font-weight:800;padding:3px 8px;border-radius:6px;display:inline-flex;align-items:center;gap:3px">⭐ IMDb '+imdb+'</span>';
     if(rt){ const pct=parseInt(rt); const col=pct>=75?'#46d369':pct>=60?'#f5c518':'#e05555'; html += '<span style="background:'+col+';color:#000;font-size:11px;font-weight:800;padding:3px 8px;border-radius:6px">🍅 '+rt+'</span>'; }
     _extRC[filmId] = html;
     el.innerHTML = html;
-  } catch(e){ el.innerHTML=''; }
+  } catch(e){
+    el.innerHTML='';
+    _extRC[filmId]='';
+  } finally {
+    _extLoading.delete(filmId);
+  }
 }
 
 // INIT — registra Service Worker imediatamente para PWA funcionar
