@@ -363,9 +363,12 @@ tr.selected td{background:rgba(229,9,20,.05)}
   .rstat-l{font-size:8px!important}
   .rank-meta{font-size:10px!important}
   .rank-name{font-size:14px!important}
+  /* Grids de 2 colunas do Ranking ficam em 1 coluna no mobile */
+  .rank-two-col { grid-template-columns: 1fr !important; }
 }
 /* RTABS FADE */
-.rtabs-wrap{position:relative;overflow:hidden}
+#maisInfoModal, #ondeModal { z-index: 900; }
+
 .rtabs-wrap::after{content:'';position:absolute;right:0;top:0;bottom:2px;width:40px;background:linear-gradient(to right,transparent,var(--bg));pointer-events:none}
 
 </style>
@@ -1914,7 +1917,7 @@ function rankAnoHTML(){
         ${anos.map(a=>`<option value="${a}" ${a===rankYear?'selected':''}>${a}</option>`).join('')}
       </select>
     </div>
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px" class="rank-two-col">
       <div>
         <div style="font-size:14px;font-weight:700;margin-bottom:10px;color:#e5e5e5">👥 Membros — filmes avaliados em ${rankYear}</div>
         ${members.map((m,i)=>{
@@ -2024,7 +2027,7 @@ function rankGeneroHTML(){
         ${genres.map(g=>`<option value="${esc(g)}" ${g===rankGenre?'selected':''}>${g}</option>`).join('')}
       </select>
     </div>
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px" class="rank-two-col">
       <div>
         <div style="font-size:14px;font-weight:700;margin-bottom:10px;color:#e5e5e5">👥 Quem mais assistiu ${rankGenre}</div>
         ${genreMembers.map((m,i)=>{
@@ -2133,7 +2136,7 @@ function rankStatsHTML(){
       </div>
 
       <!-- Destaques positivos e negativos -->
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px" class="rank-two-col">
         <div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:16px">
           <div style="font-size:13px;font-weight:700;margin-bottom:14px;display:flex;align-items:center;gap:6px">🏅 Destaques positivos</div>
           ${[
@@ -2193,7 +2196,7 @@ function rankStatsHTML(){
       </div>
 
       <!-- Gêneros + Quadro geral -->
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px" class="rank-two-col">
         <div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:16px">
           <div style="font-size:13px;font-weight:700;margin-bottom:12px">🎭 Gêneros mais assistidos</div>
           ${Object.entries(gs.genre_counts).sort((a,b)=>b[1]-a[1]).slice(0,8).map(([g,n])=>{
@@ -2250,7 +2253,7 @@ function rankStatsHTML(){
         </div>
 
         ${personal ? `
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px" class="rank-two-col">
           <div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:16px">
             <div style="font-size:13px;font-weight:700;margin-bottom:12px">⭐ Seus top 5 filmes</div>
             ${personal.top5.map((f,i)=>`<div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;cursor:pointer" onclick="openFilme('${f.id}')">
@@ -2271,7 +2274,7 @@ function rankStatsHTML(){
           </div>
         </div>
 
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px" class="rank-two-col">
           <div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:16px">
             <div style="font-size:13px;font-weight:700;margin-bottom:12px">🎭 Seus gêneros favoritos</div>
             ${personal.genre_top5.map(g=>`<div class="genre-bar-row">
@@ -3060,7 +3063,7 @@ function renderAdminStats(){
   });
 
   body.innerHTML = `
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:20px">
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:20px" class="rank-two-col">
       ${[
         ['🎬 Total de filmes', FILMES.length, '#46d369'],
         ['⭐ Total de avaliações', totalAv, '#f5c518'],
