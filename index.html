@@ -1820,10 +1820,13 @@ async function openMaisInfo(id, nome, ano){
       ]);
     }
     const omdb = omdbRes.Response==='True' ? omdbRes : null;
-    const ta = s => !s||s==='N/A' ? null : s.replace(/Won (\d+) Oscar(s?)/g,'Ganhou $1 Oscar$2').replace(/Nominated for (\d+) Oscar(s?)/g,'Indicado para $1 Oscar$2').replace(/Won (\d+)/g,'Ganhou $1').replace(/Nominated for (\d+)/g,'Indicado para $1').replace(/(\d+) wins? & (\d+) nominations? total/g,'$1 vitórias e $2 indicações no total').replace(/(\d+) wins? & (\d+) nominations?/g,'$1 vitórias e $2 indicações').replace(/(\d+) wins?/g,'$1 vitórias').replace(/(\d+) nominations?/g,'$1 indicações');
     let html = '';
-    const awards = ta(omdb?.Awards);
-    if(awards) html += '<div class="bsheet-section"><div class="bsheet-section-title">🏆 Prêmios</div><div style="font-size:14px;color:#f5c518;font-weight:600">'+esc(awards)+'</div></div>';
+    const oscarMatch = omdb?.Awards?.match(/Won (\d+) Oscar/i);
+    const oscarCount = oscarMatch ? parseInt(oscarMatch[1]) : 0;
+    if(oscarCount > 0){
+      const oscarLabel = oscarCount === 1 ? 'Oscar' : 'Oscars';
+      html += '<div class="bsheet-section"><div class="bsheet-section-title">🏆 Prêmios</div><div style="font-size:15px;color:#f5c518;font-weight:700">🗿 '+oscarCount+' '+oscarLabel+'</div></div>';
+    }
     const dir = omdb?.Director && omdb.Director!=='N/A' ? omdb.Director : null;
     const wri = omdb?.Writer && omdb.Writer!=='N/A' ? omdb.Writer.split(',').slice(0,2).join(', ') : null;
     if(dir||wri) html += '<div class="bsheet-section"><div class="bsheet-section-title">🎬 Direção e Roteiro</div>'+(dir?'<div style="margin-bottom:6px"><span style="color:#888;font-size:11px">Diretor</span><br><span style="font-size:14px;font-weight:600">'+esc(dir)+'</span></div>':'')+(wri?'<div><span style="color:#888;font-size:11px">Roteiro</span><br><span style="font-size:13px">'+esc(wri)+'</span></div>':'')+'</div>';
