@@ -365,6 +365,9 @@ tr.selected td{background:rgba(229,9,20,.05)}
   .rank-name{font-size:14px!important}
   /* Grids de 2 colunas do Ranking ficam em 1 coluna no mobile */
   .rank-two-col { grid-template-columns: 1fr !important; }
+  /* Evita corte lateral nos itens de gênero/ano */
+  .rank-two-col .rank-item { overflow:visible !important; }
+  .rank-two-col .rank-item > div:last-child { min-width:52px; }
 }
 /* RTABS FADE */
 #maisInfoModal, #ondeModal { z-index: 900; }
@@ -1853,9 +1856,17 @@ function renderRanking(){
     </div>
   `;
   renderRankTab();
+  scrollActiveTab();
 }
 
 function setRankTab(tab){ rankTab=tab; renderRanking(); }
+
+function scrollActiveTab(){
+  setTimeout(()=>{
+    const t = document.querySelector('.rtabs .rtab.active');
+    if(t) t.scrollIntoView({behavior:'smooth', block:'nearest', inline:'center'});
+  }, 40);
+}
 
 function renderRankTab(){
   const el = document.getElementById('rankTabContent');
