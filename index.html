@@ -2210,40 +2210,115 @@ function rankAfinidadesHTML(){
     .filter(([uid, s]) => s.in_ranking)
     .map(([uid, s]) => ({ uid, nome: s.nome }));
 
-  // Para cada par, calcula: filmes em comum, diferença média de notas, correlação
+  const currentYear = new Date().getFullYear();
+
+  // Calcula afinidade completa entre dois membros
   function calcAfin(uidA, uidB){
     const shared = FILMES.filter(f => {
       const a = f.avaliacoes[uidA], b = f.avaliacoes[uidB];
       return a?.nota != null && b?.nota != null;
     });
     if(shared.length < 3) return null;
+
     const diffs = shared.map(f => Math.abs(f.avaliacoes[uidA].nota - f.avaliacoes[uidB].nota));
     const avgDiff = diffs.reduce((s,d)=>s+d,0) / diffs.length;
-    // Score 0-100: diferença média 0 = 100%, diferença 5 = 0%
     const score = Math.round(Math.max(0, 100 - avgDiff * 20));
-    // Filmes que os dois amaram (≥8) e os dois detestaram (≤5)
+
+    // Ambos amaram (≥8)
     const ambosAmaram = shared.filter(f => f.avaliacoes[uidA].nota >= 8 && f.avaliacoes[uidB].nota >= 8)
       .sort((a,b) => ((b.avaliacoes[uidA].nota+b.avaliacoes[uidB].nota)/2) - ((a.avaliacoes[uidA].nota+a.avaliacoes[uidB].nota)/2))
       .slice(0,3);
-    const discordaram = shared
-      .map(f => ({ f, diff: Math.abs(f.avaliacoes[uidA].nota - f.avaliacoes[uidB].nota) }))
-      .filter(x => x.diff >= 3)
-      .sort((a,b) => b.diff - a.diff)
-      .slice(0,2).map(x => x.f);
-    return { score, shared: shared.length, avgDiff: Math.round(avgDiff*10)/10, ambosAmaram, discordaram };
+
+    // Nota máxima ambos (≥9)
+    const ambosNota9 = shared.filter(f => f.avaliacoes[uidA].nota >= 9 && f.avaliacoes[uidB].nota >= 9)
+      .sort((a,b) => ((b.avaliacoes[uidA].nota+b.avaliacoes[uidB].nota)/2) - ((a.avaliacoes[uidA].nota+a.avaliacoes[uidB].nota)/2))
+      .slice(0,3);
+
+    // Maior divergência (gap ≥3)
+    const gapMax = shared.map(f => ({ f, diff: Math.abs(f.avaliacoes[uidA].nota - f.avaliacoes[uidB].nota) }))
+      .sort((a,b) => b.diff - a.diff)[0];
+    const maiorGap = gapMax?.diff >= 3 ? gapMax : null;
+
+    // Filmes que só esses dois assistiram (excluindo outros membros)
+    const outrosUids = members.map(m=>m.uid).filter(u=>u!==uidA&&u!==uidB);
+    const exclusivos = shared.filter(f => {
+      return !outrosUids.some(u => f.avaliacoes[u]?.nota != null);
+    }).slice(0,3);
+
+    // Horas assistidas em comum
+    const minutos = shared.reduce((s,f) => s+(f.duracao_min||0), 0);
+    const horas = Math.round(minutos/60);
+
+    // Quem é mais generoso nas notas (média das notas nos filmes em comum)
+    const mediaA = shared.reduce((s,f)=>s+f.avaliacoes[uidA].nota,0)/shared.length;
+    const mediaB = shared.reduce((s,f)=>s+f.avaliacoes[uidB].nota,0)/shared.length;
+
+    // Evolução por ano
+    const anos = ['2023','2024','2025','2026'];
+    const evolucao = anos.map(ano => {
+      const filmsAno = shared.filter(f => {
+        const avA = f.avaliacoes[uidA], avB = f.avaliacoes[uidB];
+        return (avA?.data?.split('/')?.[2]===ano) || (avB?.data?.split('/')?.[2]===ano);
+      });
+      if(filmsAno.length < 2) return null;
+      const diffsAno = filmsAno.map(f => Math.abs(f.avaliacoes[uidA].nota - f.avaliacoes[uidB].nota));
+      const scoreAno = Math.round(Math.max(0, 100 - (diffsAno.reduce((s,d)=>s+d,0)/diffsAno.length)*20));
+      return { ano, score: scoreAno, count: filmsAno.length };
+    }).filter(Boolean);
+
+    // Compatibilidade por gênero (top 5 gêneros em comum)
+    const genreMap = {};
+    shared.forEach(f => {
+      f.categorias.forEach(g => {
+        if(!genreMap[g]) genreMap[g] = { diffsG: [], count: 0 };
+        genreMap[g].diffsG.push(Math.abs(f.avaliacoes[uidA].nota - f.avaliacoes[uidB].nota));
+        genreMap[g].count++;
+      });
+    });
+    const genreScores = Object.entries(genreMap)
+      .filter(([,v]) => v.count >= 3)
+      .map(([g,v]) => ({
+        g,
+        count: v.count,
+        score: Math.round(Math.max(0, 100 - (v.diffsG.reduce((s,d)=>s+d,0)/v.diffsG.length)*20))
+      }))
+      .sort((a,b) => b.count - a.count)
+      .slice(0,5);
+
+    // Gênero que um ama e o outro evita
+    const stA = STATS[uidA], stB = STATS[uidB];
+    let genreConflito = null;
+    if(stA?.genre_avg && stB?.genre_avg){
+      const allG = [...new Set([...Object.keys(stA.genre_avg||{}), ...Object.keys(stB.genre_avg||{})])];
+      let maxConflito = 0;
+      allG.forEach(g => {
+        const avgA = stA.genre_avg[g], avgB = stB.genre_avg[g];
+        if(avgA && avgB){
+          const diff = Math.abs(avgA - avgB);
+          if(diff > maxConflito){ maxConflito = diff; genreConflito = { g, avgA, avgB, uidA, uidB }; }
+        }
+      });
+    }
+
+    // Idade média dos filmes em comum (ano médio)
+    const anosFilmes = shared.filter(f=>f.ano).map(f=>f.ano);
+    const anoMedio = anosFilmes.length ? Math.round(anosFilmes.reduce((s,a)=>s+a,0)/anosFilmes.length) : null;
+
+    return {
+      score, shared: shared.length, avgDiff: Math.round(avgDiff*10)/10,
+      ambosAmaram, ambosNota9, maiorGap, exclusivos, horas,
+      mediaA: Math.round(mediaA*10)/10, mediaB: Math.round(mediaB*10)/10,
+      evolucao, genreScores, genreConflito, anoMedio
+    };
   }
 
-  // Se tem usuário logado, mostra as afinidades dele em destaque
   const focusUid = CU && STATS[CU]?.in_ranking ? CU : members[0]?.uid;
-
-  // Monta pares do focusUid com todos os outros
   const myPairs = members
     .filter(m => m.uid !== focusUid)
     .map(m => ({ m, data: calcAfin(focusUid, m.uid) }))
     .filter(x => x.data)
     .sort((a,b) => b.data.score - a.data.score);
 
-  // Todos os pares (para a matriz)
   const allPairs = [];
   for(let i=0; i<members.length; i++)
     for(let j=i+1; j<members.length; j++){
@@ -2254,12 +2329,14 @@ function rankAfinidadesHTML(){
 
   function scoreColor(s){ return s>=80?'#46d369':s>=60?'#f5c518':s>=40?'#e67e22':'#e05555'; }
   function scoreEmoji(s){ return s>=80?'💚':s>=60?'💛':s>=40?'🧡':'❤️'; }
+  function pill(text, bg, border, color, id){
+    const click = id ? `onclick="openFilme('${id}')" style="cursor:pointer;` : 'style="';
+    return `<span ${click}background:${bg};border:1px solid ${border};color:${color};font-size:11px;padding:3px 8px;border-radius:20px;white-space:nowrap;display:inline-block">${text}</span>`;
+  }
+  function truncate(s,n){ return s.length>n?s.slice(0,n-1)+'…':s; }
 
   const focusNome = STATS[focusUid]?.nome || '';
-
   let html = `<div style="margin-bottom:24px">`;
-
-  // Minha afinidade com cada membro
   html += `<div style="font-size:15px;font-weight:800;color:#e5e5e5;margin-bottom:14px">🤝 Afinidade de ${esc(focusNome)} com o grupo</div>`;
 
   if(myPairs.length === 0){
@@ -2267,42 +2344,117 @@ function rankAfinidadesHTML(){
   } else {
     myPairs.forEach(({m, data}) => {
       const col = scoreColor(data.score);
-      html += `<div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:14px 16px;margin-bottom:10px;width:100%;box-sizing:border-box">
-        <div style="display:flex;align-items:center;gap:12px;margin-bottom:10px">
-          <div style="width:40px;height:40px;border-radius:8px;background:${aC(m.uid)};display:flex;align-items:center;justify-content:center;font-weight:800;font-size:14px;color:#000;flex-shrink:0">${ini(m.nome)}</div>
-          <div style="flex:1;min-width:0">
-            <div style="font-weight:700;font-size:14px">${esc(m.nome)}</div>
-            <div style="font-size:11px;color:var(--muted)">${data.shared} filmes em comum · diff média ${data.avgDiff}</div>
-          </div>
-          <div style="text-align:right;flex-shrink:0">
-            <div style="font-size:22px;font-weight:900;color:${col}">${data.score}%</div>
-            <div style="font-size:11px;color:var(--muted)">${scoreEmoji(data.score)} afinidade</div>
-          </div>
-        </div>
-        <div style="background:var(--surface2);border-radius:4px;height:6px;overflow:hidden;margin-bottom:10px">
-          <div style="height:100%;width:${data.score}%;background:linear-gradient(90deg,${col},${col}88);border-radius:4px;transition:width .4s"></div>
-        </div>`;
+      const nomeA = STATS[focusUid]?.nome || '', nomeB = m.nome;
+      const maisGenerosoNome = data.mediaA >= data.mediaB ? nomeA : nomeB;
+      const maisGenerosoMedia = Math.max(data.mediaA, data.mediaB);
+      const maisCriticoNome = data.mediaA < data.mediaB ? nomeA : nomeB;
+      const maisCriticoMedia = Math.min(data.mediaA, data.mediaB);
 
-      if(data.ambosAmaram.length){
-        html += `<div style="font-size:11px;color:#46d369;font-weight:700;margin-bottom:4px">✅ Ambos amaram</div>
-        <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px">
-          ${data.ambosAmaram.map(f=>`<span onclick="openFilme('${f.id}')" style="background:rgba(70,211,105,.12);border:1px solid rgba(70,211,105,.3);color:#46d369;font-size:11px;padding:3px 8px;border-radius:20px;cursor:pointer;white-space:nowrap">${esc(f.nome.length>22?f.nome.slice(0,20)+'…':f.nome)}</span>`).join('')}
-        </div>`;
-      }
-      if(data.discordaram.length){
-        html += `<div style="font-size:11px;color:#e05555;font-weight:700;margin-bottom:4px">⚡ Discordaram</div>
-        <div style="display:flex;gap:6px;flex-wrap:wrap">
-          ${data.discordaram.map(f=>{
-            const nA = f.avaliacoes[focusUid]?.nota, nB = f.avaliacoes[m.uid]?.nota;
-            return `<span onclick="openFilme('${f.id}')" style="background:rgba(224,85,85,.1);border:1px solid rgba(224,85,85,.3);color:#e05555;font-size:11px;padding:3px 8px;border-radius:20px;cursor:pointer;white-space:nowrap">${esc(f.nome.length>18?f.nome.slice(0,16)+'…':f.nome)} (${fmt(nA)} vs ${fmt(nB)})</span>`;
-          }).join('')}
-        </div>`;
-      }
+      html += `<div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:14px 16px;margin-bottom:12px;width:100%;box-sizing:border-box">`;
+
+      // Cabeçalho
+      html += `<div style="display:flex;align-items:center;gap:12px;margin-bottom:10px">
+        <div style="width:40px;height:40px;border-radius:8px;background:${aC(m.uid)};display:flex;align-items:center;justify-content:center;font-weight:800;font-size:14px;color:#000;flex-shrink:0">${ini(m.nome)}</div>
+        <div style="flex:1;min-width:0">
+          <div style="font-weight:700;font-size:14px">${esc(m.nome)}</div>
+          <div style="font-size:11px;color:var(--muted)">${data.shared} filmes em comum · ⏱ ${data.horas}h assistidas juntos</div>
+        </div>
+        <div style="text-align:right;flex-shrink:0">
+          <div style="font-size:22px;font-weight:900;color:${col}">${data.score}%</div>
+          <div style="font-size:11px;color:var(--muted)">${scoreEmoji(data.score)} afinidade</div>
+        </div>
+      </div>
+      <div style="background:var(--surface2);border-radius:4px;height:6px;overflow:hidden;margin-bottom:12px">
+        <div style="height:100%;width:${data.score}%;background:linear-gradient(90deg,${col},${col}88);border-radius:4px"></div>
+      </div>`;
+
+      // Linha de stats rápidos
+      html += `<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px">`;
+      if(data.anoMedio) html += `<div style="background:var(--surface2);border-radius:8px;padding:6px 10px;font-size:11px;text-align:center"><div style="font-weight:800;color:#a0c4ff">~${data.anoMedio}</div><div style="color:var(--muted)">ano médio</div></div>`;
+      html += `<div style="background:var(--surface2);border-radius:8px;padding:6px 10px;font-size:11px;text-align:center"><div style="font-weight:800;color:#46d369">${maisGenerosoMedia}</div><div style="color:var(--muted)">${truncate(maisGenerosoNome,8)} mais generoso</div></div>`;
+      html += `<div style="background:var(--surface2);border-radius:8px;padding:6px 10px;font-size:11px;text-align:center"><div style="font-weight:800;color:#f5c518">${maisCriticoMedia}</div><div style="color:var(--muted)">${truncate(maisCriticoNome,8)} mais crítico</div></div>`;
       html += `</div>`;
+
+      // 🌟 Nota máxima em comum (≥9)
+      if(data.ambosNota9.length){
+        html += `<div style="font-size:11px;color:#f5c518;font-weight:700;margin-bottom:5px">🌟 Nota máxima em comum (≥9)</div>
+        <div style="display:flex;gap:5px;flex-wrap:wrap;margin-bottom:10px">
+          ${data.ambosNota9.map(f=>pill(truncate(f.nome,22),'rgba(245,197,24,.1)','rgba(245,197,24,.3)','#f5c518',f.id)).join('')}
+        </div>`;
+      }
+
+      // ✅ Ambos amaram (≥8, se não tiver ≥9)
+      if(!data.ambosNota9.length && data.ambosAmaram.length){
+        html += `<div style="font-size:11px;color:#46d369;font-weight:700;margin-bottom:5px">✅ Ambos amaram</div>
+        <div style="display:flex;gap:5px;flex-wrap:wrap;margin-bottom:10px">
+          ${data.ambosAmaram.map(f=>pill(truncate(f.nome,22),'rgba(70,211,105,.12)','rgba(70,211,105,.3)','#46d369',f.id)).join('')}
+        </div>`;
+      }
+
+      // 💀 Maior gap
+      if(data.maiorGap){
+        const f=data.maiorGap.f, nA=f.avaliacoes[focusUid]?.nota, nB=f.avaliacoes[m.uid]?.nota;
+        const quemAmou = nA>nB?nomeA:nomeB, quemOdiou = nA>nB?nomeB:nomeA;
+        html += `<div style="font-size:11px;color:#e05555;font-weight:700;margin-bottom:5px">💀 Maior divergência</div>
+        <div style="margin-bottom:10px">
+          ${pill(`${truncate(f.nome,20)} — ${quemAmou} ${fmt(Math.max(nA,nB))} vs ${quemOdiou} ${fmt(Math.min(nA,nB))}`,'rgba(224,85,85,.1)','rgba(224,85,85,.3)','#e05555',f.id)}
+        </div>`;
+      }
+
+      // 🔁 Exclusivos da dupla
+      if(data.exclusivos.length){
+        html += `<div style="font-size:11px;color:#ce93d8;font-weight:700;margin-bottom:5px">🔁 Só vocês dois assistiram</div>
+        <div style="display:flex;gap:5px;flex-wrap:wrap;margin-bottom:10px">
+          ${data.exclusivos.map(f=>pill(truncate(f.nome,22),'rgba(206,147,216,.1)','rgba(206,147,216,.3)','#ce93d8',f.id)).join('')}
+        </div>`;
+      }
+
+      // 🎭 Gênero conflito
+      if(data.genreConflito){
+        const gc=data.genreConflito;
+        const amaNome=gc.avgA>gc.avgB?nomeA:nomeB, ama=Math.max(gc.avgA,gc.avgB).toFixed(1);
+        const evitaNome=gc.avgA>gc.avgB?nomeB:nomeA, evita=Math.min(gc.avgA,gc.avgB).toFixed(1);
+        html += `<div style="font-size:11px;color:#e67e22;font-weight:700;margin-bottom:5px">🎭 Gênero divisor: ${esc(gc.g)}</div>
+        <div style="font-size:11px;color:var(--muted);margin-bottom:10px">${truncate(amaNome,10)} ama (${ama}) · ${truncate(evitaNome,10)} evita (${evita})</div>`;
+      }
+
+      // 🎯 Compatibilidade por gênero
+      if(data.genreScores.length){
+        html += `<div style="font-size:11px;color:#80deea;font-weight:700;margin-bottom:6px">🎯 Afinidade por gênero</div>
+        <div style="display:flex;flex-direction:column;gap:4px;margin-bottom:10px">`;
+        data.genreScores.forEach(gs => {
+          const gc = scoreColor(gs.score);
+          html += `<div style="display:flex;align-items:center;gap:8px">
+            <div style="font-size:11px;color:var(--muted);width:90px;flex-shrink:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(gs.g)}</div>
+            <div style="flex:1;background:var(--surface2);border-radius:3px;height:5px;overflow:hidden">
+              <div style="height:100%;width:${gs.score}%;background:${gc};border-radius:3px"></div>
+            </div>
+            <div style="font-size:11px;font-weight:700;color:${gc};width:32px;text-align:right;flex-shrink:0">${gs.score}%</div>
+          </div>`;
+        });
+        html += `</div>`;
+      }
+
+      // 📈 Evolução por ano
+      if(data.evolucao.length >= 2){
+        html += `<div style="font-size:11px;color:#b0bec5;font-weight:700;margin-bottom:6px">📈 Evolução da afinidade</div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:4px">`;
+        data.evolucao.forEach(ev => {
+          const ec = scoreColor(ev.score);
+          html += `<div style="background:var(--surface2);border-radius:8px;padding:5px 8px;text-align:center;min-width:52px">
+            <div style="font-size:12px;font-weight:800;color:${ec}">${ev.score}%</div>
+            <div style="font-size:10px;color:var(--muted)">${ev.ano}</div>
+            <div style="font-size:9px;color:var(--muted2)">${ev.count} filmes</div>
+          </div>`;
+        });
+        html += `</div>`;
+      }
+
+      html += `</div>`; // fim card
     });
   }
 
-  // Top pares do grupo todo
+  // Top duplas
   html += `<div style="font-size:15px;font-weight:800;color:#e5e5e5;margin:24px 0 14px">🏅 Duplas mais compatíveis do grupo</div>`;
   allPairs.slice(0,5).forEach(({a,b,data},i) => {
     const col = scoreColor(data.score);
@@ -2313,11 +2465,11 @@ function rankAfinidadesHTML(){
         <div style="width:32px;height:32px;border-radius:6px;background:${aC(a.uid)};display:flex;align-items:center;justify-content:center;font-weight:800;font-size:11px;color:#000;flex-shrink:0">${ini(a.nome)}</div>
         <div style="font-size:12px;color:var(--muted)">+</div>
         <div style="width:32px;height:32px;border-radius:6px;background:${aC(b.uid)};display:flex;align-items:center;justify-content:center;font-weight:800;font-size:11px;color:#000;flex-shrink:0">${ini(b.nome)}</div>
-        <div style="font-size:13px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(a.nome)} & ${esc(b.nome)}</div>
+        <div style="font-size:13px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1">${esc(a.nome)} & ${esc(b.nome)}</div>
       </div>
       <div style="text-align:right;flex-shrink:0">
         <div style="font-size:18px;font-weight:900;color:${col}">${data.score}%</div>
-        <div style="font-size:10px;color:var(--muted)">${data.shared} filmes</div>
+        <div style="font-size:10px;color:var(--muted)">${data.shared} filmes · ⏱${data.horas}h</div>
       </div>
     </div>`;
   });
@@ -2325,6 +2477,7 @@ function rankAfinidadesHTML(){
   html += `</div>`;
   return html;
 }
+
 
 // ESTATÍSTICAS
 function rankStatsHTML(){
