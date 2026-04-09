@@ -1807,18 +1807,24 @@ async function openMaisInfo(id, nome, ano){
   const OMDB = '419a30fd';
   try {
     const nomeD = decodeURIComponent(nome);
-    const [tmdbRes, omdbRes] = await Promise.all([
-      fetch('https://api.themoviedb.org/3/search/movie?api_key='+TMDB_KEY+'&language=pt-BR&query='+nome+'&year='+ano).then(r=>r.json()),
-      fetch('https://www.omdbapi.com/?t='+encodeURIComponent(nomeD)+'&y='+ano+'&apikey='+OMDB).then(r=>r.json())
-    ]);
+    // 1. Busca no TMDB para pegar ID e créditos
+    const tmdbRes = await fetch('https://api.themoviedb.org/3/search/movie?api_key='+TMDB_KEY+'&language=pt-BR&query='+nome+'&year='+ano).then(r=>r.json());
     const tmdbMovie = tmdbRes.results?.[0];
-    let tmdbD = null, tmdbC = null;
+    let tmdbD = null, tmdbC = null, imdbId = null;
     if(tmdbMovie){
       [tmdbD, tmdbC] = await Promise.all([
         fetch('https://api.themoviedb.org/3/movie/'+tmdbMovie.id+'?api_key='+TMDB_KEY+'&language=pt-BR').then(r=>r.json()),
         fetch('https://api.themoviedb.org/3/movie/'+tmdbMovie.id+'/credits?api_key='+TMDB_KEY+'&language=pt-BR').then(r=>r.json())
       ]);
+      // Pega IMDb ID diretamente do TMDB (mais confiável que buscar por título na OMDB)
+      const extIds = await fetch('https://api.themoviedb.org/3/movie/'+tmdbMovie.id+'/external_ids?api_key='+TMDB_KEY).then(r=>r.json()).catch(()=>({}));
+      imdbId = extIds.imdb_id || null;
     }
+    // 2. Busca OMDB pelo IMDb ID se disponível, senão pelo título
+    const omdbUrl = imdbId
+      ? `https://www.omdbapi.com/?i=${imdbId}&apikey=${OMDB}`
+      : `https://www.omdbapi.com/?t=${encodeURIComponent(nomeD)}&y=${ano}&apikey=${OMDB}`;
+    const omdbRes = await fetch(omdbUrl).then(r=>r.json()).catch(()=>({}));
     const omdb = omdbRes.Response==='True' ? omdbRes : null;
     let html = '';
     const oscarMatch = omdb?.Awards?.match(/Won (\d+) Oscar/i);
