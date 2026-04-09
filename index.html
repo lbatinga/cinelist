@@ -1348,7 +1348,7 @@ function openRecentPanel(id){
 }
 
 // ── RANKING V2 injected ──
-var rankTab = 'geral', rankYear = '2025', rankGenre = 'Ação'; // inicializado cedo
+var rankTab = 'geral', rankYear = String(new Date().getFullYear()), rankGenre = 'Ação'; // inicializado cedo
 function renderRanking_old_unused(){
   let list=Object.entries(STATS).filter(([,s])=>s.in_ranking).map(([uid,s])=>({uid,...s}));
   if(searchQ) list=list.filter(s=>s.nome.toLowerCase().includes(searchQ));
