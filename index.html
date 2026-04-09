@@ -1456,6 +1456,39 @@ async function saveRating(){
   }
 }
 
+async function mudarDeOpiniao(id){
+  if(!CU) return;
+  try {
+    // Remove o "não quero" no Supabase (seta vai_assistir de volta para 'Sim')
+    await supa.from('avaliacoes').upsert({
+      filme_id: id,
+      usuario_id: CU,
+      nota: null,
+      vai_assistir: 'Sim',
+      data_avaliacao: new Date().toISOString().split('T')[0],
+      comentario: ''
+    }, {onConflict:'filme_id,usuario_id'});
+
+    // Atualiza memória local
+    const f = FM[id];
+    if(f){
+      if(!f.avaliacoes[CU]) f.avaliacoes[CU] = {};
+      f.avaliacoes[CU] = {nota:null, vai:'Sim', data:null, comentario:''};
+    }
+    const st = STATS[CU];
+    if(st){
+      st.nao_quer = (st.nao_quer||[]).filter(x => x !== id);
+      if(!st.pendentes.includes(id)) st.pendentes.push(id);
+    }
+
+    // Abre modal de avaliação já com "Sim, já assisti" ativo
+    renderAvaliacoes('nao_quer');
+    setTimeout(() => openRate(id), 100);
+  } catch(e){
+    showToast('❌ Erro: ' + e.message);
+  }
+}
+
 // ── ADD ──
 function openAdd(){
   if(!CU){alert('Selecione seu perfil primeiro!');return;}
