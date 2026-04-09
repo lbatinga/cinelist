@@ -1683,7 +1683,6 @@ function buildUD(){
     <div style="padding:2px 10px 10px;font-size:11px;color:#666">${email}</div>
     <div style="height:1px;background:#2a2a2a;margin:4px 0"></div>
     <div class="ud-item" onclick="openProfile();document.getElementById('userDropdown').classList.remove('open')">✏️ Editar perfil</div>
-    <div class="ud-item" onclick="cadastrarBiometria();document.getElementById('userDropdown').classList.remove('open')">🔐 Cadastrar biometria</div>
     <div class="ud-item" onclick="openChangePassword();document.getElementById('userDropdown').classList.remove('open')">🔑 Alterar senha</div>
     ${email === 'lwbarbosab@gmail.com' ? '<div class="ud-item" style="color:#f5c518" onclick="openAdmin();document.getElementById(\'userDropdown\').classList.remove(\'open\')">🛠️ Painel Admin</div>' : ''}
     ${(typeof Notification !== 'undefined' && Notification.permission !== 'granted') ? '<div class="ud-item" style="color:#00bcd4" onclick="ativarNotificacoes();document.getElementById(\'userDropdown\').classList.remove(\'open\')">🔔 Ativar notificações</div>' : '<div class="ud-item" style="color:#46d369;cursor:default">🔔 Notificações ativas ✓</div>'}
@@ -1718,62 +1717,6 @@ document.getElementById('addModal').addEventListener('click',e=>{if(e.target===d
 
 // ═══════════════════════════════════════════
 // BIOMETRIA via Credential Management API
-// O navegador salva email+senha e usa biometria do dispositivo para desbloquear
-// ═══════════════════════════════════════════
-async function checkBiometricAvailable(){
-  try {
-    return !!(window.PasswordCredential || window.FederatedCredential);
-  } catch(e) { return false; }
-}
-
-async function loginBiometrico(){
-  try {
-    const cred = await navigator.credentials.get({
-      password: true,
-      mediation: 'required' // força confirmação biométrica
-    });
-    if(!cred) { showToast('❌ Nenhuma credencial salva.'); return; }
-    
-    document.getElementById('loginEmail').value = cred.id;
-    document.getElementById('loginSenha').value = cred.password;
-    showToast('⏳ Entrando...');
-    await loginEmailSenha();
-  } catch(e) {
-    showToast('❌ Biometria cancelada ou não disponível.');
-  }
-}
-
-async function salvarCredencialNavegador(email, senha){
-  try {
-    if(!window.PasswordCredential) return;
-    const cred = new PasswordCredential({ id: email, password: senha, name: email });
-    await navigator.credentials.store(cred);
-    console.log('Credencial salva no navegador');
-  } catch(e) {
-    console.warn('Não foi possível salvar credencial:', e);
-  }
-}
-
-async function cadastrarBiometria(){
-  showToast('💡 A biometria usa as credenciais salvas no navegador. Faça login normalmente e o navegador vai oferecer salvar — aceite para habilitar o login biométrico!');
-}
-
-async function initBiometricButton(){
-  const available = await checkBiometricAvailable();
-  const wrap = document.getElementById('bioWrap');
-  if(available && wrap){
-    // Verifica se há credencial salva
-    try {
-      const cred = await navigator.credentials.get({ password: true, mediation: 'silent' });
-      if(cred){
-        wrap.innerHTML = `<button onclick="loginBiometrico()" style="width:100%;background:#2a2a2a;border:1px solid #444;color:#fff;padding:12px;border-radius:10px;font-family:inherit;font-size:14px;font-weight:600;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;margin-bottom:12px"><span style="font-size:18px">🔐</span> Entrar com biometria</button>`;
-      }
-    } catch(e) {
-      // Sem credencial salva — não mostra o botão
-    }
-  }
-}
-
 
 // ===== BOTTOM SHEETS =====
 function openBSheet(name){
@@ -2787,7 +2730,6 @@ async function loginEmailSenha(){
     return;
   }
   if(data.session){
-    await salvarCredencialNavegador(email, senha);
     await onLogin(data.session);
   }
 }
@@ -2917,10 +2859,8 @@ function showAuthScreen(){
     <button class="auth-btn auth-btn-google" onclick="loginEmailSenha()" style="justify-content:center;font-size:15px;font-weight:700">
       Entrar
     </button>
-    <div style="margin-top:12px" id="bioWrap"></div>
     <div class="auth-footer">Apenas membros cadastrados têm acesso.</div>
   `;
-  initBiometricButton();
 }
 
 function showAuthLoading(){
@@ -3648,9 +3588,6 @@ window.addEventListener('popstate',()=>{
       Entrar
     </button>
     <div style="margin-top:12px">
-    <button id="biometricBtn" onclick="loginBiometrico()" style="display:none;width:100%;background:#2a2a2a;border:1px solid #444;color:#fff;padding:12px;border-radius:10px;font-family:inherit;font-size:14px;font-weight:600;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px">
-      <span style="font-size:18px">🔐</span> Entrar com biometria
-    </button>
   </div>
     <div class="auth-footer">Apenas membros cadastrados têm acesso.</div>
   </div>
