@@ -456,6 +456,7 @@ tr.selected td{background:rgba(229,9,20,.05)}
     <div class="nav-link" id="nav-avaliacoes" onclick="navigate('avaliacoes')">Minhas Avaliações</div>
     <div class="nav-link" id="nav-recentes" onclick="navigate('recentes')">Recentes</div>
     <div class="nav-link" id="nav-ranking" onclick="navigate('ranking')">Ranking</div>
+    <div class="nav-link" id="nav-descobertas" onclick="navigate('descobertas')">💡 Descobertas</div>
   </div>
   <div class="topbar-right">
     <div class="search-wrap">
@@ -479,6 +480,7 @@ tr.selected td{background:rgba(229,9,20,.05)}
   <div class="bn-item" id="bn-pendentes" onclick="navigate('pendentes')"><span class="bn-icon">⏳</span><span class="bn-label">Pendentes</span></div>
   <div class="bn-item" id="bn-avaliacoes" onclick="navigate('avaliacoes')"><span class="bn-icon">⭐</span><span class="bn-label">Notas</span></div>
   <div class="bn-item" id="bn-ranking" onclick="navigate('ranking')"><span class="bn-icon">🏆</span><span class="bn-label">Ranking</span></div>
+  <div class="bn-item" id="bn-descobertas" onclick="navigate('descobertas')"><span class="bn-icon">💡</span><span class="bn-label">Descobertas</span></div>
 </div>
 
 <!-- SCROLL CONTAINER -->
@@ -489,6 +491,7 @@ tr.selected td{background:rgba(229,9,20,.05)}
   <div id="viewAvaliacoes" class="view"></div>
   <div id="viewRecentes" class="view"></div>
   <div id="viewRanking" class="view"></div>
+  <div id="viewDescobertas" class="view"></div>
 </div>
 
 <!-- RATE MODAL -->
@@ -890,6 +893,7 @@ function render(){
   else if(CV==='avaliacoes') renderAvaliacoes();
   else if(CV==='recentes') renderRecentes();
   else if(CV==='ranking') renderRanking();
+  else if(CV==='descobertas') renderDescobertas();
 }
 
 // SEARCH
@@ -1960,6 +1964,35 @@ showAuthScreen();
 // ── RANKING V2 ──
 // rankTab já declarado acima
 
+
+function renderDescobertas(){
+  const el = document.getElementById('viewDescobertas');
+  const descTab = window.descTab || 'afinidades';
+  el.innerHTML = `
+    <div class="rank-section">
+      <div class="tpage-header" style="margin-bottom:16px">
+        <div class="tpage-title">💡 Descobertas</div>
+      </div>
+      <div class="rtabs-wrap"><div class="rtabs">
+        <div class="rtab ${descTab==='afinidades'?'active':''}" onclick="setDescTab('afinidades')">🤝 Afinidades</div>
+        <div class="rtab ${descTab==='stats'?'active':''}" onclick="setDescTab('stats')">📊 Estatísticas</div>
+      </div></div>
+      <div id="descTabContent"></div>
+    </div>
+  `;
+  renderDescTab();
+  scrollActiveTab();
+}
+
+function setDescTab(tab){ window.descTab=tab; renderDescobertas(); }
+
+function renderDescTab(){
+  const tab = window.descTab || 'afinidades';
+  const el = document.getElementById('descTabContent');
+  if(tab==='afinidades') el.innerHTML = rankAfinidadesHTML();
+  else if(tab==='stats') el.innerHTML = rankStatsHTML();
+}
+
 function renderRanking(){
   const el = document.getElementById('viewRanking');
   el.innerHTML = `
@@ -1970,10 +2003,8 @@ function renderRanking(){
       <div class="rtabs-wrap"><div class="rtabs">
         <div class="rtab ${rankTab==='geral'?'active':''}" onclick="setRankTab('geral')">🏆 Geral</div>
         <div class="rtab ${rankTab==='ano'?'active':''}" onclick="setRankTab('ano')">📅 Por Ano</div>
-        <div class="rtab ${rankTab==='filmes'?'active':''}" onclick="setRankTab('filmes')">⭐ Top Filmes</div>
         <div class="rtab ${rankTab==='genero'?'active':''}" onclick="setRankTab('genero')">🎭 Por Gênero</div>
-        <div class="rtab ${rankTab==='afinidades'?'active':''}" onclick="setRankTab('afinidades')">🤝 Afinidades</div>
-        <div class="rtab ${rankTab==='stats'?'active':''}" onclick="setRankTab('stats')">📊 Estatísticas</div>
+        <div class="rtab ${rankTab==='filmes'?'active':''}" onclick="setRankTab('filmes')">⭐ Top Filmes</div>
       </div></div>
       <div id="rankTabContent"></div>
     </div>
@@ -1997,8 +2028,7 @@ function renderRankTab(){
   else if(rankTab==='ano') el.innerHTML = rankAnoHTML();
   else if(rankTab==='filmes') el.innerHTML = rankFilmesHTML();
   else if(rankTab==='genero') el.innerHTML = rankGeneroHTML();
-  else if(rankTab==='afinidades') el.innerHTML = rankAfinidadesHTML();
-  else if(rankTab==='stats') el.innerHTML = rankStatsHTML();
+
 }
 
 // GERAL
