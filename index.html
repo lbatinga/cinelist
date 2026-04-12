@@ -479,7 +479,7 @@ tr.selected td{background:rgba(229,9,20,.05)}
 </div>
 
 <!-- RATE MODAL -->
-<div class="modal-overlay" id="rateModal" onclick="closeModalIfBg('rateModal')">
+<div class="modal-overlay" id="rateModal">
   <div class="modal-box">
     <div class="modal-title">Avaliar Filme</div>
     <div class="modal-film" id="rateFilmName"></div>
@@ -516,7 +516,7 @@ tr.selected td{background:rgba(229,9,20,.05)}
 </div>
 
 <!-- ADD FILM MODAL -->
-<div class="modal-overlay" id="addModal" onclick="closeModalIfBg('addModal')">
+<div class="modal-overlay" id="addModal">
   <div class="add-modal-box">
     <div class="modal-title">Adicionar Filme</div>
     <div class="modal-film" style="margin-bottom:18px">Preencha os dados básicos. Categoria, sinopse e capa vêm via TMDB.</div>
@@ -898,7 +898,7 @@ function monthsSince(dateStr){
   const parts = dateStr.split('/');
   if(parts.length!==3) return 999;
   const dt = new Date(parseInt(parts[2]), parseInt(parts[1])-1, parseInt(parts[0]));
-  const diff = (new Date(2026,3,4) - dt) / (1000*60*60*24*30.44);
+  const diff = (new Date() - dt) / (1000*60*60*24*30.44);
   return diff;
 }
 function isActive(s){ return monthsSince(s.ultima_av) < INACTIVE_MONTHS; }
@@ -1395,35 +1395,6 @@ function openRecentPanel(id){
 
 // ── RANKING V2 injected ──
 var rankTab = 'geral', rankYear = '2025', rankGenre = 'Ação'; // inicializado cedo
-function renderRanking_old_unused(){
-  let list=Object.entries(STATS).filter(([,s])=>s.in_ranking).map(([uid,s])=>({uid,...s}));
-  if(searchQ) list=list.filter(s=>s.nome.toLowerCase().includes(searchQ));
-  list.sort((a,b)=>b.quant-a.quant);
-  const el=document.getElementById('viewRanking');
-  el.innerHTML=`
-    <div class="rank-section">
-      <div class="tpage-header" style="margin-bottom:20px">
-        <div class="tpage-title">Ranking Geral</div>
-      </div>
-      ${list.map((s,i)=>{
-        const med=i===0?'🥇':i===1?'🥈':i===2?'🥉':'';
-        return `<div class="rank-item" onclick="openUserDetail('${s.uid}')">
-          <div class="rank-num">${med||i+1}</div>
-          <div class="rank-av" style="background:${aC(s.uid)}">${ini(s.nome)}</div>
-          <div class="rank-info">
-            <div class="rank-name">${esc(s.nome)}</div>
-            <div class="rank-sub">${s.time_str} · última: ${s.ultima_av||'—'}</div>
-          </div>
-          <div class="rank-stats">
-            <div class="rstat"><div class="rstat-n" style="color:var(--green)">${s.quant}</div><div class="rstat-l">Assistidos</div></div>
-            <div class="rstat"><div class="rstat-n" style="color:${s.media?nC(s.media):'var(--muted2)'}">${s.media?fmt(s.media):'—'}</div><div class="rstat-l">Média</div></div>
-            <div class="rstat"><div class="rstat-n" style="color:var(--muted)">${s.pendentes.length}</div><div class="rstat-l">Pendentes</div></div>
-          </div>
-        </div>`;
-      }).join('')}
-    </div>
-  `;
-}
 
 
 
@@ -1702,7 +1673,6 @@ function showNeedLogin(vid){
 
 // ── MODAL HELPERS ──
 function closeModal(id){document.getElementById(id).classList.remove('open');}
-function closeModalIfBg(id){return e=>{if(e.target===document.getElementById(id))closeModal(id);}}
 
 document.getElementById('rateModal').addEventListener('click',e=>{if(e.target===document.getElementById('rateModal'))closeModal('rateModal');});
 document.getElementById('addModal').addEventListener('click',e=>{if(e.target===document.getElementById('addModal'))closeModal('addModal');});
@@ -1913,6 +1883,93 @@ function renderRankTab(){
   else if(rankTab==='ano') el.innerHTML = rankAnoHTML();
   else if(rankTab==='filmes') el.innerHTML = rankFilmesHTML();
   else if(rankTab==='genero') el.innerHTML = rankGeneroHTML();
+}
+
+// USER DETAIL (from ranking)
+function openUserDetail(uid){
+  const s = RAW.users_stats[uid];
+  if(!s) return;
+
+  // All ratings by this user
+  const avList = FILMES
+    .filter(f => f.avaliacoes[uid] && f.avaliacoes[uid].nota !== null)
+    .sort((a,b) => b.avaliacoes[uid].nota - a.avaliacoes[uid].nota);
+
+  const avg = s.media ? fmt(s.media) : '—';
+  const topGenres = Object.entries(s.by_genre||{}).sort((a,b)=>b[1]-a[1]).slice(0,5);
+  const maxG = topGenres.length ? topGenres[0][1] : 1;
+
+  // Top 5 and Bottom 5
+  const top5 = avList.slice(0, 5);
+  const bot5 = avList.length > 5 ? avList.slice(-5).reverse() : [];
+
+  // Years breakdown
+  const yearEntries = Object.entries(s.by_year||{}).sort((a,b)=>b[0].localeCompare(a[0]));
+
+  document.getElementById('rankTabContent').innerHTML = `
+    <button onclick="renderRankTab()" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:13px;margin-bottom:16px;font-family:inherit">← Voltar</button>
+    <div style="display:flex;align-items:center;gap:14px;margin-bottom:20px">
+      <div style="width:52px;height:52px;border-radius:10px;background:${aC(uid)};color:#000;font-weight:800;font-size:18px;display:flex;align-items:center;justify-content:center">${ini(s.nome)}</div>
+      <div>
+        <div style="font-size:20px;font-weight:800">${esc(s.nome)}</div>
+        <div style="font-size:12px;color:var(--muted)">${s.time_str} assistidos · última: ${s.ultima_av||'—'}</div>
+      </div>
+    </div>
+
+    <div class="stats-grid" style="grid-template-columns:repeat(auto-fill,minmax(130px,1fr));margin-bottom:20px">
+      <div class="stat-card"><div class="stat-card-n" style="color:var(--green)">${s.quant}</div><div class="stat-card-l">Assistidos</div></div>
+      <div class="stat-card"><div class="stat-card-n" style="color:${s.media?nC(s.media):'var(--muted2)'}">${avg}</div><div class="stat-card-l">Média</div></div>
+      <div class="stat-card"><div class="stat-card-n" style="color:var(--muted)">${s.pendentes.length}</div><div class="stat-card-l">Pendentes</div></div>
+      <div class="stat-card"><div class="stat-card-n" style="color:#e05555">${(s.nao_quer||[]).length}</div><div class="stat-card-l">Não quer</div></div>
+      <div class="stat-card"><div class="stat-card-n" style="color:var(--yellow)">${s.inseridos.length}</div><div class="stat-card-l">Inseridos</div></div>
+      ${s.fav_genre ? `<div class="stat-card"><div class="stat-card-n" style="font-size:16px;color:#fff">${esc(s.fav_genre)}</div><div class="stat-card-l">Gênero favorito</div><div class="stat-card-sub">média ${s.fav_genre_avg?fmt(s.fav_genre_avg):'—'}</div></div>` : ''}
+    </div>
+
+    ${topGenres.length ? `
+      <div style="font-size:14px;font-weight:700;margin-bottom:10px">Gêneros mais assistidos</div>
+      ${topGenres.map(([g,n])=>`<div class="genre-bar-row">
+        <div class="genre-bar-label">${g}</div>
+        <div class="genre-bar-track"><div class="genre-bar-fill" style="width:${Math.round(n/maxG*100)}%"></div></div>
+        <div class="genre-bar-n">${n}</div>
+      </div>`).join('')}
+    ` : ''}
+
+    ${top5.length ? `
+      <div style="font-size:14px;font-weight:700;margin:20px 0 10px">⭐ Top 5</div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(100px,1fr));gap:8px">
+        ${top5.map(f=>`<div style="cursor:pointer;border-radius:6px;overflow:hidden;background:var(--surface)" onclick="openFilme('${f.id}')">
+          ${f.poster?`<img src="${esc(f.poster)}" style="width:100%;aspect-ratio:2/3;object-fit:cover" loading="lazy" onerror="this.style.display='none'">`:''}
+          <div style="padding:5px 7px">
+            <div style="font-size:10px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(f.nome)}</div>
+            <div style="font-size:13px;font-weight:800;color:${nC(f.avaliacoes[uid].nota)}">★ ${fmt(f.avaliacoes[uid].nota)}</div>
+          </div>
+        </div>`).join('')}
+      </div>
+    ` : ''}
+
+    ${bot5.length ? `
+      <div style="font-size:14px;font-weight:700;margin:20px 0 10px">👎 Piores 5</div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(100px,1fr));gap:8px">
+        ${bot5.map(f=>`<div style="cursor:pointer;border-radius:6px;overflow:hidden;background:var(--surface)" onclick="openFilme('${f.id}')">
+          ${f.poster?`<img src="${esc(f.poster)}" style="width:100%;aspect-ratio:2/3;object-fit:cover" loading="lazy" onerror="this.style.display='none'">`:''}
+          <div style="padding:5px 7px">
+            <div style="font-size:10px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(f.nome)}</div>
+            <div style="font-size:13px;font-weight:800;color:${nC(f.avaliacoes[uid].nota)}">★ ${fmt(f.avaliacoes[uid].nota)}</div>
+          </div>
+        </div>`).join('')}
+      </div>
+    ` : ''}
+
+    ${yearEntries.length ? `
+      <div style="font-size:14px;font-weight:700;margin:20px 0 10px">📅 Por Ano</div>
+      <div style="display:flex;flex-wrap:wrap;gap:6px">
+        ${yearEntries.map(([y,n])=>`<div onclick="openUserYearDetail('${uid}','${y}')" style="cursor:pointer;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:8px 14px;text-align:center;transition:background .15s">
+          <div style="font-size:16px;font-weight:800">${n}</div>
+          <div style="font-size:10px;color:var(--muted)">${y}</div>
+        </div>`).join('')}
+      </div>
+    ` : ''}
+  `;
 }
 
 // GERAL
@@ -3465,9 +3522,6 @@ function closeMobileFilmeModal(){
   document.getElementById('mobileFilmeModal').classList.remove('open');
   document.body.style.overflow='';
 }
-window.addEventListener('popstate',()=>{
-  if(document.getElementById('mobileFilmeModal').classList.contains('open')) closeMobileFilmeModal();
-});
 
 
 // Drag-to-scroll para as filas de posters
@@ -3493,34 +3547,8 @@ window.addEventListener('popstate',()=>{
 </script>
 
 <!-- AUTH SCREEN -->
-<div class="auth-screen" id="authScreen">
-  <div class="auth-box" id="authBox">
-    <div class="auth-logo"><svg width="160" height="48" viewBox="0 0 160 48" xmlns="http://www.w3.org/2000/svg">
-  <rect x="2" y="20" width="36" height="26" rx="2" fill="none" stroke="#fff" stroke-width="1.6"/>
-  <line x1="8" y1="29" x2="33" y2="29" stroke="#fff" stroke-width="0.7" stroke-opacity="0.35"/>
-  <line x1="8" y1="36" x2="33" y2="36" stroke="#fff" stroke-width="0.7" stroke-opacity="0.35"/>
-  <g transform="rotate(-26, 2, 20)">
-    <rect x="2" y="11" width="36" height="10" rx="2" fill="#111" stroke="#fff" stroke-width="1.6"/>
-    <rect x="1"  y="11" width="5" height="10" fill="#fff" fill-opacity="0.72"/>
-    <rect x="10" y="11" width="5" height="10" fill="#fff" fill-opacity="0.72"/>
-    <rect x="19" y="11" width="5" height="10" fill="#fff" fill-opacity="0.72"/>
-    <rect x="28" y="11" width="5" height="10" fill="#fff" fill-opacity="0.72"/>
-  </g>
-  <circle cx="2" cy="20" r="2.2" fill="#fff" fill-opacity="0.55"/>
-  <text x="46" y="35" font-family="Georgia,serif" font-size="28" font-weight="400" fill="#fff" letter-spacing="0.4">Cine<tspan font-style="italic" fill="#ccc">List</tspan></text>
-</svg></div>
-    <div class="auth-tagline">O catálogo de filmes da tropa 🎬</div>
-    <div id="authError" style="display:none;background:rgba(229,9,20,.15);border:1px solid var(--red);color:#ff6b6b;padding:10px 14px;border-radius:8px;font-size:13px;margin-bottom:12px;text-align:left"></div>
-    <input class="form-input" id="loginEmail" type="email" placeholder="Seu e-mail" style="margin-bottom:10px;display:block;width:100%;background:#2a2a2a;border:1px solid #333;color:#fff;padding:12px 14px;border-radius:8px;font-family:inherit;font-size:14px;outline:none">
-    <input class="form-input" id="loginSenha" type="password" placeholder="Senha" style="margin-bottom:16px;display:block;width:100%;background:#2a2a2a;border:1px solid #333;color:#fff;padding:12px 14px;border-radius:8px;font-family:inherit;font-size:14px;outline:none" onkeydown="if(event.key==='Enter')loginEmailSenha()">
-    <button class="auth-btn auth-btn-google" onclick="loginEmailSenha()" style="justify-content:center;font-size:15px;font-weight:700">
-      Entrar
-    </button>
-    <div style="margin-top:12px">
-
-  </div>
-    <div class="auth-footer">Apenas membros cadastrados têm acesso.</div>
-  </div>
+<div class="auth-screen" id="authScreen" style="display:none">
+  <div class="auth-box" id="authBox"></div>
 </div>
 
 
