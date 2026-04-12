@@ -2822,7 +2822,7 @@ async function onLogin(session){
     loadFilmsFromSupabase().then(() => {
       try {
         buildUD();
-        renderHome();
+        render(); // re-renderiza a view atual (seja home, filmes, pendentes, etc.)
         checkBirthdays();
       } catch(e) {
         console.error('Render error:', e);
