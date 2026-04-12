@@ -1767,10 +1767,19 @@ async function openMaisInfo(id, nome, ano){
       ]);
     }
     const omdb = omdbRes.Response==='True' ? omdbRes : null;
-    const ta = s => !s||s==='N/A' ? null : s.replace(/Won (\d+) Oscar(s?)/g,'Ganhou $1 Oscar$2').replace(/Nominated for (\d+) Oscar(s?)/g,'Indicado para $1 Oscar$2').replace(/Won (\d+)/g,'Ganhou $1').replace(/Nominated for (\d+)/g,'Indicado para $1').replace(/(\d+) wins? & (\d+) nominations? total/g,'$1 vitórias e $2 indicações no total').replace(/(\d+) wins? & (\d+) nominations?/g,'$1 vitórias e $2 indicações').replace(/(\d+) wins?/g,'$1 vitórias').replace(/(\d+) nominations?/g,'$1 indicações');
+    // Extrai dados de Oscar da string do OMDB
+    // Ex: "Won 2 Oscars. Another 31 wins & 71 nominations total"
+    // Ex: "Nominated for 4 Oscars. Another 19 wins & 71 nominations total"
+    const awardsStr = omdb?.Awards || '';
+    const oscarWins = (awardsStr.match(/Won (\d+) Oscar/i) || [])[1];
+    const oscarNoms = (awardsStr.match(/Nominated for (\d+) Oscar/i) || [])[1];
     let html = '';
-    const awards = ta(omdb?.Awards);
-    if(awards) html += '<div class="bsheet-section"><div class="bsheet-section-title">🏆 Prêmios</div><div style="font-size:14px;color:#f5c518;font-weight:600">'+esc(awards)+'</div></div>';
+    if(oscarWins || oscarNoms) {
+      const parts = [];
+      if(oscarWins && oscarWins !== '0') parts.push('<span style="color:#f5c518;font-weight:700">🏆 '+oscarWins+' Oscar'+(oscarWins==='1'?'':'s')+' ganho'+(oscarWins==='1'?'':'s')+'</span>');
+      if(oscarNoms) parts.push('<span style="color:#aaa;font-weight:600">🎬 '+oscarNoms+' indicaç'+(oscarNoms==='1'?'ão':'ões')+'</span>');
+      html += '<div class="bsheet-section"><div class="bsheet-section-title">🏆 Oscar</div><div style="font-size:14px;display:flex;gap:16px;flex-wrap:wrap">'+parts.join('')+'</div></div>';
+    }
     const dir = omdb?.Director && omdb.Director!=='N/A' ? omdb.Director : null;
     const wri = omdb?.Writer && omdb.Writer!=='N/A' ? omdb.Writer.split(',').slice(0,2).join(', ') : null;
     if(dir||wri) html += '<div class="bsheet-section"><div class="bsheet-section-title">🎬 Direção e Roteiro</div>'+(dir?'<div style="margin-bottom:6px"><span style="color:#888;font-size:11px">Diretor</span><br><span style="font-size:14px;font-weight:600">'+esc(dir)+'</span></div>':'')+(wri?'<div><span style="color:#888;font-size:11px">Roteiro</span><br><span style="font-size:13px">'+esc(wri)+'</span></div>':'')+'</div>';
