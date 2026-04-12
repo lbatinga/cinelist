@@ -62,7 +62,8 @@ body{background:var(--bg);color:var(--text);font-family:'Inter',sans-serif;displ
 .ud-check{color:var(--green);font-size:14px}
 
 /* ── MAIN SCROLL ── */
-.app-scroll{flex:1;overflow-y:auto;padding-top:60px;padding-bottom:var(--safe-bottom)}
+.app-scroll{flex:1;overflow-y:auto;overflow-x:hidden;padding-top:60px;padding-bottom:var(--safe-bottom);width:100%;max-width:100vw}
+.app-scroll > .view{width:100%;max-width:100%;overflow-x:hidden}
 .app-scroll::-webkit-scrollbar{width:4px}
 .app-scroll::-webkit-scrollbar-thumb{background:var(--surface3);border-radius:2px}
 
@@ -439,6 +440,7 @@ tr.selected td{background:rgba(229,9,20,.05)}
     <div class="nav-link" id="nav-avaliacoes" onclick="navigate('avaliacoes')">Minhas Avaliações</div>
     <div class="nav-link" id="nav-recentes" onclick="navigate('recentes')">Recentes</div>
     <div class="nav-link" id="nav-ranking" onclick="navigate('ranking')">Ranking</div>
+    <div class="nav-link" id="nav-descobertas" onclick="navigate('descobertas')">💡 Descobertas</div>
   </div>
   <div class="topbar-right">
     <div class="search-wrap">
@@ -462,6 +464,7 @@ tr.selected td{background:rgba(229,9,20,.05)}
   <div class="bn-item" id="bn-pendentes" onclick="navigate('pendentes')"><span class="bn-icon">⏳</span><span class="bn-label">Pendentes</span></div>
   <div class="bn-item" id="bn-avaliacoes" onclick="navigate('avaliacoes')"><span class="bn-icon">⭐</span><span class="bn-label">Notas</span></div>
   <div class="bn-item" id="bn-ranking" onclick="navigate('ranking')"><span class="bn-icon">🏆</span><span class="bn-label">Ranking</span></div>
+  <div class="bn-item" id="bn-descobertas" onclick="navigate('descobertas')"><span class="bn-icon">💡</span><span class="bn-label">Descobertas</span></div>
 </div>
 
 <!-- SCROLL CONTAINER -->
@@ -472,6 +475,7 @@ tr.selected td{background:rgba(229,9,20,.05)}
   <div id="viewAvaliacoes" class="view"></div>
   <div id="viewRecentes" class="view"></div>
   <div id="viewRanking" class="view"></div>
+  <div id="viewDescobertas" class="view"></div>
 </div>
 
 <!-- RATE MODAL -->
@@ -584,14 +588,12 @@ async function loadUsuariosFromSupabase() {
     if (error) throw error;
     if (!usuarios || usuarios.length === 0) return false;
 
-    // Reconstrói RAW.usuarios
     const newUsuarios = {};
     usuarios.forEach(u => {
       if (!u.legacy_id) return;
       newUsuarios[u.legacy_id] = { nome: u.nome };
     });
 
-    // Reconstrói RAW.users_stats — preserva nao_quer do STATIC para membros existentes
     const newStats = {};
     usuarios.forEach(u => {
       if (!u.legacy_id) return;
@@ -599,25 +601,16 @@ async function loadUsuariosFromSupabase() {
       newStats[u.legacy_id] = {
         nome: u.nome,
         in_ranking: u.in_ranking !== false,
-        quant: 0,
-        media: null,
-        time_str: '0h 0min',
-        ultima_av: null,
-        pendentes: [],
-        nao_quer: existing.nao_quer || [],
-        inseridos: [],
-        by_year: {},
-        by_genre: {},
-        genre_avg: {}
+        quant: 0, media: null, time_str: '0h 0min', ultima_av: null,
+        pendentes: [], nao_quer: existing.nao_quer || [],
+        inseridos: [], by_year: {}, by_genre: {}, genre_avg: {}
       };
     });
 
-    // Atualiza os objetos USERS e STATS in-place (são const mas mutáveis)
     Object.keys(USERS).forEach(k => delete USERS[k]);
     Object.assign(USERS, newUsuarios);
     Object.keys(STATS).forEach(k => delete STATS[k]);
     Object.assign(STATS, newStats);
-
     RAW.usuarios = newUsuarios;
     RAW.users_stats = newStats;
 
@@ -779,13 +772,13 @@ function calcUserStats(){
     }
 
     // Tempo total assistido (time_str)
-    const totalMin = minhasAvs.reduce((sum, a) => {
+    const totalMinU = minhasAvs.reduce((sum, a) => {
       const f = FILMES_MAP[a.id];
       return sum + (f && f.duracao_min ? f.duracao_min : 0);
     }, 0);
-    const tDias = Math.floor(totalMin / 1440);
-    const tHoras = Math.floor((totalMin % 1440) / 60);
-    const tMins = totalMin % 60;
+    const tDias = Math.floor(totalMinU / 1440);
+    const tHoras = Math.floor((totalMinU % 1440) / 60);
+    const tMins = totalMinU % 60;
     s.time_str = tDias > 0
       ? `${tDias}d ${tHoras}h ${tMins}min`
       : `${tHoras}h ${tMins}min`;
@@ -946,6 +939,7 @@ function render(){
   else if(CV==='avaliacoes') renderAvaliacoes();
   else if(CV==='recentes') renderRecentes();
   else if(CV==='ranking') renderRanking();
+  else if(CV==='descobertas') renderDescobertas();
 }
 
 // SEARCH
@@ -1907,6 +1901,35 @@ showAuthScreen();
 
 // ── RANKING V2 ──
 // rankTab já declarado acima
+
+
+function renderDescobertas(){
+  const el = document.getElementById('viewDescobertas');
+  const descTab = window.descTab || 'afinidades';
+  el.innerHTML = `
+    <div class="rank-section">
+      <div class="tpage-header" style="margin-bottom:16px">
+        <div class="tpage-title">💡 Descobertas</div>
+      </div>
+      <div class="rtabs-wrap"><div class="rtabs">
+        <div class="rtab ${descTab==='afinidades'?'active':''}" onclick="setDescTab('afinidades')">🤝 Afinidades</div>
+        <div class="rtab ${descTab==='stats'?'active':''}" onclick="setDescTab('stats')">📊 Estatísticas</div>
+      </div></div>
+      <div id="descTabContent"></div>
+    </div>
+  `;
+  renderDescTab();
+  scrollActiveTab();
+}
+
+function setDescTab(tab){ window.descTab=tab; renderDescobertas(); }
+
+function renderDescTab(){
+  const tab = window.descTab || 'afinidades';
+  const el = document.getElementById('descTabContent');
+  if(tab==='afinidades') el.innerHTML = rankAfinidadesHTML();
+  else if(tab==='stats') el.innerHTML = rankStatsHTML();
+}
 
 function renderRanking(){
   const el = document.getElementById('viewRanking');
@@ -3069,7 +3092,7 @@ async function addNewMember(){
     msg.style.color='#46d369';
     msg.textContent=`✅ Membro "${nome}" criado com sucesso!`;
 
-    // Atualiza localmente sem precisar editar o código
+    // Atualiza localmente
     USERS[legacy] = { nome };
     STATS[legacy] = { nome, in_ranking:true, quant:0, media:null, pendentes:[], nao_quer:[], inseridos:[], by_year:{}, by_genre:{}, genre_avg:{} };
     RAW.usuarios[legacy] = { nome };
