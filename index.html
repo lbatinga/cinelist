@@ -755,19 +755,17 @@ function calcUserStats(){
     const s = STATS[uid];
     if(!s) return;
 
-    // Avaliações deste usuário
+    // Avaliações deste usuário (com nota)
     const minhasAvs = FILMES
       .filter(f => f.avaliacoes[uid] && f.avaliacoes[uid].nota !== null)
       .map(f => ({ ...f.avaliacoes[uid], id: f.id, nome: f.nome, poster: f.poster, categorias: f.categorias, ano: f.ano }));
 
-    // Rebuild nao_quer from avaliacoes where vai === 'Não'
+    // Rebuild nao_quer from avaliacoes (vai === 'Não' e sem nota)
     const naoQuerFromAvs = FILMES
       .filter(f => f.avaliacoes[uid] && f.avaliacoes[uid].vai === 'Não' && f.avaliacoes[uid].nota === null)
       .map(f => f.id);
-    // Merge: keep static nao_quer + add any from avaliacoes
-    const nqMerged = new Set([...(s.nao_quer||[]), ...naoQuerFromAvs]);
-    // Remove any that now have a real rating (nota !== null)
     const ratedSet = new Set(minhasAvs.map(a => a.id));
+    const nqMerged = new Set([...(s.nao_quer||[]), ...naoQuerFromAvs]);
     s.nao_quer = [...nqMerged].filter(id => !ratedSet.has(id));
 
     // Quant e media
@@ -1467,24 +1465,18 @@ async function saveRating(){
   if(btn){btn.textContent='Salvando...';btn.disabled=true;}
 
   try{
-    // Se o filme estava em "não quero", deleta o registro antigo antes de inserir o novo
-    const isInNaoQuer = (STATS[CU]?.nao_quer||[]).includes(rateFilmeId);
-    if(isInNaoQuer){
-      await supa.from('avaliacoes').delete().eq('filme_id', rateFilmeId).eq('usuario_id', CU);
-      // Remove da lista nao_quer local
-      const st2 = STATS[CU];
-      if(st2) st2.nao_quer = (st2.nao_quer||[]).filter(id => id !== rateFilmeId);
-    }
+    // Sempre deleta registro existente antes de inserir (evita erro de RLS no upsert)
+    await supa.from('avaliacoes').delete().eq('filme_id', rateFilmeId).eq('usuario_id', CU);
 
-    // Salva no Supabase
-    const {error}=await supa.from('avaliacoes').upsert({
+    // Insere novo registro
+    const {error}=await supa.from('avaliacoes').insert({
       filme_id: rateFilmeId,
       usuario_id: CU,
       nota: nota,
       vai_assistir: vaiVal,
       data_avaliacao: data,
       comentario: coment
-    },{onConflict:'filme_id,usuario_id'});
+    });
     if(error) throw error;
 
     // Atualiza memória local
@@ -1497,11 +1489,12 @@ async function saveRating(){
     f.media=notas.length?Math.round(100*notas.reduce((s,n)=>s+n,0)/notas.length)/100:null;
     f.num_avaliacoes=notas.length;
 
-    // Remove dos pendentes locais
+    // Remove dos pendentes locais e atualiza nao_quer
     const st=STATS[CU];
     st.pendentes=st.pendentes.filter(id=>id!==rateFilmeId);
+    // Remove de nao_quer se estava lá
+    if(st.nao_quer) st.nao_quer = st.nao_quer.filter(id=>id!==rateFilmeId);
     if(isNao){
-      // Adiciona à lista nao_quer local
       if(!st.nao_quer) st.nao_quer=[];
       if(!st.nao_quer.includes(rateFilmeId)) st.nao_quer.push(rateFilmeId);
     } else {
@@ -1527,17 +1520,12 @@ async function mudarDeOpiniao(filmeId){
   if(!confirm(`Remover "${f.nome}" da lista "Não quero"?\nEle voltará para seus pendentes.`)) return;
   try{
     // Deleta do Supabase
-    const {error} = await supa.from('avaliacoes')
-      .delete()
-      .eq('filme_id', filmeId)
-      .eq('usuario_id', CU);
+    const {error} = await supa.from('avaliacoes').delete().eq('filme_id', filmeId).eq('usuario_id', CU);
     if(error) throw error;
 
-    // Atualiza local: remove da lista nao_quer
+    // Atualiza local
     const st = STATS[CU];
     if(st) st.nao_quer = (st.nao_quer||[]).filter(id => id !== filmeId);
-
-    // Remove avaliação local do filme
     if(f.avaliacoes[CU]) delete f.avaliacoes[CU];
 
     // Recalc media do filme
@@ -3036,14 +3024,15 @@ function applyUserToUI(){
 // SAVE RATING TO SUPABASE
 async function saveRatingToSupabase(filmeId, nota, vai, data, comentario){
   const uid = CU;
-  const { error } = await supa.from('avaliacoes').upsert({
+  await supa.from('avaliacoes').delete().eq('filme_id', filmeId).eq('usuario_id', uid);
+  const { error } = await supa.from('avaliacoes').insert({
     filme_id: filmeId,
     usuario_id: uid,
     nota: nota,
     vai_assistir: vai,
     data_avaliacao: data,
     comentario: comentario
-  }, { onConflict: 'filme_id,usuario_id' });
+  });
   return !error;
 }
 
