@@ -1465,18 +1465,15 @@ async function saveRating(){
   if(btn){btn.textContent='Salvando...';btn.disabled=true;}
 
   try{
-    // Sempre deleta registro existente antes de inserir (evita erro de RLS no upsert)
-    await supa.from('avaliacoes').delete().eq('filme_id', rateFilmeId).eq('usuario_id', CU);
-
-    // Insere novo registro
-    const {error}=await supa.from('avaliacoes').insert({
+    // Upsert: insere ou atualiza (funciona com policies anon de INSERT + UPDATE)
+    const {error}=await supa.from('avaliacoes').upsert({
       filme_id: rateFilmeId,
       usuario_id: CU,
       nota: nota,
       vai_assistir: vaiVal,
       data_avaliacao: data,
       comentario: coment
-    });
+    },{onConflict:'filme_id,usuario_id'});
     if(error) throw error;
 
     // Atualiza memória local
@@ -3024,15 +3021,14 @@ function applyUserToUI(){
 // SAVE RATING TO SUPABASE
 async function saveRatingToSupabase(filmeId, nota, vai, data, comentario){
   const uid = CU;
-  await supa.from('avaliacoes').delete().eq('filme_id', filmeId).eq('usuario_id', uid);
-  const { error } = await supa.from('avaliacoes').insert({
+  const { error } = await supa.from('avaliacoes').upsert({
     filme_id: filmeId,
     usuario_id: uid,
     nota: nota,
     vai_assistir: vai,
     data_avaliacao: data,
     comentario: comentario
-  });
+  },{onConflict:'filme_id,usuario_id'});
   return !error;
 }
 
