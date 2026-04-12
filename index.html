@@ -1766,7 +1766,14 @@ async function openMaisInfo(id, nome, ano){
         fetch('https://api.themoviedb.org/3/movie/'+tmdbMovie.id+'/credits?api_key='+TMDB_KEY+'&language=pt-BR').then(r=>r.json())
       ]);
     }
-    const omdb = omdbRes.Response==='True' ? omdbRes : null;
+    // Se OMDB não achou pelo nome PT-BR, tenta com o título original do TMDB
+    let omdb = omdbRes.Response==='True' ? omdbRes : null;
+    if(!omdb && tmdbMovie?.original_title && tmdbMovie.original_title !== nomeD) {
+      try {
+        const omdbRes2 = await fetch('https://www.omdbapi.com/?t='+encodeURIComponent(tmdbMovie.original_title)+'&y='+ano+'&apikey='+OMDB).then(r=>r.json());
+        if(omdbRes2.Response==='True') omdb = omdbRes2;
+      } catch(e2) {}
+    }
     // Extrai dados de Oscar da string do OMDB
     // Ex: "Won 2 Oscars. Another 31 wins & 71 nominations total"
     // Ex: "Nominated for 4 Oscars. Another 19 wins & 71 nominations total"
