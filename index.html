@@ -1896,9 +1896,8 @@ function renderRanking(){
       <div class="rtabs-wrap"><div class="rtabs">
         <div class="rtab ${rankTab==='geral'?'active':''}" onclick="setRankTab('geral')">🏆 Geral</div>
         <div class="rtab ${rankTab==='ano'?'active':''}" onclick="setRankTab('ano')">📅 Por Ano</div>
-        <div class="rtab ${rankTab==='filmes'?'active':''}" onclick="setRankTab('filmes')">⭐ Top Filmes</div>
         <div class="rtab ${rankTab==='genero'?'active':''}" onclick="setRankTab('genero')">🎭 Por Gênero</div>
-        <div class="rtab ${rankTab==='stats'?'active':''}" onclick="setRankTab('stats')">📊 Estatísticas</div>
+        <div class="rtab ${rankTab==='filmes'?'active':''}" onclick="setRankTab('filmes')">⭐ Top Filmes</div>
       </div></div>
       <div id="rankTabContent"></div>
     </div>
@@ -1914,7 +1913,6 @@ function renderRankTab(){
   else if(rankTab==='ano') el.innerHTML = rankAnoHTML();
   else if(rankTab==='filmes') el.innerHTML = rankFilmesHTML();
   else if(rankTab==='genero') el.innerHTML = rankGeneroHTML();
-  else if(rankTab==='stats') el.innerHTML = rankStatsHTML();
 }
 
 // GERAL
