@@ -778,6 +778,18 @@ function calcUserStats(){
       s.ultima_av = `${String(maxD.getDate()).padStart(2,'0')}/${String(maxD.getMonth()+1).padStart(2,'0')}/${maxD.getFullYear()}`;
     }
 
+    // Tempo total assistido (time_str)
+    const totalMin = minhasAvs.reduce((sum, a) => {
+      const f = FILMES_MAP[a.id];
+      return sum + (f && f.duracao_min ? f.duracao_min : 0);
+    }, 0);
+    const tDias = Math.floor(totalMin / 1440);
+    const tHoras = Math.floor((totalMin % 1440) / 60);
+    const tMins = totalMin % 60;
+    s.time_str = tDias > 0
+      ? `${tDias}d ${tHoras}h ${tMins}min`
+      : `${tHoras}h ${tMins}min`;
+
     // Top5 e Bot5
     const sorted = [...minhasAvs].sort((a,b) => b.nota - a.nota);
     s.top5_dyn = sorted.slice(0,5).map(a => ({ id:a.id, nome:a.nome, nota:a.nota, poster:a.poster }));
