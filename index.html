@@ -357,7 +357,7 @@ tr.selected td{background:rgba(229,9,20,.05)}
 .stream-logo{width:50px;height:50px;border-radius:10px;object-fit:cover;border:1px solid #333}
 /* RANKING MOBILE FIX */
 @media(max-width:600px){
-  .rank-item{padding:10px 12px!important;flex-wrap:wrap}
+  .rank-item{padding:10px 10px!important;flex-wrap:wrap;overflow:hidden;max-width:100%;box-sizing:border-box;gap:10px!important}
   .rank-stats{display:grid!important;grid-template-columns:1fr 1fr 1fr 1fr!important;gap:4px!important;margin-top:8px;width:100%}
   .rstat{flex-direction:column!important;align-items:center!important;text-align:center}
   .rstat-n{font-size:14px!important}
@@ -365,7 +365,8 @@ tr.selected td{background:rgba(229,9,20,.05)}
   .rank-meta{font-size:10px!important}
   .rank-name{font-size:14px!important}
   /* Grids de 2 colunas do Ranking ficam em 1 coluna no mobile */
-  .rank-two-col { grid-template-columns: 1fr !important; }
+  .rank-two-col { grid-template-columns: 1fr !important; overflow:hidden; }
+  .rank-two-col > div { min-width:0; overflow:hidden; }
   /* Film rank items mobile */
   .film-rank-item{padding:8px 8px!important;gap:8px!important}
   .fr-num{font-size:14px!important;width:24px!important}
@@ -2086,16 +2087,16 @@ function rankAnoHTML(){
         ${members.map((m,i)=>{
           const max=members[0].cnt||1;
           const med=i===0?'🥇':i===1?'🥈':i===2?'🥉':i+1+'.';
-          return `<div class="rank-item" style="margin-bottom:6px;padding:10px 14px" onclick="openUserYearDetail('${m.uid}','${rankYear}')">
-            <div style="font-size:16px;width:32px;text-align:center;flex-shrink:0">${med}</div>
-            <div class="rank-av" style="background:${aC(m.uid)};width:36px;height:36px;font-size:12px">${ini(m.nome)}</div>
-            <div style="flex:1;min-width:0">
-              <div style="font-size:13px;font-weight:700">${esc(m.nome)}</div>
+          return `<div class="rank-item" style="margin-bottom:6px;padding:10px 14px;overflow:hidden" onclick="openUserYearDetail('${m.uid}','${rankYear}')">
+            <div style="font-size:16px;width:28px;text-align:center;flex-shrink:0">${med}</div>
+            <div class="rank-av" style="background:${aC(m.uid)};width:32px;height:32px;font-size:11px">${ini(m.nome)}</div>
+            <div style="flex:1;min-width:0;overflow:hidden">
+              <div style="font-size:13px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(m.nome)}</div>
               <div style="margin-top:4px;background:var(--surface2);border-radius:3px;overflow:hidden;height:4px">
                 <div style="height:100%;width:${max?Math.round(m.cnt/max*100):0}%;background:linear-gradient(90deg,var(--red),var(--yellow));border-radius:3px"></div>
               </div>
             </div>
-            <div style="font-size:20px;font-weight:900;color:var(--green);flex-shrink:0">${m.cnt}</div>
+            <div style="font-size:18px;font-weight:900;color:var(--green);flex-shrink:0;min-width:32px;text-align:right">${m.cnt}</div>
           </div>`;
         }).join('')}
       </div>
@@ -2195,16 +2196,16 @@ function rankGeneroHTML(){
         <div style="font-size:14px;font-weight:700;margin-bottom:10px;color:#e5e5e5">👥 Quem mais assistiu ${rankGenre}</div>
         ${genreMembers.map((m,i)=>{
           const medal=i===0?'🥇':i===1?'🥈':i===2?'🥉':i+1+'.';
-          return `<div class="rank-item" style="margin-bottom:6px;padding:10px 14px">
+          return `<div class="rank-item" style="margin-bottom:6px;padding:10px 14px;overflow:hidden">
             <div style="font-size:16px;width:28px;text-align:center;flex-shrink:0">${medal}</div>
-            <div class="rank-av" style="background:${aC(m.uid)};width:34px;height:34px;font-size:11px">${ini(m.nome)}</div>
-            <div style="flex:1;min-width:0">
-              <div style="font-size:13px;font-weight:700">${esc(m.nome)}</div>
+            <div class="rank-av" style="background:${aC(m.uid)};width:32px;height:32px;font-size:11px">${ini(m.nome)}</div>
+            <div style="flex:1;min-width:0;overflow:hidden">
+              <div style="font-size:13px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(m.nome)}</div>
               <div style="margin-top:4px;background:var(--surface2);border-radius:3px;overflow:hidden;height:4px">
                 <div style="height:100%;width:${Math.round(m.cnt/maxCnt*100)}%;background:linear-gradient(90deg,var(--red),var(--yellow));border-radius:3px"></div>
               </div>
             </div>
-            <div style="text-align:right;flex-shrink:0">
+            <div style="text-align:right;flex-shrink:0;min-width:32px">
               <div style="font-size:18px;font-weight:900;color:var(--green)">${m.cnt}</div>
               ${m.avg?`<div style="font-size:10px;color:${nC(m.avg)}">média ${m.avg}</div>`:''}
             </div>
