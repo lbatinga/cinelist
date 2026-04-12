@@ -1850,6 +1850,14 @@ showAuthScreen();
 // rankTab já declarado acima
 
 
+function scrollActiveTab(){
+  setTimeout(()=>{
+    const t = document.querySelector('.rtabs .rtab.active');
+    if(t) t.scrollIntoView({behavior:'smooth', block:'nearest', inline:'center'});
+  }, 40);
+}
+
+
 function renderDescobertas(){
   const el = document.getElementById('viewDescobertas');
   const descTab = window.descTab || 'afinidades';
