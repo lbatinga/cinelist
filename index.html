@@ -1768,6 +1768,9 @@ async function saveFilme(){
     closeModal('addModal');
     renderHome();
     showToast(`✅ "${nomeFinal}" adicionado! Avalie agora 👇`);
+    // Disparar notificação push para todos
+    const nomeUsuario = USERS[CU]?.nome || 'Alguém';
+    enviarNotifFilme(nomeFinal, nomeUsuario);
     // Abrir modal de avaliação automaticamente
     setTimeout(() => openRate(data.id || newId), 300);
   }catch(e){
@@ -3120,6 +3123,23 @@ function urlBase64ToUint8Array(base64String) {
 }
 
 // ===== NOTIFICAÇÕES =====
+const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbyOBpxJ2PQOxMsOQyVjcxw4Y8F1_MprYHTSqoGOc5-ErqZHajCEKLC_fVCHmTJUi4Rr/exec';
+
+// Disparo automático ao adicionar filme (fire-and-forget)
+function enviarNotifFilme(nomeFilme, quemAdicionou) {
+  try {
+    const titulo = '🎬 Novo filme adicionado!';
+    const body = `${quemAdicionou} adicionou "${nomeFilme}" ao catálogo`;
+    const params = new URLSearchParams({ titulo, body, auto: '1' });
+    fetch(APPS_SCRIPT_URL + '?' + params.toString(), {
+      method: 'GET',
+      mode: 'no-cors'
+    }).catch(e => console.warn('Notif auto erro:', e));
+  } catch(e) {
+    console.warn('Erro ao disparar notificação:', e);
+  }
+}
+
 async function ativarNotificacoes() {
   if (!('Notification' in window)) {
     showToast('⚠️ Seu navegador não suporta notificações.');
@@ -3665,6 +3685,11 @@ function renderAdminNotificacao(){
       </div>
       <button onclick="enviarNotificacaoManual()" style="background:var(--red);color:#fff;border:none;border-radius:8px;padding:12px;font-family:inherit;font-size:14px;font-weight:800;cursor:pointer">🔔 Enviar para todos</button>
       <div id="notifMsg" style="font-size:12px;text-align:center;color:#888"></div>
+    </div>
+    <div style="margin-top:24px;padding-top:16px;border-top:1px solid #2a2a2a">
+      <div style="font-size:12px;color:#888;font-weight:700;margin-bottom:10px">🔧 DIAGNÓSTICO</div>
+      <button onclick="diagnosticoNotificacoes()" style="background:#2a2a2a;color:#fff;border:none;border-radius:8px;padding:10px;font-family:inherit;font-size:12px;font-weight:700;cursor:pointer;width:100%">Testar pipeline completo</button>
+      <div id="diagMsg" style="font-size:11px;color:#888;margin-top:8px;white-space:pre-line"></div>
     </div>`;
 }
 
@@ -3676,17 +3701,62 @@ async function enviarNotificacaoManual(){
 
   msg.style.color='#888'; msg.textContent='⏳ Enviando...';
   try {
-    const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbyOBpxJ2PQOxMsOQyVjcxw4Y8F1_MprYHTSqoGOc5-ErqZHajCEKLC_fVCHmTJUi4Rr/exec';
-    // Use GET with params to avoid CORS issues with Apps Script
     const params = new URLSearchParams({ titulo, body, manual: '1' });
     await fetch(APPS_SCRIPT_URL + '?' + params.toString(), {
       method: 'GET',
       mode: 'no-cors'
     });
-    msg.style.color='#46d369'; msg.textContent='✅ Notificação enviada!';
+    msg.style.color='#46d369'; msg.textContent='✅ Chamada enviada ao Apps Script (verifique se a notificação chegou no celular).';
   } catch(e) {
-    msg.style.color='#e05555'; msg.textContent='❌ Erro: ' + e.message;
+    msg.style.color='#e05555'; msg.textContent='❌ Erro na chamada: ' + e.message;
   }
+}
+
+async function diagnosticoNotificacoes(){
+  const el = document.getElementById('diagMsg');
+  let log = '';
+  const add = (icon, text) => { log += icon + ' ' + text + '\n'; el.textContent = log; };
+
+  // 1. Firebase
+  add(window.fbMessaging ? '✅' : '❌', 'Firebase Messaging: ' + (window.fbMessaging ? 'inicializado' : 'NÃO carregou'));
+
+  // 2. Service Worker
+  try {
+    const regs = await navigator.serviceWorker.getRegistrations();
+    const swOk = regs.some(r => r.active?.scriptURL?.includes('sw.js'));
+    add(swOk ? '✅' : '⚠️', 'Service Worker: ' + (swOk ? 'ativo' : 'não encontrado'));
+  } catch(e) {
+    add('❌', 'Service Worker: erro — ' + e.message);
+  }
+
+  // 3. Permissão de notificação
+  if('Notification' in window){
+    add(Notification.permission === 'granted' ? '✅' : '❌', 'Permissão: ' + Notification.permission);
+  } else {
+    add('❌', 'Notification API: não suportada');
+  }
+
+  // 4. Tokens no Supabase
+  try {
+    const { data, error } = await supa.from('fcm_tokens').select('email,updated_at');
+    if(error) throw error;
+    add(data.length > 0 ? '✅' : '⚠️', 'Tokens FCM salvos: ' + data.length + ' dispositivo(s)');
+    data.forEach(t => add('  📱', t.email + ' (atualizado: ' + new Date(t.updated_at).toLocaleDateString('pt-BR') + ')'));
+  } catch(e) {
+    add('❌', 'Erro ao ler tokens: ' + e.message);
+  }
+
+  // 5. Teste de chamada ao Apps Script
+  add('⏳', 'Testando chamada ao Apps Script...');
+  try {
+    const params = new URLSearchParams({ titulo: 'Teste CineList', body: 'Diagnóstico de notificações', test: '1' });
+    await fetch(APPS_SCRIPT_URL + '?' + params.toString(), { method: 'GET', mode: 'no-cors' });
+    add('✅', 'Apps Script: chamada realizada (resposta opaca — verificar se notificação chegou)');
+  } catch(e) {
+    add('❌', 'Apps Script: erro na chamada — ' + e.message);
+  }
+
+  add('ℹ️', 'Se tudo está ✅ mas a notif não chega, o problema está no Apps Script (verifique o código publicado).');
 }
 
 // ===== MOBILE FILME MODAL =====
