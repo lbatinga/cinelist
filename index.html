@@ -691,7 +691,7 @@ async function loadFilmsFromSupabase() {
         nota: av.nota,
         vai: av.vai_assistir || '',
         comentario: av.comentario || '',
-        data: av.data_avaliacao || ''
+        data: av.data_avaliacao ? (av.data_avaliacao.includes('-') ? av.data_avaliacao.split('-').reverse().join('/') : av.data_avaliacao) : ''
       };
     });
     
@@ -935,6 +935,69 @@ const esc = s=>s?s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;
 const classC = c=>{const n=parseInt(c);return n>=18?'#e05555':n>=16?'#f5a623':n>=14?'#f5c518':'#46d369'};
 
 let CU=null, CV='home', AGenre=null, navList=[], searchQ='', rateFilmeId=null, vaiVal='Sim';
+// Sort state per view: {col, dir} where dir is 'asc' or 'desc'
+var sortState = {
+  filmes: {col:'nota', dir:'desc'},
+  pendentes: {col:'nota', dir:'desc'},
+  avaliacoes: {col:'nota', dir:'desc'}
+};
+function toggleSort(view, col){
+  const s = sortState[view];
+  if(s.col === col) s.dir = s.dir === 'desc' ? 'asc' : 'desc';
+  else { s.col = col; s.dir = col === 'nome' ? 'asc' : 'desc'; }
+  render();
+}
+function sortIcon(view, col){
+  const s = sortState[view];
+  if(s.col !== col) return '';
+  return s.dir === 'asc' ? ' ↑' : ' ↓';
+}
+function applySortFilmes(list){
+  const s = sortState.filmes;
+  const dir = s.dir === 'asc' ? 1 : -1;
+  return list.sort((a,b)=>{
+    switch(s.col){
+      case 'nota': return dir * ((a.media||0) - (b.media||0));
+      case 'nome': return dir * a.nome.localeCompare(b.nome);
+      case 'ano': return dir * ((parseInt(a.ano)||0) - (parseInt(b.ano)||0));
+      case 'por': return dir * ((USERS[a.inserido_por]?.nome||'').localeCompare(USERS[b.inserido_por]?.nome||''));
+      default: return 0;
+    }
+  });
+}
+function applySortPendentes(list){
+  const s = sortState.pendentes;
+  const dir = s.dir === 'asc' ? 1 : -1;
+  return list.sort((a,b)=>{
+    switch(s.col){
+      case 'nota': return dir * ((a.media||0) - (b.media||0));
+      case 'nome': return dir * a.nome.localeCompare(b.nome);
+      case 'ano': return dir * ((parseInt(a.ano)||0) - (parseInt(b.ano)||0));
+      case 'por': return dir * ((USERS[a.inserido_por]?.nome||'').localeCompare(USERS[b.inserido_por]?.nome||''));
+      case 'avals': return dir * ((Object.values(a.avaliacoes).filter(x=>x.nota!==null).length) - (Object.values(b.avaliacoes).filter(x=>x.nota!==null).length));
+      default: return 0;
+    }
+  });
+}
+function applySortAvaliacoes(list){
+  if(!CU) return list;
+  const s = sortState.avaliacoes;
+  const dir = s.dir === 'asc' ? 1 : -1;
+  return list.sort((a,b)=>{
+    switch(s.col){
+      case 'nota': return dir * ((a.avaliacoes[CU]?.nota||0) - (b.avaliacoes[CU]?.nota||0));
+      case 'nome': return dir * a.nome.localeCompare(b.nome);
+      case 'data': {
+        const da = a.avaliacoes[CU]?.data||''; const db = b.avaliacoes[CU]?.data||'';
+        const pa = da.split('/'); const pb = db.split('/');
+        const na = pa.length===3 ? pa[2]+pa[1]+pa[0] : da;
+        const nb = pb.length===3 ? pb[2]+pb[1]+pb[0] : db;
+        return dir * na.localeCompare(nb);
+      }
+      default: return 0;
+    }
+  });
+}
 let heroSlides=[], heroIdx=0, heroTimer=null;
 
 // SCROLL
@@ -945,6 +1008,10 @@ document.getElementById('appScroll').addEventListener('scroll',function(){
 // NAV
 function navigate(view){
   CV=view; AGenre=null;
+  // Limpa a pesquisa ao mudar de aba
+  searchQ='';
+  const sb=document.getElementById('topSearch');
+  if(sb){sb.value='';sb.classList.remove('open');}
   document.querySelectorAll('.nav-link').forEach(n=>n.classList.remove('active'));
   document.querySelectorAll('.bn-item').forEach(n=>n.classList.remove('active'));
   const nl=document.getElementById('nav-'+view), bl=document.getElementById('bn-'+view);
@@ -1086,11 +1153,7 @@ function setGenre(g){
 function renderFilmes(selectedId, forceGenre){
   let list=[...FILMES].filter(f=>!searchQ||f.nome.toLowerCase().includes(searchQ));
   if(AGenre) list=list.filter(f=>f.categorias.includes(AGenre));
-  list.sort((a,b)=>{
-    if((b.media||0)!==(a.media||0)) return (b.media||0)-(a.media||0);
-    if(b.num_avaliacoes!==a.num_avaliacoes) return b.num_avaliacoes-a.num_avaliacoes;
-    return (a.data_ts||0)-(b.data_ts||0);
-  });
+  applySortFilmes(list);
   navList=list;
   const genres=[...new Set(FILMES.flatMap(f=>f.categorias))].sort();
   const selId=selectedId||(list[0]?.id);
@@ -1109,7 +1172,7 @@ function renderFilmes(selectedId, forceGenre){
           </div>
         </div>
         <table>
-          <thead><tr><th style="width:60px">Nota</th><th style="width:28px"></th><th>Nome</th><th>Ano</th><th>Duração</th><th>Por</th></tr></thead>
+          <thead><tr><th style="width:60px;cursor:pointer" onclick="toggleSort('filmes','nota')">Nota${sortIcon('filmes','nota')}</th><th style="width:28px"></th><th style="cursor:pointer" onclick="toggleSort('filmes','nome')">Nome${sortIcon('filmes','nome')}</th><th>Ano</th><th>Duração</th><th style="cursor:pointer" onclick="toggleSort('filmes','por')">Por${sortIcon('filmes','por')}</th></tr></thead>
           <tbody>
           ${list.map(f=>{
             const nota=f.media?`<span style="color:${nC(f.media)}">${fmt(f.media)}</span>`:`<span style="color:var(--muted2)">—</span>`;
@@ -1252,11 +1315,7 @@ function renderPendentes(selId){
   const s=STATS[CU];
   let list=s.pendentes.map(id=>FM[id]).filter(Boolean);
   if(searchQ) list=list.filter(f=>f.nome.toLowerCase().includes(searchQ));
-  list.sort((a,b)=>{
-    if((b.media||0)!==(a.media||0)) return (b.media||0)-(a.media||0);
-    if(b.num_avaliacoes!==a.num_avaliacoes) return b.num_avaliacoes-a.num_avaliacoes;
-    return (a.data_ts||0)-(b.data_ts||0);
-  });
+  applySortPendentes(list);
   navList=list;
   const sid=selId||(list[0]?.id);
   
@@ -1269,7 +1328,7 @@ function renderPendentes(selId){
           </div>
         </div>
         <table>
-          <thead><tr><th style="width:60px">Nota</th><th style="width:28px"></th><th>Nome</th><th>Ano</th><th>Duração</th><th>Por</th><th>Avals</th></tr></thead>
+          <thead><tr><th style="width:60px;cursor:pointer" onclick="toggleSort('pendentes','nota')">Nota${sortIcon('pendentes','nota')}</th><th style="width:28px"></th><th style="cursor:pointer" onclick="toggleSort('pendentes','nome')">Nome${sortIcon('pendentes','nome')}</th><th>Ano</th><th>Duração</th><th style="cursor:pointer" onclick="toggleSort('pendentes','por')">Por${sortIcon('pendentes','por')}</th><th style="cursor:pointer" onclick="toggleSort('pendentes','avals')">Avals${sortIcon('pendentes','avals')}</th></tr></thead>
           <tbody>
           ${list.map(f=>{
             const nota=f.media?`<span style="color:${nC(f.media)}">${fmt(f.media)}</span>`:'<span style="color:var(--muted2)">—</span>';
@@ -1314,7 +1373,7 @@ function renderAvaliacoes(tab){
   let list = avTab === 'nao_quer' ? listNQ : listAv;
   if(searchQ) list = list.filter(f=>f.nome.toLowerCase().includes(searchQ));
   if(avTab === 'nao_quer') list.sort((a,b)=>a.nome.localeCompare(b.nome));
-  else list.sort((a,b)=>b.avaliacoes[CU].nota-a.avaliacoes[CU].nota);
+  else applySortAvaliacoes(list);
   navList = list;
   const sel = list[0]?.id;
 
@@ -1334,7 +1393,7 @@ function renderAvaliacoes(tab){
         </div>
         ${avTab === 'avaliadas' ? `
         <table>
-          <thead><tr><th>Filme</th><th style="width:70px">Nota ↓</th><th>Data</th></tr></thead>
+          <thead><tr><th style="cursor:pointer" onclick="toggleSort('avaliacoes','nome')">Filme${sortIcon('avaliacoes','nome')}</th><th style="width:70px;cursor:pointer" onclick="toggleSort('avaliacoes','nota')">Nota${sortIcon('avaliacoes','nota')}</th><th style="cursor:pointer" onclick="toggleSort('avaliacoes','data')">Data${sortIcon('avaliacoes','data')}</th></tr></thead>
           <tbody>
           ${list.map(f=>{
             const av=f.avaliacoes[CU];
@@ -1666,9 +1725,12 @@ async function saveFilme(){
     const r = Math.random()*16|0, v = c=='x'?r:(r&0x3|0x8); return v.toString(16);
   });
   
+  // Usar nome do TMDB se disponível (formatação correta)
+  const nomeFinal = td?.titulo || nome;
+  
   const filme={
     id: newId,
-    nome, 
+    nome: nomeFinal, 
     ano: parseInt(ano)||null,
     duracao_str: durStr, 
     duracao_min: durMin||null,
@@ -1694,7 +1756,7 @@ async function saveFilme(){
     
     closeModal('addModal');
     renderHome();
-    showToast(`✅ "${nome}" adicionado! Avalie agora 👇`);
+    showToast(`✅ "${nomeFinal}" adicionado! Avalie agora 👇`);
     // Abrir modal de avaliação automaticamente
     setTimeout(() => openRate(data.id || newId), 300);
   }catch(e){
@@ -3123,7 +3185,7 @@ async function loadProfilesFromSupabase(){
     const { data, error } = await supa.from('perfis').select('*');
     if(error || !data) return;
     data.forEach(p => {
-      profileData[p.legacy_id] = {
+      profileData[p.usuario_id] = {
         apelido: p.apelido || '',
         bday: p.bday || '',
         favFilme: p.fav_filme || '',
@@ -3148,7 +3210,7 @@ async function saveProfiles(){
   const p = profileData[CU] || {};
   try {
     await supa.from('perfis').upsert({
-      legacy_id: CU,
+      usuario_id: CU,
       apelido: p.apelido || null,
       bday: p.bday || null,
       fav_filme: p.favFilme || null,
@@ -3156,7 +3218,7 @@ async function saveProfiles(){
       avatar_color: p.color || null,
       avatar_url: p.photo || null,
       updated_at: new Date().toISOString()
-    }, { onConflict: 'legacy_id' });
+    }, { onConflict: 'usuario_id' });
   } catch(e) {
     console.warn('Erro ao salvar perfil no Supabase:', e);
   }
