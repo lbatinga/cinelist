@@ -873,7 +873,12 @@ function parseDataCadastro(f){
       // Unix timestamp em segundos — multiplica por 1000
       return new Date(parseFloat(ts) * 1000);
     }
-    // ISO string
+    // ISO string — força interpretação UTC se não tiver indicador de fuso horário
+    // (Supabase timestamp sem timezone é UTC, mas JS interpreta como local por padrão)
+    const s = String(ts);
+    if(s.includes('T') && !s.endsWith('Z') && !/[+\-]\d{2}:\d{2}$/.test(s)) {
+      return new Date(s + 'Z');
+    }
     return new Date(ts);
   }
   if(!f.data_cadastro) return null;
@@ -883,13 +888,18 @@ function parseDataCadastro(f){
     const [d,m,y] = s.split('/');
     return new Date(parseInt(y), parseInt(m)-1, parseInt(d));
   }
-  // Formato yyyy-mm-dd
-  return new Date(s);
+  // Formato yyyy-mm-dd — trata como UTC meia-noite
+  if(/^\d{4}-\d{2}-\d{2}$/.test(s)) {
+    return new Date(s + 'T00:00:00Z');
+  }
+  return new Date(ts);
 }
 
 function getRecentIds(){
-  const cutoff = new Date();
-  cutoff.setDate(cutoff.getDate() - 15);
+  const now = new Date();
+  // Cutoff: início do dia (meia-noite local) de 15 dias atrás
+  // Assim um filme adicionado em qualquer horário do dia X ainda conta
+  const cutoff = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 15);
   return FILMES
     .filter(f => {
       const d = parseDataCadastro(f);
