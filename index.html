@@ -1792,7 +1792,7 @@ function buildUD(){
     <div class="ud-item" onclick="openProfile();document.getElementById('userDropdown').classList.remove('open')">✏️ Editar perfil</div>
     <div class="ud-item" onclick="openChangePassword();document.getElementById('userDropdown').classList.remove('open')">🔑 Alterar senha</div>
     ${email === 'lwbarbosab@gmail.com' ? '<div class="ud-item" style="color:#f5c518" onclick="openAdmin();document.getElementById(\'userDropdown\').classList.remove(\'open\')">🛠️ Painel Admin</div>' : ''}
-    ${(typeof Notification !== 'undefined' && Notification.permission !== 'granted') ? '<div class="ud-item" style="color:#00bcd4" onclick="ativarNotificacoes();document.getElementById(\'userDropdown\').classList.remove(\'open\')">🔔 Ativar notificações</div>' : '<div class="ud-item" style="color:#46d369;cursor:default">🔔 Notificações ativas ✓</div>'}
+    ${(typeof Notification !== 'undefined' && Notification.permission !== 'granted') ? '<div class="ud-item" style="color:#00bcd4" onclick="ativarNotificacoes();document.getElementById(\'userDropdown\').classList.remove(\'open\')">🔔 Ativar notificações</div>' : '<div class="ud-item" style="color:#46d369;cursor:pointer" onclick="ativarNotificacoes();document.getElementById(\'userDropdown\').classList.remove(\'open\')">🔔 Notificações ativas ✓</div>'}
     <div class="ud-item" onclick="logout()" style="color:#e05555">↩️ Sair</div>
   `;
 }
@@ -3195,6 +3195,30 @@ async function ativarNotificacoes() {
 }
 
 // INIT — call initAuth instead of buildUD+renderHome
+
+// Auto-renovar token FCM ao abrir o app (evita tokens expirados)
+window.addEventListener('cinelist:login', async () => {
+  try {
+    if (!('Notification' in window) || Notification.permission !== 'granted') return;
+    if (!('serviceWorker' in navigator) || !window.fbMessaging) return;
+
+    const swReg = await navigator.serviceWorker.ready;
+    const VAPID = 'BFxhuP8nULdLvH6IwV7OwIXxyAjTaFB68lfPCNLjAaF9Vff1G58NOC0cvXiPlcX2u6TskdwGAgqJ4oC88-ApeWo';
+    const token = await window.fbMessaging.getToken({ vapidKey: VAPID, serviceWorkerRegistration: swReg });
+
+    if (token) {
+      const email = currentSession?.user?.email || window.CU_EMAIL || '';
+      if (email && window.supa) {
+        await window.supa.from('fcm_tokens').upsert({
+          email, token, updated_at: new Date().toISOString()
+        }, { onConflict: 'email' });
+        console.log('FCM token renovado automaticamente');
+      }
+    }
+  } catch(e) {
+    console.warn('Auto-refresh FCM token erro:', e);
+  }
+});
 
 
 // ── PROFILE ──
