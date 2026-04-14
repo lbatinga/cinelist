@@ -1502,7 +1502,7 @@ function openRate(id){
   const f=FM[id];
   const existing=f.avaliacoes[CU];
   document.getElementById('rateFilmName').textContent=f.nome;
-  document.getElementById('notaInput').value=existing?.nota!=null?fmt(existing.nota):'0.00';
+  document.getElementById('notaInput').value=existing?.nota!=null?existing.nota.toFixed(2):'0.00';
   setVai(existing?.vai||'Sim');
   // Preenche data existente se houver, senão usa hoje
   let dateVal = '';
