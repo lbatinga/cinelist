@@ -3226,16 +3226,8 @@ if (window.fbMessaging) {
     console.log('Notificação foreground:', payload);
     const title = payload.notification?.title || '🎬 CineList';
     const body = payload.notification?.body || '';
-    // Mostra toast dentro do app
-    if (window.showToast) showToast('🔔 ' + title + (body ? ': ' + body : ''));
-    // Também mostra notificação do sistema (se permitido)
-    if (Notification.permission === 'granted') {
-      new Notification(title, {
-        body: body,
-        icon: './icon-192.png',
-        badge: './icon-192.png'
-      });
-    }
+    // Mostra apenas toast dentro do app (a notificação do sistema só aparece com app fechado, via Service Worker)
+    if (window.showToast) showToast('🔔 ' + title + (body ? ' — ' + body : ''));
   });
 }
 
