@@ -3220,6 +3220,25 @@ window.addEventListener('cinelist:login', async () => {
   }
 });
 
+// Notificação em foreground (app aberto na tela)
+if (window.fbMessaging) {
+  window.fbMessaging.onMessage((payload) => {
+    console.log('Notificação foreground:', payload);
+    const title = payload.notification?.title || '🎬 CineList';
+    const body = payload.notification?.body || '';
+    // Mostra toast dentro do app
+    if (window.showToast) showToast('🔔 ' + title + (body ? ': ' + body : ''));
+    // Também mostra notificação do sistema (se permitido)
+    if (Notification.permission === 'granted') {
+      new Notification(title, {
+        body: body,
+        icon: './icon-192.png',
+        badge: './icon-192.png'
+      });
+    }
+  });
+}
+
 
 // ── PROFILE ──
 const PALETTE = ['#e50914', '#e67e22', '#f5c518', '#2ecc71', '#1abc9c', '#3498db', '#9b59b6', '#e91e63', '#00bcd4', '#ff5722', '#8bc34a', '#607d8b', '#ff9800', '#673ab7', '#009688'];
