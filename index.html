@@ -301,6 +301,50 @@ tr.selected td{background:rgba(229,9,20,.05)}
 .uyt td{text-align:center;padding:6px 8px;border-bottom:1px solid rgba(255,255,255,.04);font-weight:600}
 .uyt td:first-child{text-align:left;color:var(--muted)}
 
+/* ── ACTIVITY FEED ── */
+.feed-filters{display:flex;gap:6px;margin-bottom:20px;flex-wrap:wrap}
+.feed-chip{padding:6px 14px;border-radius:20px;font-size:12px;font-weight:600;cursor:pointer;border:1px solid var(--border);background:transparent;color:var(--muted);transition:all .2s;font-family:inherit}
+.feed-chip:hover{border-color:rgba(255,255,255,.25);color:var(--text)}
+.feed-chip.active{background:var(--red);border-color:var(--red);color:#fff}
+.feed-timeline{position:relative;padding-left:28px}
+.feed-timeline::before{content:'';position:absolute;left:11px;top:0;bottom:0;width:2px;background:var(--border);border-radius:1px}
+.feed-card{position:relative;background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:14px 16px;margin-bottom:12px;transition:all .2s}
+.feed-card:hover{background:var(--surface2);border-color:rgba(255,255,255,.15)}
+.feed-dot{position:absolute;left:-22px;top:18px;width:10px;height:10px;border-radius:50%;border:2px solid var(--bg)}
+.feed-dot.rate{background:var(--green)}
+.feed-dot.add{background:var(--yellow)}
+.feed-dot.nao{background:#e05555}
+.feed-header{display:flex;align-items:center;gap:10px;margin-bottom:8px}
+.feed-avatar{width:30px;height:30px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:11px;color:#000;flex-shrink:0}
+.feed-user{font-size:13px;font-weight:700;flex:1;min-width:0}
+.feed-action{font-weight:400;color:var(--muted)}
+.feed-date{font-size:11px;color:var(--muted2);flex-shrink:0;white-space:nowrap}
+.feed-body{display:flex;align-items:center;gap:12px;cursor:pointer;border-radius:8px;padding:6px;margin:-6px;transition:background .15s}
+.feed-body:hover{background:rgba(255,255,255,.04)}
+.feed-poster{width:40px;height:60px;object-fit:cover;border-radius:4px;flex-shrink:0;background:var(--surface2)}
+.feed-film-info{flex:1;min-width:0}
+.feed-film-name{font-size:14px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.feed-film-sub{font-size:11px;color:var(--muted);margin-top:2px}
+.feed-nota{font-size:22px;font-weight:900;flex-shrink:0}
+.feed-comment{font-size:12px;color:var(--muted);margin-top:8px;font-style:italic;padding-left:58px}
+.feed-comment::before{content:'\201C'}
+.feed-comment::after{content:'\201D'}
+.feed-date-divider{font-size:12px;font-weight:700;color:var(--muted2);margin:20px 0 12px;text-transform:uppercase;letter-spacing:.5px;position:relative}
+.feed-date-divider::before{content:'';position:absolute;left:-22px;top:50%;width:10px;height:2px;background:var(--muted2);border-radius:1px}
+.feed-empty{text-align:center;padding:40px 20px;color:var(--muted2)}
+.feed-empty-icon{font-size:40px;margin-bottom:12px}
+.feed-load-more{display:block;width:100%;padding:12px;background:var(--surface);border:1px solid var(--border);border-radius:10px;color:var(--muted);font-family:inherit;font-size:13px;font-weight:600;cursor:pointer;transition:all .2s;margin-top:8px}
+.feed-load-more:hover{background:var(--surface2);color:var(--text)}
+.feed-summary{display:flex;gap:16px;margin-bottom:20px;flex-wrap:wrap}
+.feed-summary-item{font-size:12px;color:var(--muted)}
+.feed-summary-item strong{font-weight:800}
+@media(max-width:768px){
+  .feed-timeline{padding-left:20px}
+  .feed-timeline::before{left:7px}
+  .feed-dot{left:-16px}
+  .feed-date-divider::before{left:-16px}
+  .feed-nota{font-size:18px}
+}
 
 /* ── AUTH SCREEN ── */
 .auth-screen{position:fixed;inset:0;z-index:1000;background:#0a0a0a;display:flex;align-items:center;justify-content:center;padding:20px}
@@ -2046,6 +2090,7 @@ function renderDescobertas(){
       <div class="rtabs-wrap"><div class="rtabs">
         <div class="rtab ${descTab==='stats'?'active':''}" onclick="setDescTab('stats')">📊 Estatísticas</div>
         <div class="rtab ${descTab==='afinidades'?'active':''}" onclick="setDescTab('afinidades')">🤝 Afinidades</div>
+        <div class="rtab ${descTab==='atividades'?'active':''}" onclick="setDescTab('atividades')">📢 Atividades</div>
       </div></div>
       <div id="descTabContent"></div>
     </div>
@@ -2060,6 +2105,7 @@ function renderDescTab(){
   const tab = window.descTab || 'stats';
   const el = document.getElementById('descTabContent');
   if(tab==='afinidades') el.innerHTML = rankAfinidadesHTML();
+  else if(tab==='atividades') el.innerHTML = rankAtividadesHTML();
   else if(tab==='stats') el.innerHTML = rankStatsHTML();
 }
 
@@ -3026,6 +3072,178 @@ function setStatTab(tab){
 }
 
 
+
+// ── ATIVIDADES (FEED) ──
+var feedFilter = 'todos';
+var feedPage = 1;
+const FEED_PAGE_SIZE = 30;
+
+function buildFeedEvents(){
+  const events = [];
+  // 1) Avaliações e "não quero"
+  FILMES.forEach(f => {
+    Object.entries(f.avaliacoes).forEach(([uid, av]) => {
+      if(uid === 'USER-001') return;
+      const dateStr = av.data || '';
+      const dateObj = parseFeedDate(dateStr);
+      if(!dateObj) return;
+      if(av.nota !== null){
+        events.push({
+          type:'avaliacao', uid, dateObj, dateStr,
+          filmId:f.id, filmNome:f.nome, filmAno:f.ano,
+          poster:f.poster, nota:av.nota,
+          comentario:av.comentario||''
+        });
+      } else if(av.vai==='Não'){
+        events.push({
+          type:'nao_quer', uid, dateObj, dateStr,
+          filmId:f.id, filmNome:f.nome, filmAno:f.ano,
+          poster:f.poster, nota:null, comentario:''
+        });
+      }
+    });
+  });
+  // 2) Filmes adicionados ao catálogo
+  FILMES.forEach(f => {
+    const uid = f.inserido_por;
+    if(!uid || uid==='USER-001') return;
+    const dateObj = parseDataCadastro(f);
+    if(!dateObj) return;
+    events.push({
+      type:'adicionado', uid, dateObj,
+      dateStr:feedFmtDate(dateObj),
+      filmId:f.id, filmNome:f.nome, filmAno:f.ano,
+      poster:f.poster, nota:null, comentario:''
+    });
+  });
+  events.sort((a,b) => b.dateObj - a.dateObj);
+  return events;
+}
+
+function parseFeedDate(s){
+  if(!s) return null;
+  if(s.includes('/')){
+    const [d,m,y] = s.split('/');
+    if(!y) return null;
+    return new Date(parseInt(y), parseInt(m)-1, parseInt(d));
+  }
+  if(s.includes('-')) return new Date(s);
+  return null;
+}
+
+function feedFmtDate(d){
+  if(!d) return '';
+  return String(d.getDate()).padStart(2,'0')+'/'+String(d.getMonth()+1).padStart(2,'0')+'/'+d.getFullYear();
+}
+
+function feedRelDate(d){
+  const now = new Date();
+  const diff = Math.floor((now - d) / 86400000);
+  if(diff===0) return 'Hoje';
+  if(diff===1) return 'Ontem';
+  if(diff<7) return diff+' dias atrás';
+  if(diff<30) return Math.floor(diff/7)+' sem atrás';
+  return feedFmtDate(d);
+}
+
+function feedGroup(d){
+  const now = new Date();
+  const diff = Math.floor((now - d) / 86400000);
+  if(diff===0) return 'Hoje';
+  if(diff===1) return 'Ontem';
+  if(diff<7) return 'Esta semana';
+  if(diff<30) return 'Este mês';
+  const M=['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
+  return M[d.getMonth()]+' '+d.getFullYear();
+}
+
+function setFeedFilter(f){
+  feedFilter=f; feedPage=1;
+  document.getElementById('descTabContent').innerHTML = rankAtividadesHTML();
+}
+
+function loadMoreFeed(){
+  feedPage++;
+  document.getElementById('descTabContent').innerHTML = rankAtividadesHTML();
+}
+
+function feedChipsHTML(){
+  const F=[
+    {key:'todos',label:'Todos',icon:'📋'},
+    {key:'avaliacao',label:'Avaliações',icon:'⭐'},
+    {key:'adicionado',label:'Adicionados',icon:'🎬'},
+    {key:'nao_quer',label:'Recusados',icon:'❌'}
+  ];
+  return F.map(f=>`<button class="feed-chip ${feedFilter===f.key?'active':''}" onclick="setFeedFilter('${f.key}')">${f.icon} ${f.label}</button>`).join('');
+}
+
+function rankAtividadesHTML(){
+  const allEv = buildFeedEvents();
+  const events = feedFilter!=='todos' ? allEv.filter(e=>e.type===feedFilter) : allEv;
+  const total = events.length;
+  const visible = events.slice(0, feedPage * FEED_PAGE_SIZE);
+  const hasMore = visible.length < total;
+
+  // Contadores globais
+  const cntAv = allEv.filter(e=>e.type==='avaliacao').length;
+  const cntAdd = allEv.filter(e=>e.type==='adicionado').length;
+  const cntNao = allEv.filter(e=>e.type==='nao_quer').length;
+
+  if(total===0){
+    return `<div class="feed-filters">${feedChipsHTML()}</div>
+      <div class="feed-empty">
+        <div class="feed-empty-icon">📭</div>
+        <div style="font-size:14px;font-weight:600;margin-bottom:4px">Nenhuma atividade encontrada</div>
+        <div style="font-size:12px">Tente outro filtro ou aguarde novas avaliações.</div>
+      </div>`;
+  }
+
+  let html = `<div class="feed-filters">${feedChipsHTML()}</div>`;
+  html += `<div class="feed-summary">
+    <div class="feed-summary-item">⭐ <strong style="color:var(--green)">${cntAv}</strong> avaliações</div>
+    <div class="feed-summary-item">🎬 <strong style="color:var(--yellow)">${cntAdd}</strong> adicionados</div>
+    <div class="feed-summary-item">❌ <strong style="color:#e05555">${cntNao}</strong> recusados</div>
+  </div>`;
+
+  html += '<div class="feed-timeline">';
+  let lastGrp = '';
+  visible.forEach(ev => {
+    const grp = feedGroup(ev.dateObj);
+    if(grp !== lastGrp){
+      html += `<div class="feed-date-divider">${grp}</div>`;
+      lastGrp = grp;
+    }
+    const user = USERS[ev.uid];
+    const uName = user ? user.nome : ev.uid;
+    const dotCls = ev.type==='avaliacao'?'rate':ev.type==='adicionado'?'add':'nao';
+    const actText = ev.type==='avaliacao'?'avaliou':ev.type==='adicionado'?'adicionou ao catálogo':'marcou como "não quero"';
+    const actIcon = ev.type==='avaliacao'?'⭐':ev.type==='adicionado'?'🎬':'❌';
+
+    html += `<div class="feed-card">
+      <div class="feed-dot ${dotCls}"></div>
+      <div class="feed-header">
+        <div class="feed-avatar" style="background:${aC(ev.uid)}">${ini(uName)}</div>
+        <div class="feed-user">${esc(uName)} <span class="feed-action">${actText}</span></div>
+        <div class="feed-date">${feedRelDate(ev.dateObj)}</div>
+      </div>
+      <div class="feed-body" onclick="openFilme('${ev.filmId}')">
+        ${ev.poster?`<img class="feed-poster" src="${esc(ev.poster)}" loading="lazy" onerror="this.style.display='none'">`:'<div class="feed-poster"></div>'}
+        <div class="feed-film-info">
+          <div class="feed-film-name">${actIcon} ${esc(ev.filmNome)}</div>
+          <div class="feed-film-sub">${ev.filmAno||''}${ev.type==='avaliacao'?' · '+feedFmtDate(ev.dateObj):''}</div>
+        </div>
+        ${ev.nota!==null?`<div class="feed-nota" style="color:${nC(ev.nota)}">${fmt(ev.nota)}</div>`:''}
+      </div>
+      ${ev.comentario?`<div class="feed-comment">${esc(ev.comentario)}</div>`:''}
+    </div>`;
+  });
+  html += '</div>';
+
+  if(hasMore){
+    html += `<button class="feed-load-more" onclick="loadMoreFeed()">Carregar mais (${total - visible.length} restantes)</button>`;
+  }
+  return html;
+}
 
 // ── SUPABASE SETUP (supa initialized at top) ──
 const SUPA_URL = SUPA_URL2;
