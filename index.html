@@ -865,6 +865,22 @@ var FM = FILMES_MAP; // alias
 // FILMES_MAP populated from Supabase after login
 const USERS = RAW.usuarios;
 const STATS = RAW.users_stats;
+
+// ── ANIVERSÁRIOS ──
+// Mapa por nome do usuário → data no formato YYYY-MM-DD (ano opcional: 0000 se não souber)
+const BDAYS_HARDCODED = {
+  'Lucas':      '1994-04-20',
+  'Lidiane':    '1994-09-03',
+  'Jhefferson': '1994-02-20',
+  'Catharine':  '0000-05-06',
+  'Mauricio':   '0000-05-14',
+  'Pedro':      '1999-06-29',
+  'Victória':   '0000-01-26',
+};
+// Datas especiais fora do grupo (lembrete só local, sem push pro grupo)
+const BDAYS_ESPECIAIS = [
+  { nome: 'Amélia', bday: '2020-05-05', emoji: '👶' },
+];
 // RECENT_IDS dinâmico: filmes adicionados nos últimos 10 dias
 function parseDataCadastro(f){
   // data_ts pode ser: ISO string (novos filmes) ou Unix timestamp em segundos (filmes antigos)
@@ -3580,15 +3596,74 @@ function checkBirthdays(){
     const today = new Date();
     const dd = String(today.getDate()).padStart(2,'0');
     const mm = String(today.getMonth()+1).padStart(2,'0');
-    Object.entries(profileData||{}).forEach(([uid, p]) => {
+    const todayKey = `bday_${today.getFullYear()}-${mm}-${dd}`;
+
+    // Só dispara uma vez por dia por dispositivo
+    if(localStorage.getItem(todayKey)) return;
+    localStorage.setItem(todayKey, '1');
+
+    const aniversariantes = []; // membros do grupo
+    const nomesChecked = new Set();
+
+    // 1. profileData (bday salvo pelo próprio usuário)
+    Object.entries(profileData || {}).forEach(([uid, p]) => {
       if(!p.bday) return;
       const parts = p.bday.split('-');
       if(parts.length < 3) return;
-      if(parts[1] === mm && parts[2] === dd && uid !== CU) {
-        const nome = USERS[uid]?.nome || uid;
-        showToast('🎂 Hoje é aniversário de ' + nome + '!');
+      if(parts[1] !== mm || parts[2] !== dd) return;
+      const nome = USERS[uid]?.nome || uid;
+      nomesChecked.add(nome);
+      aniversariantes.push({ nome, uid, isSelf: uid === CU });
+    });
+
+    // 2. BDAYS_HARDCODED (fallback para quem não salvou no perfil)
+    Object.entries(USERS || {}).forEach(([uid, u]) => {
+      const hb = BDAYS_HARDCODED[u.nome];
+      if(!hb || nomesChecked.has(u.nome)) return;
+      const parts = hb.split('-');
+      if(parts.length < 3) return;
+      if(parts[1] !== mm || parts[2] !== dd) return;
+      aniversariantes.push({ nome: u.nome, uid, isSelf: uid === CU });
+    });
+
+    // 3. Datas especiais (só toast local, sem push pro grupo)
+    BDAYS_ESPECIAIS.forEach(e => {
+      const parts = e.bday.split('-');
+      if(parts.length < 3) return;
+      if(parts[1] !== mm || parts[2] !== dd) return;
+      const hoje = new Date();
+      const idade = hoje.getFullYear() - parseInt(parts[0]);
+      setTimeout(() => showToast(`${e.emoji || '🎂'} Hoje é aniversário de ${e.nome}! ${parts[0] !== '0000' ? idade + ' anos 🎉' : ''}`), 1200);
+    });
+
+    if(aniversariantes.length === 0) return;
+
+    // Toasts
+    aniversariantes.forEach(b => {
+      if(b.isSelf) {
+        showToast(`🎉 Feliz aniversário, ${b.nome}!`);
+      } else {
+        const hoje = new Date();
+        const hb = profileData[b.uid]?.bday || BDAYS_HARDCODED[b.nome] || '';
+        const ano = parseInt(hb.split('-')[0]);
+        const idade = ano > 0 ? ` (${hoje.getFullYear() - ano} anos)` : '';
+        showToast(`🎂 Hoje é aniversário de ${b.nome}${idade}!`);
       }
     });
+
+    // Push para o grupo
+    const nomes = aniversariantes.map(b => b.nome).join(' e ');
+    _enviarPushAniversario(nomes);
+
+  } catch(e) { console.warn('checkBirthdays error:', e); }
+}
+
+async function _enviarPushAniversario(nomes){
+  try {
+    const titulo = '🎂 Aniversário hoje!';
+    const body = `Hoje é aniversário de ${nomes}! Manda mensagem 🎉`;
+    const params = new URLSearchParams({ titulo, body });
+    await fetch(APPS_SCRIPT_URL + '?' + params.toString(), { method: 'GET', mode: 'no-cors' });
   } catch(e) {}
 }
 
