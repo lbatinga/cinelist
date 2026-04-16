@@ -3998,6 +3998,7 @@ function adminTab(tab){
   if(tab === 'duplicatas') renderAdminDuplicatas();
   else if(tab === 'membros') renderAdminMembros();
   else if(tab === 'sem_avaliacao') renderAdminSemAvaliacao();
+  else if(tab === 'datas') renderAdminDatas();
   else if(tab === 'stats') renderAdminStats();
   else if(tab === 'notificacao') renderAdminNotificacao();
 }
@@ -4175,6 +4176,174 @@ function renderAdminSemAvaliacao(){
         <button onclick="closeAdmin();openFilme('${f.id}')" style="background:#2a2a2a;color:#fff;border:none;border-radius:6px;padding:4px 10px;cursor:pointer;font-size:11px">Ver</button>
       </div>`;
     }).join('')}`;
+
+  body.innerHTML = html;
+}
+
+// ── ABA: DATAS (corrigir datas de avaliação) ──
+function getAdminDatasCorrigiveis(){
+  const items = [];
+  FILMES.forEach(f => {
+    const uid = f.inserido_por;
+    if(!uid || uid === 'USER-001') return;
+    if(!f.data_cadastro) return;
+    const av = f.avaliacoes[uid];
+    if(!av || av.nota === null) return;
+    if(av.data && av.data.trim() !== '') return;
+    // Esse é um caso corrigível
+    items.push({
+      filmId: f.id,
+      filmNome: f.nome,
+      filmAno: f.ano,
+      uid: uid,
+      userName: USERS[uid]?.nome || uid,
+      nota: av.nota,
+      dataCadastro: f.data_cadastro
+    });
+  });
+  items.sort((a,b) => a.userName.localeCompare(b.userName) || a.filmNome.localeCompare(b.filmNome));
+  return items;
+}
+
+function dataCadastroToISO(dc){
+  if(!dc) return null;
+  // dd/mm/yyyy → yyyy-mm-dd
+  if(dc.includes('/')){
+    const [d,m,y] = dc.split('/');
+    return `${y}-${m.padStart(2,'0')}-${d.padStart(2,'0')}`;
+  }
+  // já em yyyy-mm-dd
+  if(dc.includes('-')) return dc;
+  return null;
+}
+
+function dataCadastroDisplay(dc){
+  if(!dc) return '—';
+  if(dc.includes('-')) return dc.split('-').reverse().join('/');
+  return dc;
+}
+
+async function corrigirDataAdmin(filmId, uid, dataCadastro, btn){
+  const iso = dataCadastroToISO(dataCadastro);
+  if(!iso){ alert('Data de cadastro inválida'); return; }
+  btn.textContent = '...';
+  btn.disabled = true;
+  try {
+    const {error} = await supa.from('avaliacoes').update({
+      data_avaliacao: iso
+    }).eq('filme_id', filmId).eq('usuario_id', uid);
+    if(error) throw error;
+    // Atualiza memória local
+    const f = FM[filmId];
+    if(f && f.avaliacoes[uid]){
+      f.avaliacoes[uid].data = iso.split('-').reverse().join('/');
+    }
+    // Atualiza a row visualmente
+    const row = btn.closest('.adm-data-row');
+    if(row){
+      row.style.opacity = '0.4';
+      row.style.pointerEvents = 'none';
+      btn.textContent = '✅';
+    }
+    // Atualiza o contador
+    const remaining = getAdminDatasCorrigiveis().length;
+    const counter = document.getElementById('admDatasCounter');
+    if(counter) counter.textContent = remaining;
+  } catch(e){
+    console.error('Erro ao corrigir data:', e);
+    btn.textContent = 'Erro';
+    btn.style.color = '#e05555';
+    setTimeout(()=>{ btn.textContent='Corrigir'; btn.disabled=false; btn.style.color=''; }, 2000);
+  }
+}
+
+async function corrigirTodasDatasAdmin(btn){
+  const items = getAdminDatasCorrigiveis();
+  if(items.length === 0) return;
+  if(!confirm(`Tem certeza que quer corrigir ${items.length} avaliações?\n\nA data de cadastro do filme será copiada para a data de avaliação de quem cadastrou.`)) return;
+  btn.textContent = `Corrigindo 0/${items.length}...`;
+  btn.disabled = true;
+  let ok = 0, fail = 0;
+  for(let i = 0; i < items.length; i++){
+    const it = items[i];
+    const iso = dataCadastroToISO(it.dataCadastro);
+    if(!iso){ fail++; continue; }
+    try {
+      const {error} = await supa.from('avaliacoes').update({
+        data_avaliacao: iso
+      }).eq('filme_id', it.filmId).eq('usuario_id', it.uid);
+      if(error) throw error;
+      // Atualiza memória local
+      const f = FM[it.filmId];
+      if(f && f.avaliacoes[it.uid]){
+        f.avaliacoes[it.uid].data = iso.split('-').reverse().join('/');
+      }
+      ok++;
+    } catch(e){
+      console.error(`Erro corrigindo ${it.filmNome}:`, e);
+      fail++;
+    }
+    btn.textContent = `Corrigindo ${i+1}/${items.length}...`;
+  }
+  btn.textContent = `✅ ${ok} corrigidos` + (fail ? ` · ❌ ${fail} erros` : '');
+  setTimeout(()=>{ renderAdminDatas(); }, 2000);
+}
+
+function renderAdminDatas(){
+  const body = document.getElementById('adminBody');
+  const items = getAdminDatasCorrigiveis();
+
+  // Resumo por membro
+  const byUser = {};
+  items.forEach(it => {
+    if(!byUser[it.uid]) byUser[it.uid] = {nome: it.userName, cnt: 0};
+    byUser[it.uid].cnt++;
+  });
+  const userSummary = Object.values(byUser).sort((a,b) => b.cnt - a.cnt);
+
+  if(items.length === 0){
+    body.innerHTML = `
+      <div style="text-align:center;padding:30px;color:#888">
+        <div style="font-size:32px;margin-bottom:8px">✅</div>
+        <div style="font-size:14px;font-weight:600">Nenhuma avaliação sem data para corrigir!</div>
+        <div style="font-size:12px;margin-top:4px">Todas as avaliações de quem cadastrou o filme já possuem data.</div>
+      </div>`;
+    return;
+  }
+
+  let html = '';
+
+  // Header com total e botão corrigir todos
+  html += `<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:8px">
+    <div>
+      <div style="font-size:14px;font-weight:800;color:var(--yellow)">📅 <span id="admDatasCounter">${items.length}</span> avaliações sem data (corrigíveis)</div>
+      <div style="font-size:11px;color:#888;margin-top:2px">Quem cadastrou o filme avaliou, mas não preencheu a data. A data de cadastro será usada.</div>
+    </div>
+    <button onclick="corrigirTodasDatasAdmin(this)" style="background:var(--green);color:#000;border:none;border-radius:8px;padding:8px 16px;cursor:pointer;font-size:12px;font-weight:800;font-family:inherit;white-space:nowrap">✨ Corrigir todos (${items.length})</button>
+  </div>`;
+
+  // Resumo por membro
+  html += `<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px">
+    ${userSummary.map(u => `<span style="background:var(--surface2);border:1px solid var(--border);border-radius:20px;padding:4px 12px;font-size:11px;font-weight:700">${esc(u.nome)}: <span style="color:var(--yellow)">${u.cnt}</span></span>`).join('')}
+  </div>`;
+
+  // Lista
+  html += `<div style="border-top:1px solid var(--border)">`;
+  items.forEach(it => {
+    html += `<div class="adm-data-row" style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid #1a1a1a;gap:10px;transition:opacity .3s">
+      <div style="flex:1;min-width:0">
+        <div style="font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(it.filmNome)}</div>
+        <div style="font-size:10px;color:#888;margin-top:2px">
+          ${it.filmAno || ''} · por <strong style="color:var(--text)">${esc(it.userName)}</strong> · nota <strong style="color:${nC(it.nota)}">${fmt(it.nota)}</strong> · cadastro <strong style="color:var(--yellow)">${dataCadastroDisplay(it.dataCadastro)}</strong>
+        </div>
+      </div>
+      <div style="display:flex;gap:6px;flex-shrink:0">
+        <button onclick="closeAdmin();openFilme('${it.filmId}')" style="background:#2a2a2a;color:#fff;border:none;border-radius:6px;padding:5px 10px;cursor:pointer;font-size:11px">Ver</button>
+        <button onclick="corrigirDataAdmin('${it.filmId}','${it.uid}','${it.dataCadastro}',this)" style="background:var(--green);color:#000;border:none;border-radius:6px;padding:5px 12px;cursor:pointer;font-size:11px;font-weight:700">Corrigir</button>
+      </div>
+    </div>`;
+  });
+  html += '</div>';
 
   body.innerHTML = html;
 }
@@ -4464,6 +4633,7 @@ function closePosterLightbox(){
       <button onclick="adminTab('duplicatas')" id="atab-duplicatas" style="flex:1;min-width:100px;padding:7px;border-radius:8px;border:none;cursor:pointer;font-size:12px;font-weight:700;font-family:inherit;background:#2a2a2a;color:#fff">🔁 Duplicatas</button>
       <button onclick="adminTab('membros')" id="atab-membros" style="flex:1;min-width:100px;padding:7px;border-radius:8px;border:none;cursor:pointer;font-size:12px;font-weight:700;font-family:inherit;background:#2a2a2a;color:#fff">👥 Membros</button>
       <button onclick="adminTab('sem_avaliacao')" id="atab-sem_avaliacao" style="flex:1;min-width:100px;padding:7px;border-radius:8px;border:none;cursor:pointer;font-size:12px;font-weight:700;font-family:inherit;background:#2a2a2a;color:#fff">⭐ Sem avaliação</button>
+      <button onclick="adminTab('datas')" id="atab-datas" style="flex:1;min-width:100px;padding:7px;border-radius:8px;border:none;cursor:pointer;font-size:12px;font-weight:700;font-family:inherit;background:#2a2a2a;color:#fff">📅 Datas</button>
       <button onclick="adminTab('stats')" id="atab-stats" style="flex:1;min-width:100px;padding:7px;border-radius:8px;border:none;cursor:pointer;font-size:12px;font-weight:700;font-family:inherit;background:#2a2a2a;color:#fff">📊 Stats</button>
       <button onclick="adminTab('notificacao')" id="atab-notificacao" style="flex:1;min-width:100px;padding:7px;border-radius:8px;border:none;cursor:pointer;font-size:12px;font-weight:700;font-family:inherit;background:#2a2a2a;color:#fff">🔔 Notificação</button>
     </div>
