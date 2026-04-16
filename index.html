@@ -1077,7 +1077,7 @@ document.getElementById('appScroll').addEventListener('scroll',function(){
 });
 
 // NAV
-function navigate(view){
+function navigate(view, _skipHistory){
   CV=view; AGenre=null;
   // Limpa a pesquisa ao mudar de aba
   searchQ='';
@@ -1092,6 +1092,7 @@ function navigate(view){
   const vn='view'+view.charAt(0).toUpperCase()+view.slice(1);
   document.getElementById(vn).classList.add('active');
   document.getElementById('appScroll').scrollTop=0;
+  if(!_skipHistory) history.pushState({view:view},'','');
   render();
 }
 
@@ -1919,15 +1920,34 @@ function closeBSheet(name){
   }
 }
 
-// Back button closes sheets
+// Back button closes sheets/modals and navigates between views
 window.addEventListener('popstate', e => {
+  // Fecha o que estiver aberto — ordem do mais profundo para o menos
+  const mf  = document.getElementById('mobileFilmeModal');
+  const adm = document.getElementById('adminModal');
+  const pw  = document.getElementById('pwModal');
+  const prf = document.getElementById('profileModal');
+  const mi  = document.getElementById('maisInfoModal');
+  const on  = document.getElementById('ondeModal');
+
+  if(mf  && mf.classList.contains('open'))  { closeMobileFilmeModal(); return; }
+  if(adm && adm.classList.contains('open')) { closeAdmin();            return; }
+  if(pw  && pw.classList.contains('open'))  { closePwModal();          return; }
+  if(prf && prf.classList.contains('open')) { closeProfile();          return; }
+  if(mi  && mi.classList.contains('open'))  { closeBSheet('maisInfo'); return; }
+  if(on  && on.classList.contains('open'))  { closeBSheet('onde');     return; }
+
+  // Bsheet genérico (overlays antigos)
   if(e.state && e.state.bsheet){ closeBSheet(e.state.bsheet); return; }
-  const mi = document.getElementById('maisInfoSheet');
-  const on = document.getElementById('ondeSheet');
-  const mf = document.getElementById('mobileFilmeModal');
-  if(mi && mi.classList.contains('open')){ closeBSheet('maisInfo'); }
-  else if(on && on.classList.contains('open')){ closeBSheet('onde'); }
-  else if(mf && mf.classList.contains('open')){ closeMobileFilmeModal(); }
+
+  // Navegação entre views (home, filmes, pendentes, etc.)
+  if(e.state && e.state.view){
+    navigate(e.state.view, true); // true = não re-empurra o histórico
+    return;
+  }
+
+  // Sem estado reconhecido → volta pro home sem sair do app
+  navigate('home', true);
 });
 
 // ── ONDE ASSISTIR ──
@@ -3347,7 +3367,7 @@ async function onLogin(session){
       showAuthError('Perfil não configurado para ' + email + '. Fale com o administrador.');
       return;
     }
-    history.replaceState(null, '', window.location.pathname);
+    history.replaceState({view:'home'}, '', window.location.pathname);
     hideAuthScreen();
     window.CU_EMAIL = email;
     window.dispatchEvent(new Event('cinelist:login'));
@@ -3684,6 +3704,7 @@ function openProfile(){
   const cur = p.color || aC(CU);
   cp.innerHTML = PALETTE.map(c => `<div class="color-opt ${c===cur?'selected':''}" style="background:${c}" onclick="document.querySelectorAll('.color-opt').forEach(b=>b.classList.remove('selected'));this.classList.add('selected');updateAvatarPreviewColor('${c}')"></div>`).join('');
   document.getElementById('profileModal').classList.add('open');
+  history.pushState({modal:'profile'},'','');
   setTimeout(updateAvatarPreview, 50);
 }
 
@@ -3745,6 +3766,7 @@ function openChangePassword(){
   document.getElementById('pwError').style.display = 'none';
   document.getElementById('pwSuccess').style.display = 'none';
   document.getElementById('pwModal').classList.add('open');
+  history.pushState({modal:'pwModal'},'','');
 }
 
 function closePwModal(){ document.getElementById('pwModal').classList.remove('open'); }
@@ -3893,6 +3915,7 @@ var _adminTab = 'duplicatas';
 function openAdmin(){
   if(currentSession?.user?.email !== ADMIN_EMAIL){ showToast('⛔ Acesso negado.'); return; }
   document.getElementById('adminModal').classList.add('open');
+  history.pushState({modal:'admin'},'','');
   adminTab('duplicatas');
 }
 
@@ -4243,6 +4266,7 @@ function openMobileFilmeModal(id){
   document.getElementById('mobileFilmeModal').classList.add('open');
   document.getElementById('mobileFilmeModal').scrollTop=0;
   document.body.style.overflow='hidden';
+  history.pushState({modal:'mobileFilme'},'','');
 }
 function closeMobileFilmeModal(){
   document.getElementById('mobileFilmeModal').classList.remove('open');
