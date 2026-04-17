@@ -4540,32 +4540,11 @@ function closePosterLightbox(){
   const scroll = document.getElementById('appScroll');
   if(!scroll) return;
 
-  // Cria o indicador visual
-  const indicator = document.createElement('div');
-  indicator.id = 'ptrIndicator';
-  indicator.style.cssText = 'position:fixed;top:calc(60px + env(safe-area-inset-top,0px));left:50%;transform:translateX(-50%) translateY(-60px);background:#181818;border:1px solid #333;color:#fff;font-size:12px;font-weight:700;padding:8px 18px;border-radius:20px;z-index:500;transition:transform .25s cubic-bezier(.32,1,.23,1);pointer-events:none;display:flex;align-items:center;gap:8px';
-  indicator.innerHTML = '<span id="ptrSpinner" style="display:inline-block;width:14px;height:14px;border:2px solid #444;border-top-color:#e50914;border-radius:50%"></span><span id="ptrText">Puxe para atualizar</span>';
-  document.body.appendChild(indicator);
-
   let startY = 0, pulling = false, refreshing = false;
   const THRESHOLD = 72;
 
-  function show(pct, ready){
-    const y = Math.min(pct * 60, 60);
-    indicator.style.transform = `translateX(-50%) translateY(${y - 60}px)`;
-    document.getElementById('ptrText').textContent = ready ? 'Solte para atualizar' : 'Puxe para atualizar';
-    const sp = document.getElementById('ptrSpinner');
-    sp.style.borderTopColor = ready ? '#46d369' : '#e50914';
-    if(ready) sp.style.animation = 'spin .6s linear infinite';
-    else sp.style.animation = 'none';
-  }
-
-  function hide(){ indicator.style.transform = 'translateX(-50%) translateY(-60px)'; }
-
   async function doRefresh(){
     refreshing = true;
-    document.getElementById('ptrText').textContent = 'Atualizando...';
-    document.getElementById('ptrSpinner').style.animation = 'spin .6s linear infinite';
     haptic([10,30,10]);
     try {
       await loadFilmsFromSupabase();
@@ -4574,7 +4553,6 @@ function closePosterLightbox(){
     } catch(e) {
       showToast('⚠️ Erro ao atualizar');
     }
-    hide();
     refreshing = false;
   }
 
@@ -4587,8 +4565,7 @@ function closePosterLightbox(){
   scroll.addEventListener('touchmove', e => {
     if(!pulling || refreshing) return;
     const dy = e.touches[0].clientY - startY;
-    if(dy <= 0){ pulling = false; hide(); return; }
-    show(dy / THRESHOLD, dy >= THRESHOLD);
+    if(dy <= 0) pulling = false;
   }, { passive: true });
 
   scroll.addEventListener('touchend', e => {
@@ -4596,7 +4573,6 @@ function closePosterLightbox(){
     pulling = false;
     const dy = e.changedTouches[0].clientY - startY;
     if(dy >= THRESHOLD) doRefresh();
-    else hide();
   }, { passive: true });
 })();
 </script>
