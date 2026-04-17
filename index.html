@@ -226,7 +226,8 @@ tr.selected td{background:rgba(229,9,20,.05)}
 .bn-inner{display:flex;justify-content:space-around}
 .bn-item{display:flex;flex-direction:column;align-items:center;gap:3px;padding:8px 4px;cursor:pointer;flex:1;transition:color .15s;color:var(--muted);min-width:0}
 .bn-item.active,.bn-item:hover{color:#fff}
-.bn-icon{font-size:20px}
+.bn-icon{font-size:20px;position:relative;display:inline-block}
+.bn-icon[data-badge]::after{content:attr(data-badge);position:absolute;top:-5px;right:-8px;background:var(--red);color:#fff;font-size:9px;font-weight:800;min-width:15px;height:15px;border-radius:8px;display:flex;align-items:center;justify-content:center;padding:0 3px;line-height:15px}
 .bn-label{font-size:9px;font-weight:600;text-transform:uppercase;letter-spacing:.3px}
 
 @media(max-width:768px){
@@ -1164,6 +1165,15 @@ function render(){
   else if(CV==='recentes') renderRecentes();
   else if(CV==='ranking') renderRanking();
   else if(CV==='descobertas') renderDescobertas();
+  updatePendentesBadge();
+}
+
+function updatePendentesBadge(){
+  const icon = document.querySelector('#bn-pendentes .bn-icon');
+  if(!icon) return;
+  const n = CU && STATS[CU] ? (STATS[CU].pendentes||[]).length : 0;
+  if(n > 0) icon.setAttribute('data-badge', n > 99 ? '99+' : n);
+  else icon.removeAttribute('data-badge');
 }
 
 // SEARCH
@@ -1701,6 +1711,7 @@ async function saveRating(){
 
     closeModal('rateModal');
     render();
+    haptic(isNao ? [10,40,10] : [15]);
     showToast(isNao ? '✅ Marcado como "Não quero assistir"' : `✅ Nota ${fmt(nota)} salva!`);
   }catch(e){
     showToast('❌ Erro ao salvar: '+e.message);
@@ -1923,6 +1934,7 @@ function buildUD(){
     <div class="ud-item" onclick="openChangePassword();document.getElementById('userDropdown').classList.remove('open')">🔑 Alterar senha</div>
     ${email === 'lwbarbosab@gmail.com' ? '<div class="ud-item" style="color:#f5c518" onclick="openAdmin();document.getElementById(\'userDropdown\').classList.remove(\'open\')">🛠️ Painel Admin</div>' : ''}
     ${(typeof Notification !== 'undefined' && Notification.permission !== 'granted') ? '<div class="ud-item" style="color:#00bcd4" onclick="ativarNotificacoes();document.getElementById(\'userDropdown\').classList.remove(\'open\')">🔔 Ativar notificações</div>' : '<div class="ud-item" style="color:#46d369;cursor:pointer" onclick="ativarNotificacoes();document.getElementById(\'userDropdown\').classList.remove(\'open\')">🔔 Notificações ativas ✓</div>'}
+    ${_deferredInstall ? '<div class="ud-item" style="color:#3498db" onclick="installPWA()">📲 Instalar app na tela inicial</div>' : ''}
     <div class="ud-item" onclick="logout()" style="color:#e05555">↩️ Sair</div>
   `;
 }
@@ -2123,6 +2135,31 @@ async function loadExtRatings(filmId, nome, ano){
 // INIT — registra Service Worker imediatamente para PWA funcionar
 if('serviceWorker' in navigator){
   navigator.serviceWorker.register('./sw.js').catch(e => console.warn('SW:', e));
+}
+
+// ── OFFLINE INDICATOR ──
+window.addEventListener('offline', () => showToast('📡 Sem conexão — modo offline'));
+window.addEventListener('online',  () => showToast('✅ Conexão restaurada'));
+
+// ── PWA INSTALL PROMPT ──
+let _deferredInstall = null;
+window.addEventListener('beforeinstallprompt', e => {
+  e.preventDefault();
+  _deferredInstall = e;
+  buildUD();
+});
+window.addEventListener('appinstalled', () => {
+  _deferredInstall = null;
+  buildUD();
+  showToast('✅ CineList instalado com sucesso!');
+});
+async function installPWA(){
+  if(!_deferredInstall) return;
+  document.getElementById('userDropdown').classList.remove('open');
+  _deferredInstall.prompt();
+  const { outcome } = await _deferredInstall.userChoice;
+  if(outcome === 'accepted') _deferredInstall = null;
+  buildUD();
 }
 
 // Startup: aguarda DOM pronto e verifica sessao salva
@@ -3823,6 +3860,9 @@ function showToast(msg){
   setTimeout(()=>t.remove(), 2500);
 }
 
+// ── HAPTIC FEEDBACK ──
+function haptic(pattern=[10]){if(navigator.vibrate)navigator.vibrate(pattern);}
+
 // ── CHANGE PASSWORD ──
 function openChangePassword(){
   document.getElementById('pwNova').value = '';
@@ -4493,6 +4533,71 @@ function closePosterLightbox(){
     const x=e.pageX-slider.offsetLeft;
     slider.scrollLeft=scrollLeft-(x-startX)*1.2;
   });
+})();
+
+// ── PULL-TO-REFRESH ──
+(function(){
+  const scroll = document.getElementById('appScroll');
+  if(!scroll) return;
+
+  // Cria o indicador visual
+  const indicator = document.createElement('div');
+  indicator.id = 'ptrIndicator';
+  indicator.style.cssText = 'position:fixed;top:calc(60px + env(safe-area-inset-top,0px));left:50%;transform:translateX(-50%) translateY(-60px);background:#181818;border:1px solid #333;color:#fff;font-size:12px;font-weight:700;padding:8px 18px;border-radius:20px;z-index:500;transition:transform .25s cubic-bezier(.32,1,.23,1);pointer-events:none;display:flex;align-items:center;gap:8px';
+  indicator.innerHTML = '<span id="ptrSpinner" style="display:inline-block;width:14px;height:14px;border:2px solid #444;border-top-color:#e50914;border-radius:50%"></span><span id="ptrText">Puxe para atualizar</span>';
+  document.body.appendChild(indicator);
+
+  let startY = 0, pulling = false, refreshing = false;
+  const THRESHOLD = 72;
+
+  function show(pct, ready){
+    const y = Math.min(pct * 60, 60);
+    indicator.style.transform = `translateX(-50%) translateY(${y - 60}px)`;
+    document.getElementById('ptrText').textContent = ready ? 'Solte para atualizar' : 'Puxe para atualizar';
+    const sp = document.getElementById('ptrSpinner');
+    sp.style.borderTopColor = ready ? '#46d369' : '#e50914';
+    if(ready) sp.style.animation = 'spin .6s linear infinite';
+    else sp.style.animation = 'none';
+  }
+
+  function hide(){ indicator.style.transform = 'translateX(-50%) translateY(-60px)'; }
+
+  async function doRefresh(){
+    refreshing = true;
+    document.getElementById('ptrText').textContent = 'Atualizando...';
+    document.getElementById('ptrSpinner').style.animation = 'spin .6s linear infinite';
+    haptic([10,30,10]);
+    try {
+      await loadFilmsFromSupabase();
+      render();
+      showToast('✅ Dados atualizados!');
+    } catch(e) {
+      showToast('⚠️ Erro ao atualizar');
+    }
+    hide();
+    refreshing = false;
+  }
+
+  scroll.addEventListener('touchstart', e => {
+    if(scroll.scrollTop > 0 || refreshing) return;
+    startY = e.touches[0].clientY;
+    pulling = true;
+  }, { passive: true });
+
+  scroll.addEventListener('touchmove', e => {
+    if(!pulling || refreshing) return;
+    const dy = e.touches[0].clientY - startY;
+    if(dy <= 0){ pulling = false; hide(); return; }
+    show(dy / THRESHOLD, dy >= THRESHOLD);
+  }, { passive: true });
+
+  scroll.addEventListener('touchend', e => {
+    if(!pulling || refreshing) return;
+    pulling = false;
+    const dy = e.changedTouches[0].clientY - startY;
+    if(dy >= THRESHOLD) doRefresh();
+    else hide();
+  }, { passive: true });
 })();
 </script>
 
