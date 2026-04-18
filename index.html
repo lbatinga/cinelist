@@ -86,6 +86,10 @@ body{background:var(--bg);color:var(--text);font-family:'Inter',sans-serif;displ
 .hero-dots{position:absolute;bottom:20px;left:48px;display:flex;gap:6px}
 .hero-dot{width:8px;height:8px;border-radius:50%;background:rgba(255,255,255,.3);cursor:pointer;transition:all .2s;border:none}
 .hero-dot.active{background:#fff;width:20px;border-radius:4px}
+.hero-arrow{position:absolute;top:50%;transform:translateY(-50%);background:rgba(0,0,0,.45);border:none;color:#fff;font-size:36px;line-height:1;width:44px;height:64px;border-radius:6px;cursor:pointer;z-index:10;transition:background .2s;display:flex;align-items:center;justify-content:center;padding:0}
+.hero-arrow:hover{background:rgba(0,0,0,.75)}
+.hero-arrow-prev{left:12px}
+.hero-arrow-next{right:12px}
 .btn-play{background:#fff;color:#000;font-weight:700;font-size:14px;padding:9px 22px;border-radius:6px;border:none;cursor:pointer;font-family:inherit;display:flex;align-items:center;gap:7px;transition:opacity .2s}
 .btn-play:hover{opacity:.85}
 .btn-info{background:rgba(109,109,110,.6);color:#fff;font-weight:700;font-size:14px;padding:9px 22px;border-radius:6px;border:none;cursor:pointer;font-family:inherit;display:flex;align-items:center;gap:7px;transition:background .2s}
@@ -1188,19 +1192,23 @@ function handleSearch(){searchQ=document.getElementById('topSearch').value.toLow
 // ── HOME ──
 function renderHome(){
   const el=document.getElementById('viewHome');
-  // Hero: top 8 films with posters, rotating
-  heroSlides=[...FILMES].filter(f=>f.poster&&f.media&&f.num_avaliacoes>=3)
+  // Hero: pool dos top 30, embaralhado, pega 8 aleatórios
+  const heroPool=[...FILMES].filter(f=>f.poster&&f.media&&f.num_avaliacoes>=3)
     .sort((a,b)=>{
       if(b.media!==a.media) return b.media-a.media;
       if(b.num_avaliacoes!==a.num_avaliacoes) return b.num_avaliacoes-a.num_avaliacoes;
       return (a.data_ts||0)-(b.data_ts||0);
-    }).slice(0,8);
+    }).slice(0,30);
+  for(let i=heroPool.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[heroPool[i],heroPool[j]]=[heroPool[j],heroPool[i]];}
+  heroSlides=heroPool.slice(0,8);
   
   const rows = buildRows();
   el.innerHTML = `
     <div class="hero" id="heroSection">
       ${heroSlides.map((f,i)=>`<div class="hero-slide${i===0?' active':''}" id="hslide${i}" style="background-image:url('${esc(f.poster)}')"><div class="hero-gradient"></div></div>`).join('')}
       <div class="hero-content" id="heroContent">${heroSlideContent(0)}</div>
+      <button class="hero-arrow hero-arrow-prev" onclick="goHeroSlide((heroIdx-1+heroSlides.length)%heroSlides.length)">&#8249;</button>
+      <button class="hero-arrow hero-arrow-next" onclick="goHeroSlide((heroIdx+1)%heroSlides.length)">&#8250;</button>
       <div class="hero-dots" id="heroDots">${heroSlides.map((_,i)=>`<button class="hero-dot${i===0?' active':''}" onclick="goHeroSlide(${i})"></button>`).join('')}</div>
     </div>
     <div class="rows-section">${rows}</div>
@@ -1208,6 +1216,21 @@ function renderHome(){
   heroIdx=0;
   clearInterval(heroTimer);
   heroTimer=setInterval(()=>goHeroSlide((heroIdx+1)%heroSlides.length),6000);
+
+  // Swipe por toque
+  const hs=document.getElementById('heroSection');
+  if(hs){
+    let _tx=0;
+    hs.addEventListener('touchstart',e=>{_tx=e.touches[0].clientX;},{passive:true});
+    hs.addEventListener('touchend',e=>{
+      const dx=e.changedTouches[0].clientX-_tx;
+      if(Math.abs(dx)>40){
+        clearInterval(heroTimer);
+        goHeroSlide(dx<0?(heroIdx+1)%heroSlides.length:(heroIdx-1+heroSlides.length)%heroSlides.length);
+        heroTimer=setInterval(()=>goHeroSlide((heroIdx+1)%heroSlides.length),6000);
+      }
+    },{passive:true});
+  }
   navList=FILMES;
 }
 
@@ -1245,7 +1268,8 @@ function buildRows(){
       return (a.data_ts||0)-(b.data_ts||0);
     }).slice(0,20);
   
-  const recentF=RECENT_IDS.map(id=>FM[id]).filter(Boolean);
+  const recentF=RECENT_IDS.map(id=>FM[id]).filter(Boolean)
+    .sort((a,b)=>(b.media||0)-(a.media||0));
   
   const byGenre={};
   FILMES.forEach(f=>f.categorias.forEach(c=>{if(!byGenre[c])byGenre[c]=[];byGenre[c].push(f);}));
