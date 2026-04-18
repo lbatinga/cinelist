@@ -2625,8 +2625,15 @@ function openUserYearDetail(uid, year){
 
 // TOP FILMES
 function rankFilmesHTML(){
-  const topIds = RAW.top_films;
-  const list = topIds.map(id=>FM[id]).filter(Boolean).slice(0,100);
+  // Calcula dinamicamente a partir dos dados atuais (não usa RAW.top_films que é estático)
+  const list = FILMES
+    .filter(f => f.media != null && f.num_avaliacoes >= 2)
+    .sort((a,b) => {
+      if(b.media !== a.media) return b.media - a.media;
+      if(b.num_avaliacoes !== a.num_avaliacoes) return b.num_avaliacoes - a.num_avaliacoes;
+      return (a.data_ts || 0) - (b.data_ts || 0);
+    })
+    .slice(0, 100);
   return `
     <div style="font-size:13px;color:var(--muted);margin-bottom:14px">Top 100 filmes mais bem avaliados pelo grupo (mín. 2 avaliações)</div>
     ${list.map((f,i)=>`
