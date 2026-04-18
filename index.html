@@ -97,14 +97,16 @@ body{background:var(--bg);color:var(--text);font-family:'Inter',sans-serif;displ
 
 /* ── ROWS ── */
 .rows-section{padding:0 40px 48px}
-.row{margin-bottom:28px}
-.row-title{font-size:18px;font-weight:700;margin-bottom:12px;color:#e5e5e5}
-.row-track{display:flex;gap:6px;overflow-x:auto;padding-bottom:6px;scrollbar-width:none;-webkit-overflow-scrolling:touch;cursor:grab}
+.row{margin-bottom:40px;padding-top:28px;border-top:1px solid rgba(255,255,255,.05)}
+.row:first-child{border-top:none;padding-top:0}
+.row-title{font-size:24px;font-weight:800;margin-bottom:16px;color:#fff;letter-spacing:-.3px;display:flex;align-items:center;gap:12px;line-height:1}
+.row-title::before{content:"";display:inline-block;width:4px;height:22px;background:var(--row-accent,#e50914);border-radius:2px;flex-shrink:0}
+.row-track{display:flex;gap:10px;overflow-x:auto;padding-bottom:6px;scrollbar-width:none;-webkit-overflow-scrolling:touch;cursor:grab}
 .row-track::-webkit-scrollbar{display:none}
-.poster-card{flex-shrink:0;width:130px;cursor:pointer;border-radius:6px;overflow:hidden;position:relative;transition:transform .25s,box-shadow .25s}
-.poster-card:hover{transform:scale(1.08);box-shadow:0 6px 28px rgba(0,0,0,.8);z-index:10}
-.poster-img{width:130px;height:195px;object-fit:cover;display:block;background:var(--surface2)}
-.poster-no-img{width:130px;height:195px;background:var(--surface2);display:flex;align-items:center;justify-content:center;font-size:36px}
+.poster-card{flex-shrink:0;width:170px;cursor:pointer;border-radius:6px;overflow:hidden;position:relative;transition:transform .25s,box-shadow .25s;box-shadow:0 0 0 1px rgba(255,255,255,.04), 0 4px 14px -6px var(--rating-glow,rgba(0,0,0,.5))}
+.poster-card:hover{transform:scale(1.08);box-shadow:0 0 0 1px rgba(255,255,255,.1), 0 10px 32px -4px var(--rating-glow,rgba(0,0,0,.8)), 0 6px 28px rgba(0,0,0,.6);z-index:10}
+.poster-img{width:170px;height:255px;object-fit:cover;display:block;background:var(--surface2)}
+.poster-no-img{width:170px;height:255px;background:var(--surface2);display:flex;align-items:center;justify-content:center;font-size:42px}
 .poster-overlay{position:absolute;inset:0;background:linear-gradient(to top,rgba(0,0,0,.9) 0%,transparent 50%);opacity:0;transition:opacity .25s}
 .poster-card:hover .poster-overlay{opacity:1}
 .poster-info{position:absolute;bottom:0;left:0;right:0;padding:8px;transform:translateY(100%);transition:transform .25s}
@@ -241,6 +243,9 @@ tr.selected td{background:rgba(229,9,20,.05)}
   .app-scroll{padding-top:calc(52px + var(--safe-top));padding-bottom:calc(56px + var(--safe-bottom))}
   .hero-content{left:16px;bottom:50px;max-width:calc(100% - 32px)}
   .rows-section{padding:0 12px 40px}
+  .row{margin-bottom:32px;padding-top:22px}
+  .row-title{font-size:19px;margin-bottom:12px}
+  .row-title::before{width:3px;height:18px}
   .tpage{padding:16px}
   .rank-section{padding:16px;overflow-x:hidden}
   .detail-layout{flex-direction:column;height:auto}
@@ -248,8 +253,8 @@ tr.selected td{background:rgba(229,9,20,.05)}
   .detail-panel{height:auto}
   .dp-backdrop{height:220px}
   .rank-stats{gap:10px}
-  .poster-card{width:110px}
-  .poster-img,.poster-no-img{width:110px;height:165px}
+  .poster-card{width:135px}
+  .poster-img,.poster-no-img{width:135px;height:202px}
   table thead th:nth-child(4),table thead th:nth-child(5),table thead th:nth-child(6),table thead th:nth-child(7),
   table tbody td:nth-child(4),table tbody td:nth-child(5),table tbody td:nth-child(6),table tbody td:nth-child(7){display:none}
   table tbody td{padding:12px 8px}
@@ -1275,8 +1280,8 @@ function buildRows(){
   FILMES.forEach(f=>f.categorias.forEach(c=>{if(!byGenre[c])byGenre[c]=[];byGenre[c].push(f);}));
   
   let html='';
-  if(recentF.length) html+=rowHTML('🆕 Adicionados Recentemente',recentF,true);
-  html+=rowHTML('⭐ Mais Bem Avaliados',topRated);
+  if(recentF.length) html+=rowHTML('🆕 Adicionados Recentemente',recentF,true,'#46d369');
+  html+=rowHTML('⭐ Mais Bem Avaliados',topRated,false,'#f5c518');
   
   // Top 5 genres by count
   Object.entries(byGenre).sort((a,b)=>b[1].length-a[1].length).slice(0,5).forEach(([g,films])=>{
@@ -1285,19 +1290,37 @@ function buildRows(){
       if(b.num_avaliacoes!==a.num_avaliacoes) return b.num_avaliacoes-a.num_avaliacoes;
       return (a.data_ts||0)-(b.data_ts||0);
     }).slice(0,15);
-    html+=rowHTML(g,sorted);
+    html+=rowHTML(g,sorted,false,GENRE_COLORS[g]||'#e50914');
   });
   return html;
 }
 
-function rowHTML(title,films,showDate){
-  return `<div class="row"><div class="row-title">${title}</div><div class="row-track">${films.map(f=>pCard(f,showDate)).join('')}</div></div>`;
+// Cor de acento por gênero (mudança 9)
+const GENRE_COLORS={
+  'Ação':'#e50914','Comédia':'#f5c518','Drama':'#4a90e2','Aventura':'#f39c12','Thriller':'#9b59b6',
+  'Terror':'#8e1616','Romance':'#e91e63','Animação':'#00bcd4','Ficção científica':'#7e57c2',
+  'Crime':'#607d8b','Fantasia':'#ab47bc','Família':'#26a69a','Mistério':'#5c6bc0','História':'#8d6e63',
+  'Guerra':'#6d4c41','Música':'#ec407a','Faroeste':'#bf8550','Documentário':'#78909c'
+};
+
+// Converte cor da nota em glow rgba
+function glowC(media){
+  if(!media) return 'rgba(0,0,0,.45)';
+  if(media>=9) return 'rgba(0,188,212,.55)';
+  if(media>=7.5) return 'rgba(70,211,105,.5)';
+  if(media>=6) return 'rgba(245,197,24,.45)';
+  if(media>=4) return 'rgba(255,112,67,.45)';
+  return 'rgba(192,57,43,.45)';
+}
+
+function rowHTML(title,films,showDate,accent){
+  return `<div class="row" style="--row-accent:${accent||'#e50914'}"><div class="row-title">${title}</div><div class="row-track">${films.map(f=>pCard(f,showDate)).join('')}</div></div>`;
 }
 
 function pCard(f, showDate){
   const d = parseDataCadastro ? parseDataCadastro(f) : null;
   const dataCad = d ? `${String(d.getDate()).padStart(2,'0')}/${String(d.getMonth()+1).padStart(2,'0')}/${d.getFullYear()}` : null;
-  return `<div class="poster-card" onclick="openFilme('${f.id}')">
+  return `<div class="poster-card" style="--rating-glow:${glowC(f.media)}" onclick="openFilme('${f.id}')">
     ${f.poster?`<img class="poster-img" src="${esc(f.poster)}" loading="lazy" alt="" onerror="this.style.display='none'">`:`<div class="poster-no-img">🎬</div>`}
     ${f.media?`<div class="poster-badge" style="color:${nC(f.media)}">${fmt(f.media)}</div>`:''}
     <div class="poster-class">${f.classificacao}</div>
