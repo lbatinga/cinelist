@@ -212,10 +212,23 @@ tr.selected td{background:rgba(229,9,20,.05)}
 .btn-save:hover{opacity:.88}
 
 /* ── ADD FILM MODAL ── */
-.add-modal-box{background:#181818;border-radius:14px;width:100%;max-width:460px;padding:28px;animation:mIn .22s ease;border:1px solid var(--border)}
-.tmdb-prev{display:none;background:var(--surface2);border-radius:8px;padding:12px;gap:12px;margin-top:10px;align-items:flex-start}
+.add-modal-box{background:#181818;border-radius:14px;width:100%;max-width:460px;padding:28px;animation:mIn .22s ease;border:1px solid var(--border);max-height:calc(100vh - 40px);overflow-y:auto}
+.add-modal-box::-webkit-scrollbar{width:4px}
+.add-modal-box::-webkit-scrollbar-thumb{background:var(--surface3);border-radius:2px}
+.tmdb-prev{display:none;background:var(--surface2);border-radius:8px;padding:12px;margin-top:10px;flex-direction:column;gap:10px}
 .tmdb-prev.show{display:flex}
+.tmdb-nav{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.tmdb-arrow{background:transparent;border:1px solid var(--border);color:#fff;width:30px;height:30px;border-radius:6px;cursor:pointer;font-family:inherit;font-size:15px;display:flex;align-items:center;justify-content:center;transition:background .15s;padding:0;line-height:1}
+.tmdb-arrow:hover:not(:disabled){background:rgba(255,255,255,.08)}
+.tmdb-arrow:disabled{opacity:.3;cursor:default}
+.tmdb-indicator{font-size:12px;color:var(--muted);font-weight:500;flex:1;text-align:center}
+.tmdb-card{display:flex;gap:12px;align-items:flex-start}
 .tmdb-thumb{width:56px;height:84px;object-fit:cover;border-radius:4px;flex-shrink:0;background:var(--surface3)}
+.tmdb-thumb-empty{width:56px;height:84px;border-radius:4px;flex-shrink:0;background:var(--surface3);display:flex;align-items:center;justify-content:center;font-size:26px;color:var(--muted)}
+.tmdb-info{flex:1;min-width:0}
+.tmdb-title{font-weight:700;font-size:13px;margin-bottom:4px;color:#fff;line-height:1.3}
+.tmdb-meta{font-size:12px;color:var(--muted);line-height:1.5}
+.tmdb-status{padding:10px 6px;text-align:center;color:var(--muted);font-size:13px}
 .form-row{display:grid;grid-template-columns:1fr 1fr;gap:12px}
 
 /* ── RANKING ── */
@@ -270,6 +283,11 @@ tr.selected td{background:rgba(229,9,20,.05)}
   .td-name{font-size:14px;max-width:200px}
   .detail-panel{display:none}
   table tbody tr{cursor:pointer;-webkit-tap-highlight-color:rgba(255,255,255,.08)}
+  /* Add film modal — mobile fits */
+  .modal-overlay{padding:12px}
+  .add-modal-box{padding:18px;max-height:calc(100vh - 24px)}
+  .modal-title{font-size:18px}
+  .modal-film{font-size:12px;margin-bottom:16px}
 }
 
 #mobileFilmeModal{display:none;position:fixed;inset:0;z-index:800;background:#0d0d0d;overflow-y:auto;-webkit-overflow-scrolling:touch;overscroll-behavior-y:contain}
@@ -660,24 +678,11 @@ tr.selected td{background:rgba(229,9,20,.05)}
 <div class="modal-overlay" id="addModal">
   <div class="add-modal-box">
     <div class="modal-title">Adicionar Filme</div>
-    <div class="modal-film" style="margin-bottom:18px">Preencha os dados básicos. Categoria, sinopse e capa vêm via TMDB.</div>
+    <div class="modal-film" style="margin-bottom:18px">Digite o nome e escolha o filme correto. Ano, duração, categoria, sinopse e capa vêm via TMDB.</div>
     <div class="form-group">
       <label class="form-label">Nome do Filme *</label>
       <input class="form-input" id="addNome" placeholder="Ex: Interestelar" oninput="onAddNomeInput()">
-      <div class="tmdb-prev" id="tmdbPrev">
-        <img class="tmdb-thumb" id="tmdbThumb" src="" alt="">
-        <div><div id="tmdbTitle" style="font-weight:700;font-size:13px;margin-bottom:4px"></div><div id="tmdbMeta" style="font-size:12px;color:var(--muted);line-height:1.5"></div></div>
-      </div>
-    </div>
-    <div class="form-row">
-      <div class="form-group" style="margin-bottom:0">
-        <label class="form-label">Ano *</label>
-        <input class="form-input" id="addAno" type="number" placeholder="2025">
-      </div>
-      <div class="form-group" style="margin-bottom:0">
-        <label class="form-label">Duração (hh:mm) *</label>
-        <input class="form-input" id="addDur" placeholder="2:15">
-      </div>
+      <div class="tmdb-prev" id="tmdbPrev"></div>
     </div>
     <div style="margin-top:14px;background:var(--surface2);border-radius:8px;padding:10px 14px;font-size:12px;color:var(--muted)">
       📌 Inserido por: <strong id="addInsPor" style="color:#fff">—</strong> &nbsp;·&nbsp; Data: <strong id="addDataCad" style="color:#fff"></strong>
@@ -1818,14 +1823,18 @@ function openAdd(){
   const now=new Date();
   document.getElementById('addDataCad').textContent=`${now.getDate().toString().padStart(2,'0')}/${(now.getMonth()+1).toString().padStart(2,'0')}/${now.getFullYear()}`;
   document.getElementById('addNome').value='';
-  document.getElementById('addAno').value='';
-  document.getElementById('addDur').value='';
   document.getElementById('tmdbPrev').classList.remove('show');
+  document.getElementById('tmdbPrev').innerHTML='';
+  tmdbResult=null;
+  tmdbCandidates=[];
+  tmdbSelectedIdx=0;
   document.getElementById('addModal').classList.add('open');
 }
 
 var tmdbTimer=null;
 var tmdbResult=null;
+var tmdbCandidates=[];
+var tmdbSelectedIdx=0;
 const TMDB_KEY='6bceb2e92a51fd680b2cf8a2a2fbc1ff';
 const CERT_MAP={'G':'L','PG':'10','PG-13':'12','R':'16','NC-17':'18'};
 
@@ -1838,6 +1847,7 @@ function getCert(rd){
   }return'';
 }
 
+// Busca candidatos no TMDB — retorna array de até 5 resultados com info básica
 async function searchTMDB(nome,ano){
   const q=encodeURIComponent(normStr(nome));
   const yp=ano?`&primary_release_year=${ano}`:'';
@@ -1851,101 +1861,174 @@ async function searchTMDB(nome,ano){
     const d=await(await fetch(url)).json();
     filmes=d.results||[];
   }
-  if(!filmes.length)return null;
-  if(ano){const by=filmes.filter(f=>f.release_date?.slice(0,4)===String(ano));if(by.length)filmes=by;}
-  const info=await(await fetch(`https://api.themoviedb.org/3/movie/${filmes[0].id}?api_key=${TMDB_KEY}&language=pt-BR&append_to_response=release_dates`)).json();
+  if(!filmes.length)return[];
+  if(ano){
+    const matching=filmes.filter(f=>f.release_date?.slice(0,4)===String(ano));
+    const other=filmes.filter(f=>f.release_date?.slice(0,4)!==String(ano));
+    filmes=[...matching,...other];
+  }
+  return filmes.slice(0,5).map(f=>({
+    tmdbId:f.id,
+    titulo:f.title||'',
+    ano:f.release_date?.slice(0,4)||'',
+    poster:f.poster_path?'https://image.tmdb.org/t/p/w200'+f.poster_path:'',
+    overview:f.overview||''
+  }));
+}
+
+// Busca detalhes completos de um candidato TMDB (runtime, gêneros, classificação)
+async function enrichTMDBResult(candidate){
+  const info=await(await fetch(`https://api.themoviedb.org/3/movie/${candidate.tmdbId}?api_key=${TMDB_KEY}&language=pt-BR&append_to_response=release_dates`)).json();
   const rt=info.runtime||0,h=Math.floor(rt/60),m=rt%60;
   return{
-    titulo:info.title||nome, ano:info.release_date?.slice(0,4)||ano||'',
-    poster:info.poster_path?'https://image.tmdb.org/t/p/w500'+info.poster_path:'',
-    sinopse:info.overview||'', categorias:(info.genres||[]).map(g=>g.name),
+    titulo:info.title||candidate.titulo,
+    ano:info.release_date?.slice(0,4)||candidate.ano,
+    poster:info.poster_path?'https://image.tmdb.org/t/p/w500'+info.poster_path:candidate.poster,
+    sinopse:info.overview||candidate.overview,
+    categorias:(info.genres||[]).map(g=>g.name),
     classificacao:getCert(info.release_dates),
-    duracao_str:rt?`${h}h ${m}min`:'', duracao_min:rt,
+    duracao_str:rt?`${h}h ${m}min`:'',
+    duracao_min:rt,
     duracao_hhmm:rt?`${h}:${String(m).padStart(2,'0')}`:''
   };
+}
+
+function renderTmdbCandidates(){
+  const prev=document.getElementById('tmdbPrev');
+  if(!tmdbCandidates.length){
+    prev.innerHTML='<div class="tmdb-status">⚠️ Não encontrado. Tente uma variação do nome.</div>';
+    return;
+  }
+  const c=tmdbCandidates[tmdbSelectedIdx];
+  const showNav=tmdbCandidates.length>1;
+  const enriched=(tmdbResult && tmdbResult._tmdbId===c.tmdbId) ? tmdbResult : null;
+
+  let html='';
+  if(showNav){
+    const prevDisabled=tmdbSelectedIdx===0;
+    const nextDisabled=tmdbSelectedIdx===tmdbCandidates.length-1;
+    html+=`<div class="tmdb-nav">
+      <button class="tmdb-arrow" onclick="selectTmdbCandidate(${tmdbSelectedIdx-1})" ${prevDisabled?'disabled':''}>‹</button>
+      <span class="tmdb-indicator">Resultado ${tmdbSelectedIdx+1} de ${tmdbCandidates.length}</span>
+      <button class="tmdb-arrow" onclick="selectTmdbCandidate(${tmdbSelectedIdx+1})" ${nextDisabled?'disabled':''}>›</button>
+    </div>`;
+  }
+
+  const metaHTML=enriched
+    ?`🎬 ${enriched.categorias.join(', ')||'—'}<br>⏱️ ${enriched.duracao_str||'—'} &nbsp;|&nbsp; 🔞 ${enriched.classificacao||'—'}`
+    :'<span style="opacity:.6">Carregando detalhes...</span>';
+
+  html+=`<div class="tmdb-card">
+    ${c.poster?`<img class="tmdb-thumb" src="${esc(c.poster)}" alt="" onerror="this.style.display='none'">`:'<div class="tmdb-thumb-empty">🎬</div>'}
+    <div class="tmdb-info">
+      <div class="tmdb-title">${esc(c.titulo)}${c.ano?` (${c.ano})`:''}</div>
+      <div class="tmdb-meta">${metaHTML}</div>
+    </div>
+  </div>`;
+
+  prev.innerHTML=html;
+}
+
+async function selectTmdbCandidate(idx){
+  if(!tmdbCandidates[idx])return;
+  tmdbSelectedIdx=idx;
+  tmdbResult=null;
+  renderTmdbCandidates();
+  try{
+    const enriched=await enrichTMDBResult(tmdbCandidates[idx]);
+    enriched._tmdbId=tmdbCandidates[idx].tmdbId;
+    tmdbResult=enriched;
+    renderTmdbCandidates();
+  }catch(e){
+    console.error('Erro ao enriquecer candidato TMDB:',e);
+  }
 }
 
 function onAddNomeInput(){
   clearTimeout(tmdbTimer);
   const nome=document.getElementById('addNome').value.trim();
   const prev=document.getElementById('tmdbPrev');
-  if(nome.length<2){prev.classList.remove('show');tmdbResult=null;return;}
-  document.getElementById('tmdbTitle').textContent='🔍 Buscando...';
-  document.getElementById('tmdbMeta').textContent='';
-  document.getElementById('tmdbThumb').src='';
+  if(nome.length<2){
+    prev.classList.remove('show');
+    tmdbResult=null;
+    tmdbCandidates=[];
+    return;
+  }
   prev.classList.add('show');
+  prev.innerHTML='<div class="tmdb-status">🔍 Buscando...</div>';
   tmdbTimer=setTimeout(async()=>{
-    const ano=document.getElementById('addAno').value.trim();
     try{
-      const res=await searchTMDB(nome,ano);
-      if(res){
-        tmdbResult=res;
-        document.getElementById('tmdbThumb').src=res.poster;
-        document.getElementById('tmdbTitle').textContent=res.titulo+(res.ano?` (${res.ano})`:'');
-        document.getElementById('tmdbMeta').innerHTML=`🎬 ${res.categorias.join(', ')||'—'}<br>⏱️ ${res.duracao_str||'—'} &nbsp;|&nbsp; 🔞 ${res.classificacao||'—'}`;
-        if(res.ano)document.getElementById('addAno').value=res.ano;
-        if(res.duracao_hhmm)document.getElementById('addDur').value=res.duracao_hhmm;
-      }else{
+      const candidates=await searchTMDB(nome,'');
+      tmdbCandidates=candidates;
+      tmdbSelectedIdx=0;
+      if(candidates.length===0){
         tmdbResult=null;
-        document.getElementById('tmdbTitle').textContent=nome;
-        document.getElementById('tmdbMeta').innerHTML='⚠️ Não encontrado. Preencha manualmente.';
+        renderTmdbCandidates();
+        return;
       }
+      renderTmdbCandidates();
+      await selectTmdbCandidate(0);
     }catch(e){
-      document.getElementById('tmdbMeta').innerHTML='⚠️ Erro na busca.';
+      console.error('Erro busca TMDB:',e);
+      prev.innerHTML='<div class="tmdb-status">⚠️ Erro na busca.</div>';
     }
   },800);
 }
 
 async function saveFilme(){
   const nome=document.getElementById('addNome').value.trim();
-  const ano=document.getElementById('addAno').value.trim();
-  const dur=document.getElementById('addDur').value.trim();
-  if(!nome||!ano||!dur){showToast('⚠️ Preencha Nome, Ano e Duração!');return;}
-  
+  if(!nome){showToast('⚠️ Digite o nome do filme!');return;}
+
+  // Precisa ter um resultado TMDB selecionado
+  let td = tmdbResult;
+  if(!td && tmdbCandidates.length && tmdbCandidates[tmdbSelectedIdx]){
+    try{ td = await enrichTMDBResult(tmdbCandidates[tmdbSelectedIdx]); }catch(e){}
+  }
+  if(!td){
+    // Última tentativa — busca fresca
+    try{
+      const candidates = await searchTMDB(nome,'');
+      if(candidates.length) td = await enrichTMDBResult(candidates[0]);
+    }catch(e){}
+  }
+  if(!td){
+    showToast('⚠️ Filme não encontrado no TMDB. Verifique o nome digitado.');
+    return;
+  }
+
+  const nomeFinal = td.titulo || nome;
+  const anoInt = parseInt(td.ano) || null;
+  const durMin = td.duracao_min || 0;
+  const durStr = td.duracao_str || (durMin ? `${Math.floor(durMin/60)}h ${durMin%60}min` : '');
+
   // Verificar duplicata
-  const anoInt = parseInt(ano)||null;
   const duplicado = FILMES.find(f =>
-    f.nome.trim().toLowerCase() === nome.toLowerCase() &&
+    f.nome.trim().toLowerCase() === nomeFinal.toLowerCase() &&
     (f.ano === anoInt || !anoInt)
   );
   if(duplicado){
-    showToast('⚠️ "' + nome + '" já está cadastrado!');
+    showToast('⚠️ "' + nomeFinal + '" já está cadastrado!');
     return;
   }
 
   const btn=document.getElementById('saveFilmeBtn');
   if(btn){btn.textContent='Salvando...';btn.disabled=true;}
-  
-  // Se não tem resultado TMDB ainda, tenta buscar
-  let td = tmdbResult;
-  if(!td && nome.length>=2){
-    try{ td = await searchTMDB(nome, ano); }catch(e){}
-  }
-  
-  // Parse duração
-  const parts=dur.split(':');
-  const durMin=parts.length===2?parseInt(parts[0])*60+parseInt(parts[1]):0;
-  const h=Math.floor(durMin/60),m=durMin%60;
-  const durStr=durMin?`${h}h ${m}min`:dur;
-  
+
   // Generate UUID for id
   const newId = 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
     const r = Math.random()*16|0, v = c=='x'?r:(r&0x3|0x8); return v.toString(16);
   });
-  
-  // Usar nome do TMDB se disponível (formatação correta)
-  const nomeFinal = td?.titulo || nome;
-  
+
   const filme={
     id: newId,
-    nome: nomeFinal, 
-    ano: parseInt(ano)||null,
-    duracao_str: durStr, 
+    nome: nomeFinal,
+    ano: anoInt,
+    duracao_str: durStr,
     duracao_min: durMin||null,
-    poster: td?.poster||null,
-    sinopse: td?.sinopse||null,
-    categorias: td?.categorias||[],
-    classificacao: td?.classificacao||null,
+    poster: td.poster||null,
+    sinopse: td.sinopse||null,
+    categorias: td.categorias||[],
+    classificacao: td.classificacao||null,
     inserido_por: CU,
     data_cadastro: (()=>{ const n=new Date(); return `${String(n.getDate()).padStart(2,'0')}/${String(n.getMonth()+1).padStart(2,'0')}/${n.getFullYear()}`; })()
   };
