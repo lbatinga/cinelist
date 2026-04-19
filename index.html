@@ -976,7 +976,7 @@ function calcUserStats(){
   gs.total_avaliacoes = FILMES.reduce((s,f) => s + f.num_avaliacoes, 0);
   const todasNotas = FILMES.flatMap(f => Object.values(f.avaliacoes).map(a=>a.nota).filter(n=>n!==null));
   gs.avg_nota = todasNotas.length ? Math.round(100 * todasNotas.reduce((a,b)=>a+b,0)/todasNotas.length)/100 : 0;
-  
+
   // Genre counts global
   gs.genre_counts = {};
   FILMES.forEach(f => f.categorias.forEach(g => { gs.genre_counts[g] = (gs.genre_counts[g]||0) + 1; }));
@@ -986,7 +986,97 @@ function calcUserStats(){
   const totalMin = FILMES.reduce((s,f) => s + (f.duracao_min||0), 0);
   gs.total_catalog_days = Math.round(totalMin / 1440);
 
-  console.log(`✅ Stats calculadas: ${gs.total_filmes} filmes, ${gs.total_avaliacoes} avaliações`);
+  // Total de membros ativos (que avaliaram pelo menos 1 filme)
+  gs.total_membros = uids.filter(u => (STATS[u]?.quant || 0) > 0).length;
+
+  // ── Atividade mensal (monthly_activity) ──
+  RAW.monthly_activity = {};
+  FILMES.forEach(f => {
+    Object.values(f.avaliacoes || {}).forEach(av => {
+      if(av?.data){
+        const p = av.data.split('/');
+        if(p.length === 3){
+          const key = `${p[2]}-${p[1].padStart(2,'0')}`;
+          RAW.monthly_activity[key] = (RAW.monthly_activity[key] || 0) + 1;
+        }
+      }
+    });
+  });
+  const monthEntries = Object.entries(RAW.monthly_activity);
+  if(monthEntries.length){
+    const MESES_ABR = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
+    const top = monthEntries.sort((a,b)=>b[1]-a[1])[0];
+    const [ano,mes] = top[0].split('-');
+    gs.top_month = `${MESES_ABR[parseInt(mes)-1]}/${ano}`;
+    gs.top_month_count = top[1];
+  }
+
+  // ── User personal (top5, bot5, histograma, genre_top5) recalculados ──
+  RAW.user_personal = RAW.user_personal || {};
+  uids.forEach(uid => {
+    const s = STATS[uid];
+    if(!s || !s.quant) return;
+
+    const minhasAvs = FILMES
+      .filter(f => f.avaliacoes[uid] && f.avaliacoes[uid].nota !== null)
+      .map(f => ({ id:f.id, nome:f.nome, poster:f.poster, ano:f.ano, categorias:f.categorias, nota:f.avaliacoes[uid].nota }));
+
+    const sorted = [...minhasAvs].sort((a,b) => b.nota - a.nota);
+    const top5 = sorted.slice(0,5).map(a => ({ id:a.id, nome:a.nome, nota:a.nota, poster:a.poster }));
+    const bot5 = sorted.slice(-5).reverse().map(a => ({ id:a.id, nome:a.nome, nota:a.nota, poster:a.poster }));
+
+    // Histograma 0-10 (buckets de 1 ponto: [0,1), [1,2), ..., [9,10], [10])
+    const histogram = new Array(11).fill(0);
+    minhasAvs.forEach(a => {
+      const b = Math.min(10, Math.floor(a.nota));
+      histogram[b]++;
+    });
+
+    // Ano mais ativo
+    let mostActiveYear = null, mostActiveYearCount = 0;
+    Object.entries(s.by_year || {}).forEach(([ano,cnt]) => {
+      if(cnt > mostActiveYearCount){ mostActiveYearCount = cnt; mostActiveYear = ano; }
+    });
+
+    // Top 5 gêneros com média
+    const genreTop5 = Object.entries(s.by_genre || {})
+      .sort((a,b) => b[1] - a[1])
+      .slice(0,5)
+      .map(([genre,count]) => ({ genre, count, avg: s.genre_avg?.[genre] || null }));
+
+    RAW.user_personal[uid] = {
+      top5, bot5,
+      fav_genre: s.fav_genre || null,
+      fav_genre_avg: s.fav_genre_avg || null,
+      most_active_year: mostActiveYear,
+      most_active_year_count: mostActiveYearCount,
+      nota_histogram: histogram,
+      genre_top5: genreTop5
+    };
+  });
+
+  // ── Highlights (quem mais filmes, maior média, mais seletivo, etc.) ──
+  const ranking = uids.filter(u => STATS[u]?.quant > 0).map(u => ({ uid:u, ...STATS[u] }));
+  if(ranking.length){
+    const byCount = [...ranking].sort((a,b) => b.quant - a.quant);
+    const byAvg = [...ranking].filter(r => r.media != null).sort((a,b) => b.media - a.media);
+    const byPending = uids.map(u => ({ uid:u, nome:USERS[u]?.nome, cnt:(STATS[u]?.pendentes||[]).length }))
+      .sort((a,b) => b.cnt - a.cnt);
+    const byAdded = uids.map(u => ({ uid:u, nome:USERS[u]?.nome, cnt:(STATS[u]?.inseridos||[]).length }))
+      .sort((a,b) => b.cnt - a.cnt);
+
+    RAW.highlights = {
+      most_films:   { uid: byCount[0].uid,        nome: byCount[0].nome },
+      least_films:  { uid: byCount[byCount.length-1].uid, nome: byCount[byCount.length-1].nome },
+      highest_avg:  byAvg[0] ? { uid: byAvg[0].uid, nome: byAvg[0].nome } : null,
+      lowest_avg:   byAvg.length ? { uid: byAvg[byAvg.length-1].uid, nome: byAvg[byAvg.length-1].nome } : null,
+      most_pending: byPending[0] ? { uid: byPending[0].uid, nome: byPending[0].nome } : null,
+      most_added:   byAdded[0] ? { uid: byAdded[0].uid, nome: byAdded[0].nome } : null,
+      most_selective: byAvg.length ? { uid: byAvg[byAvg.length-1].uid, nome: byAvg[byAvg.length-1].nome } : null
+    };
+  }
+
+  console.log(`✅ Stats calculadas: ${gs.total_filmes} filmes, ${gs.total_avaliacoes} avaliações, ${uids.length} membros`);
 }
 
 var FM = FILMES_MAP; // alias
@@ -2398,6 +2488,29 @@ function renderRankTab(){
   else if(rankTab==='genero') el.innerHTML = rankGeneroHTML();
 }
 
+// ── AFINIDADE GLOBAL (reutilizável) ──
+// Calcula compatibilidade entre dois usuários baseado em filmes em comum
+function calcAfinGlobal(uidA, uidB){
+  const shared = FILMES.filter(f => {
+    const a = f.avaliacoes?.[uidA], b = f.avaliacoes?.[uidB];
+    return a?.nota != null && b?.nota != null;
+  });
+  if(shared.length < 3) return { score: null, shared: shared.length };
+
+  const diffs = shared.map(f => Math.abs(f.avaliacoes[uidA].nota - f.avaliacoes[uidB].nota));
+  const avgDiff = diffs.reduce((s,d)=>s+d,0) / diffs.length;
+  const score = Math.round(Math.max(0, 100 - avgDiff * 20));
+  return { score, shared: shared.length };
+}
+
+function afinColor(score){
+  if(score == null) return 'var(--muted2)';
+  if(score >= 80) return '#46d369';
+  if(score >= 60) return '#f5c518';
+  if(score >= 40) return '#e67e22';
+  return '#e05555';
+}
+
 // USER DETAIL (from ranking)
 function openUserDetail(uid){
   const s = RAW.users_stats[uid];
@@ -2472,6 +2585,52 @@ function openUserDetail(uid){
       </div>
       <span style="font-size:11px;font-weight:700;padding:5px 12px;border-radius:20px;background:${statusBg};color:${statusColor};flex-shrink:0">${statusLabel}</span>
     </div>
+
+    <!-- COMPATIBILIDADE COM A TROPA -->
+    ${(() => {
+      const outros = Object.keys(USERS).filter(u => u !== uid && u !== 'USER-001' && USERS[u]);
+      const afins = outros.map(outro => {
+        const p = getProfile(outro);
+        return {
+          uid: outro,
+          nome: USERS[outro]?.nome || '?',
+          apelido: p.apelido || USERS[outro]?.nome || '?',
+          color: p.color || aC(outro),
+          photo: p.photo,
+          ...calcAfinGlobal(uid, outro)
+        };
+      }).filter(a => a.score != null).sort((a,b) => b.score - a.score);
+
+      if(afins.length === 0) return '';
+
+      const viewerName = CU && CU !== uid ? (USERS[CU]?.nome || '') : '';
+      const isOwnProfile = CU === uid;
+      const titulo = isOwnProfile ? '🎯 Sua compatibilidade com a tropa' : `🎯 Compatibilidade de ${esc(nome)} com a tropa`;
+
+      return `
+      <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:14px;margin-bottom:20px">
+        <div style="font-size:13px;font-weight:700;margin-bottom:12px;display:flex;align-items:center;justify-content:space-between">
+          <span>${titulo}</span>
+          <span style="font-size:10px;color:var(--muted2);font-weight:500">${afins.length} ${afins.length===1?'membro':'membros'}</span>
+        </div>
+        <div style="display:flex;gap:10px;overflow-x:auto;padding-bottom:4px;scrollbar-width:thin;-webkit-overflow-scrolling:touch">
+          ${afins.map(a => {
+            const col = afinColor(a.score);
+            const avHTML = a.photo
+              ? `<img src="${esc(a.photo)}" style="width:42px;height:42px;border-radius:50%;object-fit:cover;border:2px solid ${col}">`
+              : `<div style="width:42px;height:42px;border-radius:50%;background:${a.color};color:#000;font-weight:900;font-size:14px;display:flex;align-items:center;justify-content:center;border:2px solid ${col}">${ini(a.nome)}</div>`;
+            const isViewer = CU === a.uid;
+            return `<div onclick="openUserDetail('${a.uid}')" style="flex-shrink:0;width:110px;background:var(--surface2);border:1px solid ${isViewer?col:'var(--border)'};border-radius:10px;padding:11px 8px;text-align:center;cursor:pointer;transition:transform .15s,border-color .15s" onmouseover="this.style.transform='translateY(-2px)'" onmouseout="this.style.transform='none'">
+              <div style="font-size:20px;font-weight:900;color:${col};line-height:1;margin-bottom:6px">${a.score}%</div>
+              <div style="display:flex;justify-content:center;margin-bottom:6px">${avHTML}</div>
+              <div style="font-size:11px;font-weight:700;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(a.apelido)}</div>
+              <div style="font-size:10px;color:var(--muted2);margin-top:2px">${a.shared} filme${a.shared===1?'':'s'}</div>
+            </div>`;
+          }).join('')}
+        </div>
+        <div style="font-size:10px;color:var(--muted2);margin-top:10px;text-align:center">Clique em alguém para comparar gostos em detalhe</div>
+      </div>` ;
+    })()}
 
     <!-- STATS -->
     <div class="stats-grid" style="grid-template-columns:repeat(auto-fill,minmax(110px,1fr));margin-bottom:20px">
@@ -4187,6 +4346,7 @@ function adminTab(tab){
   else if(tab === 'datas') renderAdminDatas();
   else if(tab === 'stats') renderAdminStats();
   else if(tab === 'notificacao') renderAdminNotificacao();
+  else if(tab === 'backup') renderAdminBackup();
 }
 
 // ── ABA: DUPLICATAS ──
@@ -4629,6 +4789,172 @@ async function diagnosticoNotificacoes(){
   add('ℹ️', 'Se tudo está ✅ mas a notif não chega, o problema está no Apps Script (verifique o código publicado).');
 }
 
+// ── ABA: BACKUP ──
+function renderAdminBackup(){
+  const body = document.getElementById('adminBody');
+  const totalFilmes = FILMES.length;
+  const totalAv = FILMES.reduce((s,f) => s + (f.num_avaliacoes||0), 0);
+  const totalMembros = Object.keys(USERS).length;
+
+  body.innerHTML = `
+    <div style="font-size:13px;color:#888;margin-bottom:16px;line-height:1.5">
+      Baixe uma cópia completa dos dados do CineList. Guarde num lugar seguro (Drive, Dropbox, PC) para garantir que nada seja perdido em caso de problema com o servidor.
+    </div>
+
+    <div style="background:#1f1f1f;border-radius:10px;padding:14px;margin-bottom:16px;border:1px solid #2a2a2a">
+      <div style="font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:#888;font-weight:700;margin-bottom:10px">📊 Snapshot atual</div>
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px">
+        <div style="text-align:center">
+          <div style="font-size:20px;font-weight:900;color:#fff">${totalFilmes}</div>
+          <div style="font-size:10px;color:#888">filmes</div>
+        </div>
+        <div style="text-align:center">
+          <div style="font-size:20px;font-weight:900;color:#fff">${totalAv}</div>
+          <div style="font-size:10px;color:#888">avaliações</div>
+        </div>
+        <div style="text-align:center">
+          <div style="font-size:20px;font-weight:900;color:#fff">${totalMembros}</div>
+          <div style="font-size:10px;color:#888">membros</div>
+        </div>
+      </div>
+    </div>
+
+    <div style="display:flex;flex-direction:column;gap:10px">
+      <button onclick="exportBackupJSON()" style="background:var(--green);color:#000;border:none;border-radius:8px;padding:12px;font-family:inherit;font-size:14px;font-weight:800;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px">
+        💾 Baixar backup completo (JSON)
+      </button>
+      <button onclick="exportBackupCSV()" style="background:#2a2a2a;color:#fff;border:1px solid #333;border-radius:8px;padding:10px;font-family:inherit;font-size:13px;font-weight:700;cursor:pointer">
+        📊 Baixar avaliações em CSV (pra Excel/Sheets)
+      </button>
+      <div id="backupMsg" style="font-size:12px;color:#888;text-align:center;padding:4px"></div>
+    </div>
+
+    <div style="margin-top:24px;padding-top:16px;border-top:1px solid #2a2a2a">
+      <div style="font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:#f5c518;font-weight:700;margin-bottom:8px">⚠️ Recomendação</div>
+      <div style="font-size:12px;color:#888;line-height:1.6">
+        Faça um backup <strong style="color:#fff">uma vez por mês</strong> e guarde em pelo menos 2 lugares diferentes (ex: Drive + pasta local). O arquivo JSON pode ser usado para restaurar os dados se algo acontecer com o Supabase.
+      </div>
+    </div>`;
+}
+
+async function exportBackupJSON(){
+  const msg = document.getElementById('backupMsg');
+  msg.style.color='#888'; msg.textContent='⏳ Preparando backup...';
+
+  try {
+    // Recarrega dados frescos antes de exportar
+    await loadFilmsFromSupabase();
+
+    const backup = {
+      version: '1.0',
+      app: 'CineList',
+      exported_at: new Date().toISOString(),
+      exported_by: USERS[CU]?.nome || 'desconhecido',
+      exported_by_uid: CU,
+      stats: {
+        total_filmes: FILMES.length,
+        total_avaliacoes: FILMES.reduce((s,f) => s + (f.num_avaliacoes||0), 0),
+        total_membros: Object.keys(USERS).length
+      },
+      usuarios: USERS,
+      filmes: FILMES.map(f => ({
+        id: f.id,
+        nome: f.nome,
+        ano: f.ano,
+        duracao_str: f.duracao_str,
+        duracao_min: f.duracao_min,
+        poster: f.poster,
+        sinopse: f.sinopse,
+        categorias: f.categorias,
+        classificacao: f.classificacao,
+        inserido_por: f.inserido_por,
+        data_cadastro: f.data_cadastro,
+        data_ts: f.data_ts,
+        avaliacoes: f.avaliacoes || {},
+        media: f.media,
+        num_avaliacoes: f.num_avaliacoes
+      }))
+    };
+
+    const blob = new Blob([JSON.stringify(backup, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    const dateStr = new Date().toISOString().slice(0,10);
+    a.download = `cinelist-backup-${dateStr}.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+
+    const sizeKB = Math.round(blob.size / 1024);
+    msg.style.color='#46d369';
+    msg.textContent=`✅ Backup baixado! (${sizeKB} KB) — Guarde num lugar seguro.`;
+  } catch(e) {
+    console.error('Erro backup:', e);
+    msg.style.color='#e05555';
+    msg.textContent='❌ Erro ao gerar backup: ' + e.message;
+  }
+}
+
+async function exportBackupCSV(){
+  const msg = document.getElementById('backupMsg');
+  msg.style.color='#888'; msg.textContent='⏳ Preparando CSV...';
+
+  try {
+    // Cabeçalho
+    const linhas = [
+      ['usuario','filme','ano','nota','data_avaliacao','categorias','duracao_min'].join(';')
+    ];
+
+    FILMES.forEach(f => {
+      const avs = f.avaliacoes || {};
+      Object.entries(avs).forEach(([uid, av]) => {
+        if(av.nota == null) return;
+        const nomeUser = USERS[uid]?.nome || uid;
+        const cats = (f.categorias || []).join('|');
+        const csvEsc = s => {
+          if(s == null) return '';
+          const str = String(s);
+          if(str.includes(';') || str.includes('"') || str.includes('\n')){
+            return '"' + str.replace(/"/g,'""') + '"';
+          }
+          return str;
+        };
+        linhas.push([
+          csvEsc(nomeUser),
+          csvEsc(f.nome),
+          f.ano || '',
+          av.nota,
+          csvEsc(av.data || ''),
+          csvEsc(cats),
+          f.duracao_min || ''
+        ].join(';'));
+      });
+    });
+
+    // BOM pra Excel reconhecer UTF-8
+    const csv = '\ufeff' + linhas.join('\n');
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    const dateStr = new Date().toISOString().slice(0,10);
+    a.download = `cinelist-avaliacoes-${dateStr}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+
+    msg.style.color='#46d369';
+    msg.textContent=`✅ CSV com ${linhas.length - 1} avaliações baixado!`;
+  } catch(e) {
+    console.error('Erro CSV:', e);
+    msg.style.color='#e05555';
+    msg.textContent='❌ Erro ao gerar CSV: ' + e.message;
+  }
+}
+
 // ===== MOBILE FILME MODAL =====
 function openMobileFilmeModal(id){
   const f=FM[id]; if(!f) return;
@@ -4884,6 +5210,7 @@ function closePosterLightbox(){
       <button onclick="adminTab('datas')" id="atab-datas" style="flex:1;min-width:100px;padding:7px;border-radius:8px;border:none;cursor:pointer;font-size:12px;font-weight:700;font-family:inherit;background:#2a2a2a;color:#fff">📅 Datas</button>
       <button onclick="adminTab('stats')" id="atab-stats" style="flex:1;min-width:100px;padding:7px;border-radius:8px;border:none;cursor:pointer;font-size:12px;font-weight:700;font-family:inherit;background:#2a2a2a;color:#fff">📊 Stats</button>
       <button onclick="adminTab('notificacao')" id="atab-notificacao" style="flex:1;min-width:100px;padding:7px;border-radius:8px;border:none;cursor:pointer;font-size:12px;font-weight:700;font-family:inherit;background:#2a2a2a;color:#fff">🔔 Notificação</button>
+      <button onclick="adminTab('backup')" id="atab-backup" style="flex:1;min-width:100px;padding:7px;border-radius:8px;border:none;cursor:pointer;font-size:12px;font-weight:700;font-family:inherit;background:#2a2a2a;color:#fff">💾 Backup</button>
     </div>
     <div class="pm-body" id="adminBody" style="max-height:65vh;overflow-y:auto"></div>
     <div class="pm-footer"><button class="pm-cancel" onclick="closeAdmin()">Fechar</button></div>
