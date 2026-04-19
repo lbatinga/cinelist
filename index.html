@@ -897,6 +897,11 @@ function calcUserStats(){
     const nqMerged = new Set([...(s.nao_quer||[]), ...naoQuerFromAvs]);
     s.nao_quer = [...nqMerged].filter(id => !ratedSet.has(id));
 
+    // DIAGNÓSTICO: Loga quantos nao_quer foram reconstruídos do Supabase vs perdidos
+    if(naoQuerFromAvs.length > 0 || (s.nao_quer || []).length > 0){
+      console.log(`[DIAG nao_quer] ${USERS[uid]?.nome || uid}: ${naoQuerFromAvs.length} do DB, total final: ${s.nao_quer.length}`);
+    }
+
     // Quant e media
     s.quant = minhasAvs.length;
     s.media = minhasAvs.length
@@ -4347,6 +4352,7 @@ function adminTab(tab){
   else if(tab === 'stats') renderAdminStats();
   else if(tab === 'notificacao') renderAdminNotificacao();
   else if(tab === 'backup') renderAdminBackup();
+  else if(tab === 'migracao') renderAdminMigracao();
 }
 
 // ── ABA: DUPLICATAS ──
@@ -4837,6 +4843,198 @@ function renderAdminBackup(){
     </div>`;
 }
 
+// ── ABA: MIGRAÇÃO / RECUPERAÇÃO ──
+function renderAdminMigracao(){
+  const body = document.getElementById('adminBody');
+
+  // Conta quantos nao_quer existem atualmente (reconstruídos do DB)
+  const countPorUser = {};
+  let totalAtual = 0;
+  Object.keys(STATS).forEach(uid => {
+    if(uid === 'USER-001') return;
+    const n = (STATS[uid]?.nao_quer || []).length;
+    countPorUser[uid] = n;
+    totalAtual += n;
+  });
+
+  body.innerHTML = `
+    <div style="background:#2a1f1a;border:1px solid #5a3820;border-radius:10px;padding:14px;margin-bottom:16px">
+      <div style="font-size:12px;font-weight:700;color:#f5c518;margin-bottom:6px">🔧 Recuperação de "Não quer"</div>
+      <div style="font-size:12px;color:#ccc;line-height:1.5">
+        Quando o STATIC foi reduzido, filmes marcados como "não quer" no passado podem ter sido perdidos se não estavam na tabela <code>avaliacoes</code> do Supabase. 
+        Use esta ferramenta para restaurar os dados a partir de um backup JSON antigo.
+      </div>
+    </div>
+
+    <div style="background:#1f1f1f;border-radius:10px;padding:14px;margin-bottom:16px;border:1px solid #2a2a2a">
+      <div style="font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:#888;font-weight:700;margin-bottom:10px">📊 Situação atual (reconstruída do Supabase)</div>
+      <div style="font-size:20px;font-weight:900;color:#fff;margin-bottom:8px">${totalAtual} <span style="font-size:11px;color:#888;font-weight:500">não-quer no total</span></div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(110px,1fr));gap:6px;margin-top:10px">
+        ${Object.entries(countPorUser).map(([uid,n]) => `
+          <div style="background:#0f0f0f;border-radius:6px;padding:6px;text-align:center">
+            <div style="font-size:14px;font-weight:800;color:${n===0?'#e05555':'#fff'}">${n}</div>
+            <div style="font-size:10px;color:#888">${esc(USERS[uid]?.nome || uid)}</div>
+          </div>
+        `).join('')}
+      </div>
+    </div>
+
+    <div style="background:#1f1f1f;border-radius:10px;padding:14px;margin-bottom:16px;border:1px solid #2a2a2a">
+      <div style="font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:#888;font-weight:700;margin-bottom:10px">1️⃣ Enviar backup antigo</div>
+      <div style="font-size:12px;color:#888;line-height:1.5;margin-bottom:10px">
+        Selecione o arquivo JSON gerado pelo CineList antes da redução do STATIC.
+      </div>
+      <input type="file" id="migBackupFile" accept=".json,application/json" onchange="analisarBackupMigracao(event)" style="width:100%;padding:8px;background:#0f0f0f;border:1px solid #333;border-radius:6px;color:#fff;font-family:inherit">
+    </div>
+
+    <div id="migResultado" style="display:none"></div>
+  `;
+}
+
+async function analisarBackupMigracao(ev){
+  const file = ev.target.files[0];
+  if(!file) return;
+
+  const resultDiv = document.getElementById('migResultado');
+  resultDiv.style.display = 'block';
+  resultDiv.innerHTML = '<div style="color:#888;padding:14px;text-align:center">⏳ Analisando backup…</div>';
+
+  try {
+    const text = await file.text();
+    const backup = JSON.parse(text);
+
+    // Aceita formato antigo (users_stats) ou novo formato de export
+    const usersStatsOld = backup.users_stats || backup.raw?.users_stats || null;
+
+    // Se for formato de export novo (com filmes e usuarios), tenta extrair dos dados
+    if(!usersStatsOld){
+      resultDiv.innerHTML = `
+        <div style="background:#2a1f1f;border:1px solid #5a3030;border-radius:10px;padding:14px;margin-bottom:12px">
+          <div style="color:#e05555;font-weight:700;margin-bottom:6px">❌ Formato não reconhecido</div>
+          <div style="font-size:12px;color:#ccc;line-height:1.5">
+            O backup precisa conter <code>users_stats</code> com listas de <code>nao_quer</code> por usuário. 
+            Tente usar o arquivo original com o STATIC completo (cópia do index.html antigo seria suficiente — extraia o bloco STATIC).
+          </div>
+        </div>
+        <details style="margin-top:10px;font-size:11px;color:#888">
+          <summary style="cursor:pointer">Ver chaves do backup carregado</summary>
+          <pre style="background:#0f0f0f;padding:8px;border-radius:4px;overflow-x:auto">${esc(Object.keys(backup).join('\\n'))}</pre>
+        </details>
+      `;
+      return;
+    }
+
+    // Compara com o estado atual — quais nao_quer do backup NÃO estão no Supabase?
+    const diagnostico = {};
+    const allMissing = [];
+
+    Object.keys(usersStatsOld).forEach(uid => {
+      if(uid === 'USER-001') return;
+      const nqBackup = usersStatsOld[uid]?.nao_quer || [];
+      const nqAtual = new Set(STATS[uid]?.nao_quer || []);
+
+      // Filmes que estão no backup mas não foram reconstruídos (ausentes do DB)
+      const missing = nqBackup.filter(id => !nqAtual.has(id));
+
+      if(nqBackup.length > 0 || missing.length > 0){
+        diagnostico[uid] = {
+          nome: USERS[uid]?.nome || usersStatsOld[uid].nome || uid,
+          backup: nqBackup.length,
+          atual: nqAtual.size,
+          missing: missing.length,
+          missing_ids: missing
+        };
+        missing.forEach(filmeId => allMissing.push({ uid, filme_id: filmeId }));
+      }
+    });
+
+    const totalMissing = allMissing.length;
+
+    resultDiv.innerHTML = `
+      <div style="background:#1f1f1f;border-radius:10px;padding:14px;margin-bottom:12px;border:1px solid #2a2a2a">
+        <div style="font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:#888;font-weight:700;margin-bottom:10px">2️⃣ Diagnóstico</div>
+        <div style="font-size:22px;font-weight:900;color:${totalMissing>0?'#e05555':'var(--green)'};margin-bottom:8px">
+          ${totalMissing} <span style="font-size:11px;color:#888;font-weight:500">registros faltando no Supabase</span>
+        </div>
+        <div style="display:grid;grid-template-columns:auto 1fr 1fr 1fr;gap:6px;font-size:11px;margin-top:12px">
+          <div style="color:#888;font-weight:700">Usuário</div>
+          <div style="color:#888;font-weight:700;text-align:right">Backup</div>
+          <div style="color:#888;font-weight:700;text-align:right">Atual</div>
+          <div style="color:#888;font-weight:700;text-align:right">Faltando</div>
+          ${Object.values(diagnostico).map(d => `
+            <div style="color:#fff">${esc(d.nome)}</div>
+            <div style="text-align:right;color:#ccc">${d.backup}</div>
+            <div style="text-align:right;color:#ccc">${d.atual}</div>
+            <div style="text-align:right;color:${d.missing>0?'#e05555':'var(--green)'};font-weight:700">${d.missing}</div>
+          `).join('')}
+        </div>
+      </div>
+
+      ${totalMissing > 0 ? `
+      <div style="background:#1f1f1f;border-radius:10px;padding:14px;margin-bottom:12px;border:1px solid #2a2a2a">
+        <div style="font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:#888;font-weight:700;margin-bottom:10px">3️⃣ Migrar pro Supabase</div>
+        <div style="font-size:12px;color:#888;line-height:1.5;margin-bottom:12px">
+          Vai fazer <strong style="color:#fff">upsert</strong> na tabela <code>avaliacoes</code> — cada entry vira uma linha com <code>nota=null</code> e <code>vai_assistir='Não'</code>. Não sobrescreve avaliações existentes (tem <code>onConflict</code>).
+        </div>
+        <button onclick='window._migrarNaoQuer(${JSON.stringify(allMissing).replace(/</g,"\\u003c")})' style="width:100%;background:var(--red);color:#fff;border:none;border-radius:8px;padding:12px;font-family:inherit;font-size:14px;font-weight:800;cursor:pointer">
+          🚀 Migrar ${totalMissing} registros pro Supabase
+        </button>
+        <div id="migProgresso" style="font-size:12px;color:#888;text-align:center;margin-top:10px"></div>
+      </div>
+      ` : `
+      <div style="background:#1a2a1f;border:1px solid #2e5838;border-radius:10px;padding:14px">
+        <div style="color:var(--green);font-weight:700">✅ Tudo certo!</div>
+        <div style="font-size:12px;color:#ccc;margin-top:4px">Todos os "não quer" do backup já estão no Supabase.</div>
+      </div>
+      `}
+    `;
+  } catch(e){
+    resultDiv.innerHTML = `
+      <div style="background:#2a1f1f;border:1px solid #5a3030;border-radius:10px;padding:14px">
+        <div style="color:#e05555;font-weight:700">❌ Erro ao ler backup</div>
+        <div style="font-size:12px;color:#ccc;margin-top:4px">${esc(e.message)}</div>
+      </div>
+    `;
+  }
+}
+
+window._migrarNaoQuer = async function(lista){
+  const prog = document.getElementById('migProgresso');
+  const btn = event.target;
+  btn.disabled = true;
+  btn.style.opacity = '.5';
+
+  const hoje = new Date().toISOString().split('T')[0];
+  let ok = 0, erro = 0;
+
+  // Upsert em lotes de 50
+  for(let i = 0; i < lista.length; i += 50){
+    const batch = lista.slice(i, i + 50).map(r => ({
+      filme_id: r.filme_id,
+      usuario_id: r.uid,
+      nota: null,
+      vai_assistir: 'Não',
+      data_avaliacao: hoje,
+      comentario: ''
+    }));
+
+    try {
+      const { error } = await supa.from('avaliacoes').upsert(batch, { onConflict: 'filme_id,usuario_id' });
+      if(error){ erro += batch.length; console.error('Migração erro:', error); }
+      else ok += batch.length;
+    } catch(e){
+      erro += batch.length;
+      console.error('Migração exception:', e);
+    }
+
+    prog.innerHTML = `⏳ ${ok + erro} / ${lista.length} processados (${ok} ok, ${erro} erro)`;
+  }
+
+  prog.innerHTML = `✅ Concluído: ${ok} migrados, ${erro} erros. <strong>Recarregue a página</strong> para ver os resultados.`;
+  btn.textContent = 'Migração concluída';
+  showToast(`${ok} registros migrados!`);
+};
+
 async function exportBackupJSON(){
   const msg = document.getElementById('backupMsg');
   msg.style.color='#888'; msg.textContent='⏳ Preparando backup...';
@@ -5211,6 +5409,7 @@ function closePosterLightbox(){
       <button onclick="adminTab('stats')" id="atab-stats" style="flex:1;min-width:100px;padding:7px;border-radius:8px;border:none;cursor:pointer;font-size:12px;font-weight:700;font-family:inherit;background:#2a2a2a;color:#fff">📊 Stats</button>
       <button onclick="adminTab('notificacao')" id="atab-notificacao" style="flex:1;min-width:100px;padding:7px;border-radius:8px;border:none;cursor:pointer;font-size:12px;font-weight:700;font-family:inherit;background:#2a2a2a;color:#fff">🔔 Notificação</button>
       <button onclick="adminTab('backup')" id="atab-backup" style="flex:1;min-width:100px;padding:7px;border-radius:8px;border:none;cursor:pointer;font-size:12px;font-weight:700;font-family:inherit;background:#2a2a2a;color:#fff">💾 Backup</button>
+      <button onclick="adminTab('migracao')" id="atab-migracao" style="flex:1;min-width:100px;padding:7px;border-radius:8px;border:none;cursor:pointer;font-size:12px;font-weight:700;font-family:inherit;background:#2a2a2a;color:#fff">🔧 Migração</button>
     </div>
     <div class="pm-body" id="adminBody" style="max-height:65vh;overflow-y:auto"></div>
     <div class="pm-footer"><button class="pm-cancel" onclick="closeAdmin()">Fechar</button></div>
