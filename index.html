@@ -2516,6 +2516,106 @@ function afinColor(score){
   return '#e05555';
 }
 
+// ── CONQUISTAS / BADGES ──
+// Calcula conquistas de um usuário com base em seus dados
+function calcConquistas(uid){
+  const s = RAW.users_stats[uid];
+  if(!s) return [];
+
+  const minhasAvs = FILMES
+    .filter(f => f.avaliacoes?.[uid] && f.avaliacoes[uid].nota !== null)
+    .map(f => ({
+      id: f.id,
+      nota: f.avaliacoes[uid].nota,
+      data: f.avaliacoes[uid].data,
+      duracao_min: f.duracao_min || 0,
+      categorias: f.categorias || [],
+      ano: f.ano,
+      avaliacoes: f.avaliacoes
+    }));
+
+  const quant = minhasAvs.length;
+  const media = s.media;
+  const inseridos = (s.inseridos || []).length;
+  const conquistas = [];
+
+  // ── Volume (9 níveis: cobre do iniciante até acervos de 1000+) ──
+  if(quant >= 900) conquistas.push({ id:'divindade', emoji:'🏆', nome:'Divindade', desc:`${quant} filmes avaliados`, color:'#FFD700' });
+  else if(quant >= 700) conquistas.push({ id:'imortal', emoji:'💫', nome:'Imortal', desc:`${quant} filmes avaliados`, color:'#FFD700' });
+  else if(quant >= 550) conquistas.push({ id:'lenda', emoji:'👑', nome:'Lenda', desc:`${quant} filmes avaliados`, color:'#FFD700' });
+  else if(quant >= 400) conquistas.push({ id:'veterano', emoji:'⭐', nome:'Veterano', desc:`${quant} filmes avaliados`, color:'#C0C0C0' });
+  else if(quant >= 250) conquistas.push({ id:'mestre', emoji:'🎭', nome:'Mestre', desc:`${quant} filmes avaliados`, color:'#C0C0C0' });
+  else if(quant >= 150) conquistas.push({ id:'cinefilo', emoji:'🎬', nome:'Cinéfilo', desc:`${quant} filmes avaliados`, color:'#46d369' });
+  else if(quant >= 75) conquistas.push({ id:'aficionado', emoji:'🍿', nome:'Aficionado', desc:`${quant} filmes avaliados`, color:'#f5c518' });
+  else if(quant >= 30) conquistas.push({ id:'aprendiz', emoji:'🎞️', nome:'Aprendiz', desc:`${quant} filmes avaliados`, color:'#80deea' });
+  else if(quant >= 10) conquistas.push({ id:'iniciante', emoji:'🌱', nome:'Iniciante', desc:`${quant} filmes avaliados`, color:'#80deea' });
+
+  // ── Perfil de notas ──
+  if(quant >= 50 && media != null){
+    if(media >= 8) conquistas.push({ id:'otimista', emoji:'💝', nome:'Otimista', desc:'Média ≥ 8.0 com 50+ filmes', color:'#e91e63' });
+    else if(media <= 6.5) conquistas.push({ id:'critico', emoji:'🔍', nome:'Crítico', desc:'Média ≤ 6.5 com 50+ filmes', color:'#9b59b6' });
+  }
+
+  // ── Pioneirismo: filmes em que foi o único avaliador (3 níveis) ──
+  const outrosUids = Object.keys(USERS).filter(u => u !== uid && u !== 'USER-001');
+  const soEle = minhasAvs.filter(f => {
+    return !outrosUids.some(u => f.avaliacoes?.[u]?.nota != null);
+  });
+  if(soEle.length >= 50) conquistas.push({ id:'desbravador', emoji:'🗺️', nome:'Desbravador', desc:`${soEle.length} filmes que só ele viu`, color:'#ab47bc' });
+  else if(soEle.length >= 20) conquistas.push({ id:'explorador', emoji:'💎', nome:'Explorador', desc:`${soEle.length} filmes que só ele viu`, color:'#ce93d8' });
+  else if(soEle.length >= 5) conquistas.push({ id:'pioneiro', emoji:'🌟', nome:'Pioneiro', desc:`${soEle.length} filmes que só ele viu`, color:'#80deea' });
+
+  // ── Curadoria (5 níveis) ──
+  if(inseridos >= 300) conquistas.push({ id:'patrono', emoji:'🏛️', nome:'Patrono do Acervo', desc:`${inseridos} filmes adicionados`, color:'#FFD700' });
+  else if(inseridos >= 150) conquistas.push({ id:'mestrecurador', emoji:'🎖️', nome:'Mestre Curador', desc:`${inseridos} filmes adicionados`, color:'#f39c12' });
+  else if(inseridos >= 75) conquistas.push({ id:'curador', emoji:'📚', nome:'Curador', desc:`${inseridos} filmes adicionados`, color:'#f39c12' });
+  else if(inseridos >= 30) conquistas.push({ id:'colecionador', emoji:'📦', nome:'Colecionador', desc:`${inseridos} filmes adicionados`, color:'#f5c518' });
+  else if(inseridos >= 10) conquistas.push({ id:'colaborador', emoji:'📥', nome:'Colaborador', desc:`${inseridos} filmes adicionados`, color:'#80deea' });
+
+  // ── Maratonista: avaliações num único mês (3 níveis) ──
+  const porMes = {};
+  minhasAvs.forEach(a => {
+    if(!a.data) return;
+    const p = a.data.split('/');
+    if(p.length !== 3) return;
+    const key = `${p[2]}-${p[1]}`;
+    porMes[key] = (porMes[key] || 0) + 1;
+  });
+  const maxMes = Math.max(0, ...Object.values(porMes));
+  if(maxMes >= 100) conquistas.push({ id:'imparavel', emoji:'🔥', nome:'Imparável', desc:`${maxMes} filmes num único mês`, color:'#FFD700' });
+  else if(maxMes >= 50) conquistas.push({ id:'lendamensal', emoji:'🏆', nome:'Lenda Mensal', desc:`${maxMes} filmes num único mês`, color:'#FFD700' });
+  else if(maxMes >= 20) conquistas.push({ id:'maratonista', emoji:'🏃', nome:'Maratonista', desc:`${maxMes} filmes num único mês`, color:'#e67e22' });
+
+  // ── Gênero dominante ──
+  if(s.fav_genre && s.by_genre && quant >= 30){
+    const favCount = s.by_genre[s.fav_genre] || 0;
+    const pct = Math.round((favCount / quant) * 100);
+    if(pct >= 40) conquistas.push({ id:'especialista', emoji:'🎯', nome:`Fã de ${s.fav_genre}`, desc:`${pct}% dos filmes são de ${s.fav_genre}`, color:'#46d369' });
+  }
+
+  // ── Notas 10 perfeitas (4 níveis) ──
+  const dezes = minhasAvs.filter(a => a.nota === 10).length;
+  if(dezes >= 50) conquistas.push({ id:'lendadezes', emoji:'💎', nome:'Lenda dos Dezes', desc:`${dezes} notas 10`, color:'#FFD700' });
+  else if(dezes >= 25) conquistas.push({ id:'devoto', emoji:'🌟', nome:'Devoto', desc:`${dezes} notas 10`, color:'#FFD700' });
+  else if(dezes >= 10) conquistas.push({ id:'perfeccionista', emoji:'💯', nome:'Perfeccionista', desc:`${dezes} notas 10`, color:'#f5c518' });
+  else if(dezes >= 3) conquistas.push({ id:'apaixonado', emoji:'❤️', nome:'Apaixonado', desc:`${dezes} notas 10`, color:'#e91e63' });
+
+  // ── Tempo assistido (4 níveis) ──
+  const totalMin = minhasAvs.reduce((t,a) => t + (a.duracao_min || 0), 0);
+  const dias = totalMin / 1440;
+  if(dias >= 100) conquistas.push({ id:'tempo100', emoji:'🌙', nome:'Cem Noites', desc:`${Math.floor(dias)} dias assistindo`, color:'#FFD700' });
+  else if(dias >= 60) conquistas.push({ id:'tempo60', emoji:'📅', nome:'Dois Meses', desc:`${Math.floor(dias)} dias assistindo`, color:'#ce93d8' });
+  else if(dias >= 30) conquistas.push({ id:'tempo30', emoji:'⏰', nome:'Um Mês de Cinema', desc:`${Math.floor(dias)} dias assistindo`, color:'#80deea' });
+  else if(dias >= 7) conquistas.push({ id:'tempo7', emoji:'⏱️', nome:'Uma Semana Inteira', desc:`${Math.floor(dias)} dias assistindo`, color:'#4a90e2' });
+
+  // ── Diversidade: viu filmes de N gêneros diferentes ──
+  const generosVistos = Object.keys(s.by_genre || {}).filter(g => (s.by_genre[g]||0) >= 3).length;
+  if(generosVistos >= 15) conquistas.push({ id:'eclético', emoji:'🌈', nome:'Eclético', desc:`${generosVistos} gêneros diferentes (3+ filmes)`, color:'#46d369' });
+  else if(generosVistos >= 10) conquistas.push({ id:'versatil', emoji:'🎨', nome:'Versátil', desc:`${generosVistos} gêneros diferentes (3+ filmes)`, color:'#80deea' });
+
+  return conquistas;
+}
+
 // USER DETAIL (from ranking)
 function openUserDetail(uid){
   const s = RAW.users_stats[uid];
@@ -2646,6 +2746,28 @@ function openUserDetail(uid){
       <div class="stat-card"><div class="stat-card-n" style="color:#e05555">${(s.nao_quer||[]).length}</div><div class="stat-card-l">Não quer</div></div>
       ${s.fav_genre ? `<div class="stat-card"><div class="stat-card-n" style="font-size:14px;color:#fff">${esc(s.fav_genre)}</div><div class="stat-card-l">Gênero fav.</div><div class="stat-card-sub">média ${s.fav_genre_avg?fmt(s.fav_genre_avg):'—'}</div></div>` : ''}
     </div>
+
+    <!-- CONQUISTAS / BADGES -->
+    ${(() => {
+      const badges = calcConquistas(uid);
+      if(!badges.length) return '';
+      return `
+      <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:14px;margin-bottom:20px">
+        <div style="font-size:13px;font-weight:700;margin-bottom:12px;display:flex;align-items:center;justify-content:space-between">
+          <span>🏅 Conquistas</span>
+          <span style="font-size:10px;color:var(--muted2);font-weight:500">${badges.length}</span>
+        </div>
+        <div style="display:flex;gap:8px;overflow-x:auto;padding-bottom:4px;scrollbar-width:thin;-webkit-overflow-scrolling:touch">
+          ${badges.map(b => `
+            <div style="flex-shrink:0;min-width:128px;max-width:150px;background:var(--surface2);border:1px solid ${b.color}44;border-left:3px solid ${b.color};border-radius:8px;padding:10px;text-align:center">
+              <div style="font-size:24px;line-height:1;margin-bottom:6px">${b.emoji}</div>
+              <div style="font-size:11px;font-weight:800;color:${b.color};line-height:1.2;margin-bottom:3px">${esc(b.nome)}</div>
+              <div style="font-size:9px;color:var(--muted);line-height:1.3">${esc(b.desc)}</div>
+            </div>
+          `).join('')}
+        </div>
+      </div>`;
+    })()}
 
     <!-- TOP 5 / BOT 5 lado a lado -->
     ${(top5.length || bot5.length) ? `
