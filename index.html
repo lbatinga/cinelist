@@ -2616,10 +2616,28 @@ function calcConquistas(uid){
   return conquistas;
 }
 
-// USER DETAIL (from ranking)
+// USER DETAIL (from ranking) - wrapper que injeta no rankTabContent
 function openUserDetail(uid){
+  const html = userDetailHTML(uid, { context: 'ranking' });
+  if(!html) return;
+  document.getElementById('rankTabContent').innerHTML = html;
+  document.getElementById('appScroll').scrollTop = 0;
+}
+
+// Versão para embutir em outras telas (ex: Descobertas > Meu Perfil)
+function selectPerfilMembro(uid){
+  window.perfilSelecionadoUid = uid;
+  const c = document.getElementById('perfilEmbutidoContainer');
+  if(c) c.innerHTML = userDetailHTML(uid, { context: 'descobertas' });
+}
+
+// Retorna string HTML do perfil detalhado de um usuário
+// opts.context: 'ranking' (com botão Voltar) | 'descobertas' (com seletor de membro)
+function userDetailHTML(uid, opts){
+  opts = opts || {};
+  const ctx = opts.context || 'ranking';
   const s = RAW.users_stats[uid];
-  if(!s) return;
+  if(!s) return '';
 
   const dynS = STATS[uid] || {};
   const p = getProfile(uid);
@@ -2677,9 +2695,23 @@ function openUserDetail(uid){
   const statusColor = ativo ? 'var(--green)' : 'var(--muted)';
   const statusBg = ativo ? 'rgba(70,211,105,.12)' : 'rgba(100,100,100,.15)';
 
-  document.getElementById('rankTabContent').innerHTML = `
-    <button onclick="renderRankTab()" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:13px;margin-bottom:16px;font-family:inherit;display:flex;align-items:center;gap:4px;padding:0">← Voltar</button>
+  // Nav header: botão Voltar (ranking) ou seletor de membro (descobertas)
+  const membros = Object.entries(USERS)
+    .filter(([u]) => u !== 'USER-001' && RAW.users_stats[u])
+    .sort((a,b) => a[1].nome.localeCompare(b[1].nome));
+  const navHTML = ctx === 'ranking'
+    ? `<button onclick="renderRankTab()" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:13px;margin-bottom:16px;font-family:inherit;display:flex;align-items:center;gap:4px;padding:0">← Voltar</button>`
+    : ctx === 'descobertas'
+      ? `<div style="display:flex;align-items:center;gap:10px;margin-bottom:16px;flex-wrap:wrap">
+          <span style="font-size:12px;color:var(--muted);font-weight:600">Ver perfil de:</span>
+          <select onchange="selectPerfilMembro(this.value)" style="background:var(--surface2);color:#fff;border:1px solid var(--border);border-radius:8px;padding:7px 10px;font-family:inherit;font-size:13px;font-weight:700;cursor:pointer;outline:none">
+            ${membros.map(([u,info]) => `<option value="${u}" ${u===uid?'selected':''}>${esc(info.nome)}${u===CU?' (você)':''}</option>`).join('')}
+          </select>
+        </div>`
+      : '';
 
+  return `
+    ${navHTML}
     <!-- HEADER -->
     <div style="display:flex;align-items:center;gap:14px;margin-bottom:20px;padding:16px;background:var(--surface);border-radius:12px;border:1px solid var(--border)">
       ${avatarHTML}
@@ -3545,73 +3577,9 @@ function rankStatsHTML(){
     <!-- PESSOAL (hidden by default, shown via tab) -->
     <div id="stat-pessoal-content" style="display:none">
       ${!CU ? `<div class="empty-block"><div class="empty-icon">👤</div><div>Selecione seu perfil para ver suas estatísticas pessoais.</div></div>` : `
-        <div style="display:flex;align-items:center;gap:14px;margin-bottom:20px;padding:16px;background:var(--surface);border-radius:10px;border:1px solid var(--border)">
-          <div style="width:52px;height:52px;border-radius:10px;background:${aC(CU)};color:#000;font-weight:800;font-size:20px;display:flex;align-items:center;justify-content:center">${ini(USERS[CU]?.nome||'?')}</div>
-          <div>
-            <div style="font-size:20px;font-weight:900">${esc(USERS[CU]?.nome||'?')}</div>
-            <div style="font-size:12px;color:var(--muted);margin-top:2px">${ps?.quant||0} filmes · média ${ps?.media?fmt(ps.media):'—'} · última avaliação ${ps?.ultima_av||'—'}</div>
-          </div>
-          <div style="margin-left:auto">
-            <span style="font-size:11px;font-weight:700;padding:4px 12px;border-radius:20px;background:${isActive(ps)?'rgba(70,211,105,.15)':'rgba(100,100,100,.2)'};color:${isActive(ps)?'var(--green)':'var(--muted)'}">
-              ${isActive(ps)?'● Ativo':'● Inativo há '+inactiveSince(ps)}
-            </span>
-          </div>
+        <div id="perfilEmbutidoContainer">
+          ${userDetailHTML(window.perfilSelecionadoUid || CU, { context: 'descobertas' })}
         </div>
-
-        <div class="stats-grid" style="grid-template-columns:repeat(4,1fr);margin-bottom:16px">
-          <div class="stat-card"><div class="stat-card-n" style="color:var(--green)">${ps?.quant||0}</div><div class="stat-card-l">Assistidos</div></div>
-          <div class="stat-card"><div class="stat-card-n" style="color:var(--yellow)">${ps?.media?fmt(ps.media):'—'}</div><div class="stat-card-l">Média geral</div></div>
-          <div class="stat-card"><div class="stat-card-n" style="color:#3498db">${ps?.inseridos?.length||0}</div><div class="stat-card-l">Inseridos</div></div>
-          <div class="stat-card"><div class="stat-card-n" style="color:var(--muted)">${ps?.pendentes?.length||0}</div><div class="stat-card-l">Pendentes</div></div>
-        </div>
-
-        ${personal ? `
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px" class="rank-two-col">
-          <div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:16px">
-            <div style="font-size:13px;font-weight:700;margin-bottom:12px">⭐ Seus top 5 filmes</div>
-            ${personal.top5.map((f,i)=>`<div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;cursor:pointer" onclick="openFilme('${f.id}')">
-              <div style="font-size:14px;font-weight:900;width:20px;text-align:center;color:var(--muted2)">${i+1}</div>
-              ${f.poster?`<img src="${esc(f.poster)}" style="width:28px;height:42px;object-fit:cover;border-radius:3px;flex-shrink:0" onerror="this.style.display='none'">`:''}
-              <div style="flex:1;min-width:0"><div style="font-size:12px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(f.nome)}</div></div>
-              <div style="font-size:15px;font-weight:800;color:${nC(f.nota)}">${fmt(f.nota)}</div>
-            </div>`).join('')}
-          </div>
-          <div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:16px">
-            <div style="font-size:13px;font-weight:700;margin-bottom:12px">😬 Seus 5 piores</div>
-            ${personal.bot5.map((f,i)=>`<div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;cursor:pointer" onclick="openFilme('${f.id}')">
-              <div style="font-size:14px;font-weight:900;width:20px;text-align:center;color:var(--muted2)">${i+1}</div>
-              ${f.poster?`<img src="${esc(f.poster)}" style="width:28px;height:42px;object-fit:cover;border-radius:3px;flex-shrink:0" onerror="this.style.display='none'">`:''}
-              <div style="flex:1;min-width:0"><div style="font-size:12px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(f.nome)}</div></div>
-              <div style="font-size:15px;font-weight:800;color:${nC(f.nota)}">${fmt(f.nota)}</div>
-            </div>`).join('')}
-          </div>
-        </div>
-
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px" class="rank-two-col">
-          <div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:16px">
-            <div style="font-size:13px;font-weight:700;margin-bottom:12px">🎭 Seus gêneros favoritos</div>
-            ${personal.genre_top5.map(g=>`<div class="genre-bar-row">
-              <div class="genre-bar-label">${g.genre}</div>
-              <div class="genre-bar-track"><div class="genre-bar-fill" style="width:${Math.round(g.count/personal.genre_top5[0].count*100)}%"></div></div>
-              <div class="genre-bar-n">${g.count}</div>
-            </div>`).join('')}
-          </div>
-          <div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:16px">
-            <div style="font-size:13px;font-weight:700;margin-bottom:16px">📌 Destaques pessoais</div>
-            ${[
-              ['🎭','Gênero favorito', personal.fav_genre + (personal.fav_genre_avg?' · média '+fmt(personal.fav_genre_avg):'')],
-              ['📅','Ano mais ativo', personal.most_active_year+' ('+personal.most_active_year_count+' filmes)'],
-              ['⭐','Maior nota dada', fmt(Math.max(...personal.top5.map(f=>f.nota)))],
-              ['💀','Menor nota dada', fmt(Math.min(...personal.bot5.map(f=>f.nota)))],
-            ].map(([icon,label,val])=>`
-              <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">
-                <span style="font-size:18px">${icon}</span>
-                <div><div style="font-size:10px;color:var(--muted2);text-transform:uppercase;letter-spacing:.3px">${label}</div>
-                <div style="font-size:13px;font-weight:700;color:var(--text)">${val}</div></div>
-              </div>`).join('')}
-          </div>
-        </div>
-        ` : ''}
       `}
     </div>
   `;
