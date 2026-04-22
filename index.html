@@ -4648,30 +4648,30 @@ function renderAdminMembros(){
 
 async function addNewMember(){
   const nome = document.getElementById('newMemberNome').value.trim();
-  const email = document.getElementById('newMemberEmail').value.trim();
+  const email = document.getElementById('newMemberEmail').value.trim().toLowerCase();
   const senha = document.getElementById('newMemberSenha').value;
   const legacy = document.getElementById('newMemberLegacy').value.trim();
   const msg = document.getElementById('newMemberMsg');
 
   if(!nome||!email||!senha||!legacy){ msg.style.color='#e05555'; msg.textContent='⚠️ Preencha todos os campos.'; return; }
+  if(senha.length < 6){ msg.style.color='#e05555'; msg.textContent='⚠️ A senha precisa ter pelo menos 6 caracteres.'; return; }
+  if(!/^USER-\d{3}$/.test(legacy)){ msg.style.color='#e05555'; msg.textContent='⚠️ Legacy ID deve estar no formato USER-XXX (ex: USER-011).'; return; }
+  if(USERS[legacy]){ msg.style.color='#e05555'; msg.textContent='⚠️ Esse Legacy ID já existe.'; return; }
   if(Object.values(USERS).some(u=>u.nome.toLowerCase()===nome.toLowerCase())){ msg.style.color='#e05555'; msg.textContent='⚠️ Já existe um membro com esse nome.'; return; }
 
-  msg.style.color='#888'; msg.textContent='⏳ Criando...';
+  msg.style.color='#888'; msg.textContent='⏳ Criando via Apps Script...';
 
   try {
-    // Cria usuário no Auth (via Admin API — precisaria de service role, então usamos signup)
-    const { data: authData, error: authErr } = await supa.auth.admin.createUser({
-      email, password: senha, email_confirm: true
+    // Chama o Apps Script (que usa a service_role key guardada em Script Properties).
+    // Importante: SEM mode:'no-cors' aqui — precisamos ler a resposta JSON.
+    const params = new URLSearchParams({
+      acao: 'criarUsuario',
+      nome, email, senha, legacy_id: legacy
     });
-    if(authErr) throw authErr;
-
-    const auth_id = authData.user.id;
-
-    // Insere na tabela usuarios
-    const { error: dbErr } = await supa.from('usuarios').insert({
-      nome, email, legacy_id: legacy, auth_id
-    });
-    if(dbErr) throw dbErr;
+    const resp = await fetch(APPS_SCRIPT_URL + '?' + params.toString(), { method: 'GET' });
+    if(!resp.ok) throw new Error('HTTP ' + resp.status);
+    const data = await resp.json();
+    if(!data.ok) throw new Error(data.error || 'Falha desconhecida');
 
     msg.style.color='#46d369';
     msg.textContent=`✅ Membro "${nome}" criado com sucesso!`;
@@ -4682,6 +4682,15 @@ async function addNewMember(){
     RAW.usuarios[legacy] = { nome };
     RAW.users_stats[legacy] = STATS[legacy];
     buildUD();
+
+    // Limpa formulário
+    document.getElementById('newMemberNome').value = '';
+    document.getElementById('newMemberEmail').value = '';
+    document.getElementById('newMemberSenha').value = '';
+    document.getElementById('newMemberLegacy').value = '';
+
+    // Re-renderiza a lista pra mostrar o novo membro
+    setTimeout(() => { try { renderAdminMembros(); } catch(e){} }, 1200);
 
   } catch(e) {
     msg.style.color='#e05555';
