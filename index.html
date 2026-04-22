@@ -1570,6 +1570,7 @@ function filmDetailHTML(id){
                 :`<div style="font-size:10px;color:var(--muted2);margin-top:1px;font-style:italic">sem data</div>`)}
             </div>
             <div class="dp-r-nota" style="color:${nC(av.nota)}">★ ${fmt(av.nota)}</div>
+            ${isAdminUser()?`<button onclick="event.stopPropagation();deleteAvaliacaoAdmin('${f.id}','${uid}',this)" title="Excluir esta nota (admin)" style="background:transparent;border:1px solid #3a1414;color:#e05555;border-radius:6px;padding:4px 7px;margin-left:6px;cursor:pointer;font-size:12px;line-height:1">🗑️</button>`:''}
           </div>`).join('')}
         </div>`:''}
       <div class="dp-footer">
@@ -1580,6 +1581,10 @@ function filmDetailHTML(id){
         const naoQ = Object.entries(STATS).filter(([uid,s])=>(s.nao_quer||[]).includes(f.id)).map(([uid])=> uid===CU ? (USERS[uid]?.nome||uid)+' (você)' : USERS[uid]?.nome||uid);
         return naoQ.length ? `<div class="dp-footer" style="margin-top:4px;color:#e05555"><span>❌ Não quer assistir: <strong style="color:#e05555">${naoQ.join(', ')}</strong></span></div>` : '';
       })()}
+      ${isAdminUser()?`
+      <div style="margin-top:16px;padding-top:14px;border-top:1px solid #2a2a2a;display:flex;justify-content:flex-end;gap:8px">
+        <button onclick="deleteFilmeFromDetail('${f.id}',this)" title="Excluir filme (admin)" style="background:#1a0a0a;color:#e05555;border:1px solid #3a1414;border-radius:8px;padding:8px 14px;cursor:pointer;font-size:12px;font-weight:700;font-family:inherit">🗑️ Excluir filme (admin)</button>
+      </div>`:''}
     </div>
   `;
 }
@@ -4500,6 +4505,111 @@ async function deleteFilmeAdmin(id, btn){
   } catch(e) {
     showToast('❌ Erro: ' + e.message);
     btn.textContent = 'Excluir'; btn.disabled = false;
+  }
+}
+
+// ── ADMIN: Delete helpers usados no painel de detalhes do filme ──
+function isAdminUser(){
+  return currentSession?.user?.email === ADMIN_EMAIL;
+}
+
+async function deleteFilmeFromDetail(id, btn){
+  const f = FM[id];
+  if(!f) return;
+  const nAv = Object.values(f.avaliacoes||{}).filter(a=>a.nota!==null).length;
+  const msg = nAv > 0
+    ? `Excluir "${f.nome}"?\n\n⚠️ Este filme tem ${nAv} avaliação(ões) que também serão perdidas.\n\nAção irreversível.`
+    : `Excluir "${f.nome}"?\n\nAção irreversível.`;
+  if(!confirm(msg)) return;
+  if(btn){ btn.textContent = 'Excluindo...'; btn.disabled = true; }
+  try {
+    const {error} = await supa.from('filmes').delete().eq('id', id);
+    if(error) throw error;
+
+    // Remove do estado local
+    const idx = FILMES.findIndex(x => x.id === id);
+    if(idx > -1) FILMES.splice(idx, 1);
+    delete FILMES_MAP[id];
+    if(RAW?.filmes) RAW.filmes = RAW.filmes.filter(x => x.id !== id);
+
+    // Remove também dos pendentes/inseridos/nao_quer de cada membro (só em memória)
+    Object.values(STATS).forEach(s => {
+      if(s.pendentes) s.pendentes = s.pendentes.filter(fid => fid !== id);
+      if(s.inseridos) s.inseridos = s.inseridos.filter(fid => fid !== id);
+      if(s.nao_quer)  s.nao_quer  = s.nao_quer.filter(fid => fid !== id);
+    });
+
+    // Fecha modal mobile se estiver aberto com esse filme
+    if(window._currentMobileFilmeId === id){
+      try { closeMobileFilmeModal(); } catch(e){}
+    }
+
+    // Re-renderiza a view atual
+    try { render(); } catch(e){ try { renderHome(); } catch(e2){} }
+    showToast('🗑️ Filme excluído!');
+  } catch(e) {
+    showToast('❌ Erro: ' + e.message);
+    if(btn){ btn.textContent = '🗑️ Excluir filme'; btn.disabled = false; }
+  }
+}
+
+async function deleteAvaliacaoAdmin(filmeId, uid, btn){
+  const f = FM[filmeId];
+  if(!f) return;
+  const userName = USERS[uid]?.nome || uid;
+  const av = f.avaliacoes?.[uid];
+  if(!av) return;
+  const notaStr = av.nota != null ? fmt(av.nota) : '—';
+  if(!confirm(`Excluir a nota ${notaStr} de ${userName} para "${f.nome}"?\n\nAção irreversível.`)) return;
+  if(btn){ btn.textContent = '…'; btn.disabled = true; }
+  try {
+    const {error} = await supa.from('avaliacoes')
+      .delete()
+      .eq('filme_id', filmeId)
+      .eq('usuario_id', uid);
+    if(error) throw error;
+
+    // Remove do estado local
+    if(f.avaliacoes && f.avaliacoes[uid]) delete f.avaliacoes[uid];
+
+    // Recalcula média e contagem
+    const notas = Object.values(f.avaliacoes||{}).filter(a => a.nota !== null).map(a => a.nota);
+    f.media = notas.length ? Math.round(100 * notas.reduce((s,n)=>s+n,0) / notas.length) / 100 : null;
+    f.num_avaliacoes = notas.length;
+
+    // Atualiza contador de "quant" do membro e remove de pendentes se estava avaliado
+    if(STATS[uid]){
+      if(typeof STATS[uid].quant === 'number' && STATS[uid].quant > 0) STATS[uid].quant--;
+    }
+
+    // Re-renderiza o painel de detalhes na view ativa + mobile modal (se aberto)
+    try {
+      const active = document.querySelector('.view.active');
+      const activeId = active?.id;
+      if(activeId === 'viewFilmes'){
+        const p = document.getElementById('filmDetailPanel');
+        if(p) p.innerHTML = filmDetailHTML(filmeId);
+      } else if(activeId === 'viewPendentes'){
+        const p = document.getElementById('pendDetailPanel');
+        if(p) p.innerHTML = filmDetailHTML(filmeId);
+      } else if(activeId === 'viewAvaliacoes'){
+        const p = document.getElementById('avDetailPanel');
+        if(p) p.innerHTML = filmDetailHTML(filmeId);
+      } else if(activeId === 'viewRecentes'){
+        const p = document.getElementById('recentDetailPanel');
+        if(p) p.innerHTML = filmDetailHTML(filmeId);
+      }
+      // Se o modal mobile estiver aberto com esse filme, atualiza
+      if(window._currentMobileFilmeId === filmeId){
+        const mc = document.getElementById('mfmContent');
+        if(mc) mc.innerHTML = filmDetailHTML(filmeId);
+      }
+    } catch(e){ console.warn('Re-render parcial falhou:', e); }
+
+    showToast(`🗑️ Nota de ${userName} excluída!`);
+  } catch(e) {
+    showToast('❌ Erro: ' + e.message);
+    if(btn){ btn.textContent = '🗑️'; btn.disabled = false; }
   }
 }
 
