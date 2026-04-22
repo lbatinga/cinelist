@@ -1565,9 +1565,16 @@ function filmDetailHTML(id){
             <div class="dp-r-av" style="background:${aC(uid)}">${ini(USERS[uid]?.nome||'?')}</div>
             <div class="dp-r-name">
               ${esc(USERS[uid]?.nome||uid)}
-              ${av.data?`<div style="font-size:10px;color:var(--muted2);margin-top:1px">${av.data}</div>`
-                :(uid===CU?`<div style="font-size:10px;color:#f5c518;margin-top:1px;cursor:pointer" onclick="event.stopPropagation();openRate('${f.id}')">📅 Sem data — toque para adicionar</div>`
-                :`<div style="font-size:10px;color:var(--muted2);margin-top:1px;font-style:italic">sem data</div>`)}
+              ${av.data
+                ?`<div style="font-size:10px;color:var(--muted2);margin-top:1px;display:flex;align-items:center;gap:6px">
+                    <span>${av.data}</span>
+                    ${(isAdminUser() && uid !== CU)?`<span onclick="event.stopPropagation();openEditDataAdmin('${f.id}','${uid}')" style="cursor:pointer;color:#f5c518;font-size:10px" title="Editar data (admin)">✏️</span>`:''}
+                  </div>`
+                :(uid===CU
+                  ?`<div style="font-size:10px;color:#f5c518;margin-top:1px;cursor:pointer" onclick="event.stopPropagation();openRate('${f.id}')">📅 Sem data — toque para adicionar</div>`
+                  :(isAdminUser()
+                    ?`<div style="font-size:10px;color:#f5c518;margin-top:1px;cursor:pointer" onclick="event.stopPropagation();openEditDataAdmin('${f.id}','${uid}')">📅 Sem data — adicionar (admin)</div>`
+                    :`<div style="font-size:10px;color:var(--muted2);margin-top:1px;font-style:italic">sem data</div>`))}
             </div>
             <div class="dp-r-nota" style="color:${nC(av.nota)}">★ ${fmt(av.nota)}</div>
             ${isAdminUser()?`<button onclick="event.stopPropagation();deleteAvaliacaoAdmin('${f.id}','${uid}',this)" title="Excluir esta nota (admin)" style="background:transparent;border:1px solid #3a1414;color:#e05555;border-radius:6px;padding:4px 7px;margin-left:6px;cursor:pointer;font-size:12px;line-height:1">🗑️</button>`:''}
@@ -4613,6 +4620,93 @@ async function deleteAvaliacaoAdmin(filmeId, uid, btn){
   }
 }
 
+// ── ADMIN: Editar data de avaliação de qualquer membro ──
+var _editDataCtx = null; // {filmeId, uid}
+
+function openEditDataAdmin(filmeId, uid){
+  if(!isAdminUser()){ showToast('⛔ Acesso negado.'); return; }
+  const f = FM[filmeId];
+  if(!f || !f.avaliacoes?.[uid]){ showToast('❌ Avaliação não encontrada.'); return; }
+
+  _editDataCtx = { filmeId, uid };
+  document.getElementById('editDataFilmName').textContent = f.nome;
+  document.getElementById('editDataUserName').textContent = USERS[uid]?.nome || uid;
+
+  // Preenche com a data atual (se houver), no formato YYYY-MM-DD que o input type=date espera
+  const av = f.avaliacoes[uid];
+  let dateVal = '';
+  if(av.data){
+    const p = av.data.split('/');
+    if(p.length === 3) dateVal = `${p[2]}-${p[1].padStart(2,'0')}-${p[0].padStart(2,'0')}`;
+  }
+  if(!dateVal){ dateVal = new Date().toISOString().split('T')[0]; }
+  document.getElementById('editDataInput').value = dateVal;
+  document.getElementById('editDataMsg').textContent = '';
+
+  document.getElementById('editDataModal').classList.add('open');
+}
+
+function closeEditDataModal(){
+  document.getElementById('editDataModal').classList.remove('open');
+  _editDataCtx = null;
+}
+
+async function saveDataAdmin(){
+  if(!_editDataCtx){ return; }
+  const { filmeId, uid } = _editDataCtx;
+  const data = document.getElementById('editDataInput').value;
+  const msg = document.getElementById('editDataMsg');
+  const btn = document.getElementById('editDataSaveBtn');
+
+  if(!data){ msg.style.color = '#e05555'; msg.textContent = '⚠️ Escolha uma data.'; return; }
+
+  msg.style.color = '#888'; msg.textContent = '⏳ Salvando...';
+  if(btn){ btn.textContent = 'Salvando...'; btn.disabled = true; }
+
+  try {
+    const { error } = await supa.from('avaliacoes')
+      .update({ data_avaliacao: data })
+      .eq('filme_id', filmeId)
+      .eq('usuario_id', uid);
+    if(error) throw error;
+
+    // Atualiza memória local: formato dd/mm/yyyy
+    const f = FM[filmeId];
+    if(f?.avaliacoes?.[uid]){
+      f.avaliacoes[uid].data = data.split('-').reverse().join('/');
+    }
+
+    // Re-renderiza o painel de detalhes onde estiver aberto
+    try {
+      const active = document.querySelector('.view.active');
+      const activeId = active?.id;
+      if(activeId === 'viewFilmes'){
+        const p = document.getElementById('filmDetailPanel');
+        if(p) p.innerHTML = filmDetailHTML(filmeId);
+      } else if(activeId === 'viewPendentes'){
+        const p = document.getElementById('pendDetailPanel');
+        if(p) p.innerHTML = filmDetailHTML(filmeId);
+      } else if(activeId === 'viewAvaliacoes'){
+        const p = document.getElementById('avDetailPanel');
+        if(p) p.innerHTML = filmDetailHTML(filmeId);
+      } else if(activeId === 'viewRecentes'){
+        const p = document.getElementById('recentDetailPanel');
+        if(p) p.innerHTML = filmDetailHTML(filmeId);
+      }
+      if(window._currentMobileFilmeId === filmeId){
+        const mc = document.getElementById('mfmContent');
+        if(mc) mc.innerHTML = filmDetailHTML(filmeId);
+      }
+    } catch(e){ console.warn('Re-render parcial falhou:', e); }
+
+    closeEditDataModal();
+    showToast(`📅 Data de ${USERS[uid]?.nome||uid} atualizada!`);
+  } catch(e){
+    msg.style.color = '#e05555'; msg.textContent = '❌ Erro: ' + e.message;
+    if(btn){ btn.textContent = 'Salvar'; btn.disabled = false; }
+  }
+}
+
 // ── ABA: MEMBROS ──
 function renderAdminMembros(){
   const body = document.getElementById('adminBody');
@@ -5622,6 +5716,31 @@ function closePosterLightbox(){
     </div>
     <div class="pm-body" id="adminBody" style="max-height:65vh;overflow-y:auto"></div>
     <div class="pm-footer"><button class="pm-cancel" onclick="closeAdmin()">Fechar</button></div>
+  </div>
+</div>
+
+<!-- EDIT DATA (ADMIN) MODAL -->
+<div class="profile-overlay" id="editDataModal" onclick="if(event.target===this)closeEditDataModal()">
+  <div class="profile-modal" style="max-width:420px;width:92%">
+    <div class="pm-header">
+      <div class="pm-title">📅 Editar data (admin)</div>
+      <button class="pm-close" onclick="closeEditDataModal()">×</button>
+    </div>
+    <div class="pm-body" style="padding:16px 20px">
+      <div style="font-size:13px;color:var(--muted);margin-bottom:4px">Filme</div>
+      <div id="editDataFilmName" style="font-size:15px;font-weight:700;margin-bottom:12px"></div>
+      <div style="font-size:13px;color:var(--muted);margin-bottom:4px">Membro</div>
+      <div id="editDataUserName" style="font-size:14px;font-weight:600;margin-bottom:16px"></div>
+      <div class="pm-field">
+        <label class="pm-label">Data de avaliação</label>
+        <input class="pm-input" id="editDataInput" type="date">
+      </div>
+      <div id="editDataMsg" style="margin-top:10px;font-size:12px;text-align:center;min-height:16px"></div>
+    </div>
+    <div class="pm-footer">
+      <button class="pm-cancel" onclick="closeEditDataModal()">Cancelar</button>
+      <button class="pm-save" id="editDataSaveBtn" onclick="saveDataAdmin()">Salvar</button>
+    </div>
   </div>
 </div>
 
