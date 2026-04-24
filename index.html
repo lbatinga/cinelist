@@ -2529,10 +2529,11 @@ function afinColor(score){
 }
 
 // ── CONQUISTAS / BADGES ──
-// Calcula conquistas de um usuário com base em seus dados
-function calcConquistas(uid){
+// Retorna estrutura completa com trilhas de progressão + conquistas especiais
+// (cada trilha tem múltiplos níveis; usuário sempre pode ver o próximo nível)
+function getAchievementData(uid){
   const s = RAW.users_stats[uid];
-  if(!s) return [];
+  if(!s) return null;
 
   const minhasAvs = FILMES
     .filter(f => f.avaliacoes?.[uid] && f.avaliacoes[uid].nota !== null)
@@ -2549,42 +2550,12 @@ function calcConquistas(uid){
   const quant = minhasAvs.length;
   const media = s.media;
   const inseridos = (s.inseridos || []).length;
-  const conquistas = [];
 
-  // ── Volume (9 níveis: cobre do iniciante até acervos de 1000+) ──
-  if(quant >= 900) conquistas.push({ id:'divindade', emoji:'🏆', nome:'Divindade', desc:`${quant} filmes avaliados`, color:'#FFD700' });
-  else if(quant >= 700) conquistas.push({ id:'imortal', emoji:'💫', nome:'Imortal', desc:`${quant} filmes avaliados`, color:'#FFD700' });
-  else if(quant >= 550) conquistas.push({ id:'lenda', emoji:'👑', nome:'Lenda', desc:`${quant} filmes avaliados`, color:'#FFD700' });
-  else if(quant >= 400) conquistas.push({ id:'veterano', emoji:'⭐', nome:'Veterano', desc:`${quant} filmes avaliados`, color:'#C0C0C0' });
-  else if(quant >= 250) conquistas.push({ id:'mestre', emoji:'🎭', nome:'Mestre', desc:`${quant} filmes avaliados`, color:'#C0C0C0' });
-  else if(quant >= 150) conquistas.push({ id:'cinefilo', emoji:'🎬', nome:'Cinéfilo', desc:`${quant} filmes avaliados`, color:'#46d369' });
-  else if(quant >= 75) conquistas.push({ id:'aficionado', emoji:'🍿', nome:'Aficionado', desc:`${quant} filmes avaliados`, color:'#f5c518' });
-  else if(quant >= 30) conquistas.push({ id:'aprendiz', emoji:'🎞️', nome:'Aprendiz', desc:`${quant} filmes avaliados`, color:'#80deea' });
-  else if(quant >= 10) conquistas.push({ id:'iniciante', emoji:'🌱', nome:'Iniciante', desc:`${quant} filmes avaliados`, color:'#80deea' });
-
-  // ── Perfil de notas ──
-  if(quant >= 50 && media != null){
-    if(media >= 8) conquistas.push({ id:'otimista', emoji:'💝', nome:'Otimista', desc:'Média ≥ 8.0 com 50+ filmes', color:'#e91e63' });
-    else if(media <= 6.5) conquistas.push({ id:'critico', emoji:'🔍', nome:'Crítico', desc:'Média ≤ 6.5 com 50+ filmes', color:'#9b59b6' });
-  }
-
-  // ── Pioneirismo: filmes em que foi o único avaliador (3 níveis) ──
+  // Pioneirismo
   const outrosUids = Object.keys(USERS).filter(u => u !== uid && u !== 'USER-001');
-  const soEle = minhasAvs.filter(f => {
-    return !outrosUids.some(u => f.avaliacoes?.[u]?.nota != null);
-  });
-  if(soEle.length >= 50) conquistas.push({ id:'desbravador', emoji:'🗺️', nome:'Desbravador', desc:`${soEle.length} filmes que só ele viu`, color:'#ab47bc' });
-  else if(soEle.length >= 20) conquistas.push({ id:'explorador', emoji:'💎', nome:'Explorador', desc:`${soEle.length} filmes que só ele viu`, color:'#ce93d8' });
-  else if(soEle.length >= 5) conquistas.push({ id:'pioneiro', emoji:'🌟', nome:'Pioneiro', desc:`${soEle.length} filmes que só ele viu`, color:'#80deea' });
+  const soEle = minhasAvs.filter(f => !outrosUids.some(u => f.avaliacoes?.[u]?.nota != null)).length;
 
-  // ── Curadoria (5 níveis) ──
-  if(inseridos >= 300) conquistas.push({ id:'patrono', emoji:'🏛️', nome:'Patrono do Acervo', desc:`${inseridos} filmes adicionados`, color:'#FFD700' });
-  else if(inseridos >= 150) conquistas.push({ id:'mestrecurador', emoji:'🎖️', nome:'Mestre Curador', desc:`${inseridos} filmes adicionados`, color:'#f39c12' });
-  else if(inseridos >= 75) conquistas.push({ id:'curador', emoji:'📚', nome:'Curador', desc:`${inseridos} filmes adicionados`, color:'#f39c12' });
-  else if(inseridos >= 30) conquistas.push({ id:'colecionador', emoji:'📦', nome:'Colecionador', desc:`${inseridos} filmes adicionados`, color:'#f5c518' });
-  else if(inseridos >= 10) conquistas.push({ id:'colaborador', emoji:'📥', nome:'Colaborador', desc:`${inseridos} filmes adicionados`, color:'#80deea' });
-
-  // ── Maratonista: avaliações num único mês (3 níveis) ──
+  // Por mês
   const porMes = {};
   minhasAvs.forEach(a => {
     if(!a.data) return;
@@ -2594,38 +2565,308 @@ function calcConquistas(uid){
     porMes[key] = (porMes[key] || 0) + 1;
   });
   const maxMes = Math.max(0, ...Object.values(porMes));
-  if(maxMes >= 100) conquistas.push({ id:'imparavel', emoji:'🔥', nome:'Imparável', desc:`${maxMes} filmes num único mês`, color:'#FFD700' });
-  else if(maxMes >= 50) conquistas.push({ id:'lendamensal', emoji:'🏆', nome:'Lenda Mensal', desc:`${maxMes} filmes num único mês`, color:'#FFD700' });
-  else if(maxMes >= 20) conquistas.push({ id:'maratonista', emoji:'🏃', nome:'Maratonista', desc:`${maxMes} filmes num único mês`, color:'#e67e22' });
+  const mesesAtivos = Object.keys(porMes).length;
 
-  // ── Gênero dominante ──
+  // Notas
+  const dezes = minhasAvs.filter(a => a.nota === 10).length;
+  const zeros = minhasAvs.filter(a => a.nota === 0).length;
+  const aprovados = minhasAvs.filter(a => a.nota >= 7).length;
+  const pctAprov = quant > 0 ? aprovados / quant : 0;
+
+  // Tempo
+  const totalMin = minhasAvs.reduce((t,a) => t + (a.duracao_min || 0), 0);
+  const dias = Math.floor(totalMin / 1440);
+
+  // Diversidade — MUDOU: critério subiu de 3+ para 5+ filmes por gênero
+  const generosVistos = Object.keys(s.by_genre || {}).filter(g => (s.by_genre[g]||0) >= 5).length;
+
+  // Décadas (10+ filmes na mesma década)
+  const porDecada = {};
+  minhasAvs.forEach(a => {
+    if(!a.ano) return;
+    const dec = Math.floor(a.ano/10)*10;
+    porDecada[dec] = (porDecada[dec]||0) + 1;
+  });
+  const decadasCobertas = Object.values(porDecada).filter(n => n >= 10).length;
+
+  // Filmes longos (2h30+)
+  const longos = minhasAvs.filter(a => a.duracao_min >= 150).length;
+
+  // ── TRILHAS de progressão (ordenadas do iniciante ao máximo) ──
+  const trilhas = [
+    {
+      id: 'volume', nome: 'Volume', icon: '🎬', unit: 'filmes avaliados',
+      current: quant,
+      levels: [
+        { id:'iniciante',   emoji:'🌱', nome:'Iniciante',   threshold:10,  color:'#80deea' },
+        { id:'aprendiz',    emoji:'🎞️', nome:'Aprendiz',    threshold:30,  color:'#80deea' },
+        { id:'aficionado',  emoji:'🍿', nome:'Aficionado',  threshold:75,  color:'#f5c518' },
+        { id:'cinefilo',    emoji:'🎬', nome:'Cinéfilo',    threshold:150, color:'#46d369' },
+        { id:'mestre',      emoji:'🎭', nome:'Mestre',      threshold:250, color:'#C0C0C0' },
+        { id:'veterano',    emoji:'⭐', nome:'Veterano',    threshold:400, color:'#C0C0C0' },
+        { id:'lenda',       emoji:'👑', nome:'Lenda',       threshold:550, color:'#FFD700' },
+        { id:'imortal',     emoji:'💫', nome:'Imortal',     threshold:700, color:'#FFD700' },
+        { id:'divindade',   emoji:'🏆', nome:'Divindade',   threshold:900, color:'#FFD700' }
+      ]
+    },
+    {
+      id: 'curadoria', nome: 'Curadoria', icon: '📚', unit: 'filmes adicionados',
+      current: inseridos,
+      levels: [
+        { id:'colaborador',   emoji:'📥', nome:'Colaborador',   threshold:10,  color:'#80deea' },
+        { id:'colecionador',  emoji:'📦', nome:'Colecionador',  threshold:30,  color:'#f5c518' },
+        { id:'curador',       emoji:'📚', nome:'Curador',       threshold:75,  color:'#f39c12' },
+        { id:'mestrecurador', emoji:'🎖️', nome:'Mestre Curador', threshold:150, color:'#f39c12' },
+        { id:'patrono',       emoji:'🏛️', nome:'Patrono',       threshold:300, color:'#FFD700' }
+      ]
+    },
+    {
+      id: 'pioneirismo', nome: 'Pioneirismo', icon: '🗺️', unit: 'filmes que só ele viu',
+      current: soEle,
+      levels: [
+        { id:'pioneiro',    emoji:'🌟', nome:'Pioneiro',    threshold:5,  color:'#80deea' },
+        { id:'explorador',  emoji:'💎', nome:'Explorador',  threshold:20, color:'#ce93d8' },
+        { id:'desbravador', emoji:'🗺️', nome:'Desbravador', threshold:50, color:'#ab47bc' }
+      ]
+    },
+    {
+      id: 'maratona', nome: 'Maratona Mensal', icon: '🏃', unit: 'filmes no mesmo mês',
+      current: maxMes,
+      levels: [
+        { id:'maratonista',  emoji:'🏃', nome:'Maratonista',  threshold:20,  color:'#e67e22' },
+        { id:'lendamensal',  emoji:'🏆', nome:'Lenda Mensal', threshold:50,  color:'#FFD700' },
+        { id:'imparavel',    emoji:'🔥', nome:'Imparável',    threshold:100, color:'#FFD700' }
+      ]
+    },
+    {
+      id: 'notas10', nome: 'Notas 10', icon: '💯', unit: 'notas 10 distribuídas',
+      current: dezes,
+      levels: [
+        { id:'apaixonado',     emoji:'❤️',  nome:'Apaixonado',     threshold:3,  color:'#e91e63' },
+        { id:'perfeccionista', emoji:'💯', nome:'Perfeccionista', threshold:10, color:'#f5c518' },
+        { id:'devoto',         emoji:'🌟', nome:'Devoto',         threshold:25, color:'#FFD700' },
+        { id:'lendadezes',     emoji:'💎', nome:'Lenda dos Dezes', threshold:50, color:'#FFD700' }
+      ]
+    },
+    {
+      id: 'tempo', nome: 'Tempo na Tela', icon: '⏰', unit: 'dias assistindo',
+      current: dias,
+      levels: [
+        { id:'tempo7',    emoji:'⏱️', nome:'Uma Semana Inteira', threshold:7,   color:'#4a90e2' },
+        { id:'tempo30',   emoji:'⏰', nome:'Um Mês de Cinema',   threshold:30,  color:'#80deea' },
+        { id:'tempo60',   emoji:'📅', nome:'Dois Meses',         threshold:60,  color:'#ce93d8' },
+        { id:'tempo100',  emoji:'🌙', nome:'Cem Noites',         threshold:100, color:'#FFD700' }
+      ]
+    },
+    {
+      id: 'diversidade', nome: 'Diversidade de Gêneros', icon: '🧩', unit: 'gêneros com 5+ filmes',
+      current: generosVistos,
+      levels: [
+        { id:'versatil',  emoji:'🎨', nome:'Versátil',  threshold:8,  color:'#80deea' },
+        { id:'eclético',  emoji:'🧩', nome:'Eclético',  threshold:13, color:'#46d369' },
+        { id:'onivoro',   emoji:'🎪', nome:'Onívoro',   threshold:18, color:'#FFD700' }
+      ]
+    },
+    // ── NOVAS TRILHAS ──
+    {
+      id: 'decadas', nome: 'Viajante do Tempo', icon: '🕰️', unit: 'décadas com 10+ filmes',
+      current: decadasCobertas,
+      levels: [
+        { id:'nostalgico',  emoji:'📽️',  nome:'Nostálgico',  threshold:3, color:'#80deea' },
+        { id:'viajante',    emoji:'🕰️', nome:'Viajante',    threshold:5, color:'#f39c12' },
+        { id:'arqueologo',  emoji:'⏳', nome:'Arqueólogo',  threshold:7, color:'#FFD700' }
+      ]
+    },
+    {
+      id: 'epicos', nome: 'Filmes Longos', icon: '🎞️', unit: 'filmes com 2h30+',
+      current: longos,
+      levels: [
+        { id:'paciente',    emoji:'🛋️', nome:'Paciente',       threshold:10, color:'#80deea' },
+        { id:'epico',       emoji:'🎞️', nome:'Fã de Épicos',   threshold:30, color:'#f39c12' },
+        { id:'resistente',  emoji:'⚔️', nome:'Resistente',     threshold:60, color:'#FFD700' }
+      ]
+    },
+    {
+      id: 'consistencia', nome: 'Consistência', icon: '📅', unit: 'meses com avaliações',
+      current: mesesAtivos,
+      levels: [
+        { id:'regular',  emoji:'📆', nome:'Regular',  threshold:6,  color:'#80deea' },
+        { id:'assiduo',  emoji:'📅', nome:'Assíduo',  threshold:12, color:'#f5c518' },
+        { id:'fiel',     emoji:'🗓️', nome:'Fiel',     threshold:24, color:'#FFD700' }
+      ]
+    }
+  ];
+
+  // ── CONQUISTAS ESPECIAIS (sem progressão, só acerta ou não) ──
+  const especiais = [];
+
+  // Perfil de notas — precisa de 50+ avaliações
+  if(quant >= 50 && media != null){
+    especiais.push({
+      id:'otimista', emoji:'💝', nome:'Otimista',
+      desc:'Média ≥ 8.0 com 50+ filmes',
+      color:'#e91e63',
+      unlocked: media >= 8,
+      hint: media >= 8 ? null : `Média atual: ${fmt(media)}`
+    });
+    especiais.push({
+      id:'critico', emoji:'🔍', nome:'Crítico',
+      desc:'Média ≤ 6.5 com 50+ filmes',
+      color:'#9b59b6',
+      unlocked: media <= 6.5,
+      hint: media <= 6.5 ? null : `Média atual: ${fmt(media)}`
+    });
+  }
+
+  // Gênero dominante
   if(s.fav_genre && s.by_genre && quant >= 30){
     const favCount = s.by_genre[s.fav_genre] || 0;
     const pct = Math.round((favCount / quant) * 100);
-    if(pct >= 40) conquistas.push({ id:'especialista', emoji:'🎯', nome:`Fã de ${s.fav_genre}`, desc:`${pct}% dos filmes são de ${s.fav_genre}`, color:'#46d369' });
+    especiais.push({
+      id:'especialista', emoji:'🎯', nome:`Fã de ${s.fav_genre}`,
+      desc:`40%+ dos filmes do gênero preferido`,
+      color:'#46d369',
+      unlocked: pct >= 40,
+      hint: pct >= 40 ? `${pct}% dos filmes são de ${s.fav_genre}` : `${pct}% atual (precisa 40%+)`
+    });
   }
 
-  // ── Notas 10 perfeitas (4 níveis) ──
-  const dezes = minhasAvs.filter(a => a.nota === 10).length;
-  if(dezes >= 50) conquistas.push({ id:'lendadezes', emoji:'💎', nome:'Lenda dos Dezes', desc:`${dezes} notas 10`, color:'#FFD700' });
-  else if(dezes >= 25) conquistas.push({ id:'devoto', emoji:'🌟', nome:'Devoto', desc:`${dezes} notas 10`, color:'#FFD700' });
-  else if(dezes >= 10) conquistas.push({ id:'perfeccionista', emoji:'💯', nome:'Perfeccionista', desc:`${dezes} notas 10`, color:'#f5c518' });
-  else if(dezes >= 3) conquistas.push({ id:'apaixonado', emoji:'❤️', nome:'Apaixonado', desc:`${dezes} notas 10`, color:'#e91e63' });
+  // NOVAS especiais
+  if(quant >= 100){
+    especiais.push({
+      id:'bomhumor', emoji:'😊', nome:'Bom Humor',
+      desc:'70%+ dos filmes com nota ≥ 7',
+      color:'#46d369',
+      unlocked: pctAprov >= 0.7,
+      hint: `${Math.round(pctAprov*100)}% atual`
+    });
+    especiais.push({
+      id:'dificil', emoji:'🦁', nome:'Difícil de Agradar',
+      desc:'Menos de 30% com nota ≥ 7',
+      color:'#e74c3c',
+      unlocked: pctAprov < 0.3,
+      hint: `${Math.round(pctAprov*100)}% atual`
+    });
+  }
 
-  // ── Tempo assistido (4 níveis) ──
-  const totalMin = minhasAvs.reduce((t,a) => t + (a.duracao_min || 0), 0);
-  const dias = totalMin / 1440;
-  if(dias >= 100) conquistas.push({ id:'tempo100', emoji:'🌙', nome:'Cem Noites', desc:`${Math.floor(dias)} dias assistindo`, color:'#FFD700' });
-  else if(dias >= 60) conquistas.push({ id:'tempo60', emoji:'📅', nome:'Dois Meses', desc:`${Math.floor(dias)} dias assistindo`, color:'#ce93d8' });
-  else if(dias >= 30) conquistas.push({ id:'tempo30', emoji:'⏰', nome:'Um Mês de Cinema', desc:`${Math.floor(dias)} dias assistindo`, color:'#80deea' });
-  else if(dias >= 7) conquistas.push({ id:'tempo7', emoji:'⏱️', nome:'Uma Semana Inteira', desc:`${Math.floor(dias)} dias assistindo`, color:'#4a90e2' });
+  // Implacável
+  especiais.push({
+    id:'implacavel', emoji:'💀', nome:'Implacável',
+    desc:'Deu 5+ notas 0',
+    color:'#8e44ad',
+    unlocked: zeros >= 5,
+    hint: zeros >= 5 ? `${zeros} notas 0` : `${zeros}/5 notas 0`
+  });
 
-  // ── Diversidade: viu filmes de N gêneros diferentes ──
-  const generosVistos = Object.keys(s.by_genre || {}).filter(g => (s.by_genre[g]||0) >= 3).length;
-  if(generosVistos >= 15) conquistas.push({ id:'eclético', emoji:'🌈', nome:'Eclético', desc:`${generosVistos} gêneros diferentes (3+ filmes)`, color:'#46d369' });
-  else if(generosVistos >= 10) conquistas.push({ id:'versatil', emoji:'🎨', nome:'Versátil', desc:`${generosVistos} gêneros diferentes (3+ filmes)`, color:'#80deea' });
+  return { trilhas, especiais, totals: {
+    unlocked: (
+      trilhas.reduce((n,t) => n + t.levels.filter(l => t.current >= l.threshold).length, 0) +
+      especiais.filter(e => e.unlocked).length
+    ),
+    total: (
+      trilhas.reduce((n,t) => n + t.levels.length, 0) +
+      especiais.length
+    )
+  }};
+}
 
-  return conquistas;
+// Renderiza a seção completa de conquistas (trilhas + especiais)
+function renderConquistasHTML(uid){
+  const data = getAchievementData(uid);
+  if(!data) return '';
+  const { trilhas, especiais, totals } = data;
+
+  const trilhasHTML = trilhas.map(t => {
+    // nível atual = o maior threshold já alcançado
+    const achieved = t.levels.filter(l => t.current >= l.threshold);
+    const currentLevel = achieved.length ? achieved[achieved.length-1] : null;
+    const nextLevel = t.levels.find(l => t.current < l.threshold);
+
+    // Barra de progresso até o próximo nível
+    let progressHTML = '';
+    if(nextLevel){
+      const prev = currentLevel ? currentLevel.threshold : 0;
+      const span = Math.max(1, nextLevel.threshold - prev);
+      const pct = Math.min(100, Math.max(0, ((t.current - prev) / span) * 100));
+      progressHTML = `
+        <div style="height:4px;background:var(--surface3);border-radius:2px;overflow:hidden;margin-top:10px">
+          <div style="height:100%;width:${pct}%;background:linear-gradient(90deg,${nextLevel.color}66,${nextLevel.color});transition:width .6s"></div>
+        </div>
+        <div style="font-size:10px;color:var(--muted);margin-top:5px;display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap">
+          <span><b style="color:var(--text)">${t.current}</b> / ${nextLevel.threshold} ${esc(t.unit)}</span>
+          <span style="color:var(--muted2)">próximo: ${nextLevel.emoji} <b style="color:${nextLevel.color}">${esc(nextLevel.nome)}</b></span>
+        </div>
+      `;
+    } else {
+      progressHTML = `
+        <div style="height:4px;background:linear-gradient(90deg,#FFD700,#ffa500,#FFD700);border-radius:2px;margin-top:10px"></div>
+        <div style="font-size:10px;color:#FFD700;margin-top:5px;font-weight:700">✨ Trilha completa! ${t.current} ${esc(t.unit)}</div>
+      `;
+    }
+
+    // Steps visuais
+    const stepsHTML = t.levels.map(l => {
+      const done = t.current >= l.threshold;
+      const isNext = !done && nextLevel && nextLevel.id === l.id;
+      const bgColor = done ? l.color+'22' : (isNext ? l.color+'11' : 'transparent');
+      const borderColor = done ? l.color+'77' : (isNext ? l.color+'88' : 'rgba(255,255,255,0.05)');
+      const opacity = done ? '1' : (isNext ? '0.9' : '0.35');
+      const shadow = isNext ? `box-shadow:0 0 12px ${l.color}33;` : '';
+      return `
+        <div style="flex:1;min-width:0;display:flex;flex-direction:column;align-items:center;gap:3px;padding:8px 3px;border-radius:6px;background:${bgColor};border:1px solid ${borderColor};${shadow}opacity:${opacity};position:relative" title="${esc(l.nome)} · ${l.threshold}+ ${esc(t.unit)}">
+          ${done ? `<div style="position:absolute;top:2px;right:2px;font-size:9px;color:${l.color}">✓</div>` : (isNext ? `<div style="position:absolute;top:2px;right:3px;font-size:8px;color:${l.color}">◉</div>` : '')}
+          <div style="font-size:18px;line-height:1;filter:${done ? 'none' : 'grayscale(0.8)'}">${l.emoji}</div>
+          <div style="font-size:8px;font-weight:700;color:${done ? l.color : 'var(--muted2)'};line-height:1.1;text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;width:100%">${esc(l.nome)}</div>
+          <div style="font-size:8px;color:var(--muted2);line-height:1">${l.threshold}+</div>
+        </div>
+      `;
+    }).join('');
+
+    const headerBadge = currentLevel
+      ? `<span style="font-size:10px;color:${currentLevel.color};font-weight:700;background:${currentLevel.color}22;padding:2px 7px;border-radius:10px;border:1px solid ${currentLevel.color}44">${currentLevel.emoji} ${esc(currentLevel.nome)}</span>`
+      : `<span style="font-size:10px;color:var(--muted2);font-weight:500">não iniciado</span>`;
+
+    return `
+      <div style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:12px;margin-bottom:10px">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;flex-wrap:wrap">
+          <span style="font-size:15px">${t.icon}</span>
+          <span style="font-size:12px;font-weight:700;flex:1">${esc(t.nome)}</span>
+          ${headerBadge}
+        </div>
+        <div style="display:flex;gap:3px">${stepsHTML}</div>
+        ${progressHTML}
+      </div>
+    `;
+  }).join('');
+
+  // Especiais — grid de cards
+  const especiaisHTML = especiais.length ? `
+    <div style="margin-top:14px">
+      <div style="font-size:11px;font-weight:700;color:var(--muted);margin-bottom:8px;text-transform:uppercase;letter-spacing:0.5px">✨ Especiais</div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:8px">
+        ${especiais.map(e => `
+          <div style="background:var(--surface2);border:1px solid ${e.unlocked ? e.color+'66' : 'var(--border)'};border-left:3px solid ${e.unlocked ? e.color : 'var(--muted2)'};border-radius:8px;padding:10px;text-align:center;opacity:${e.unlocked ? '1' : '0.55'};position:relative">
+            ${e.unlocked ? `<div style="position:absolute;top:4px;right:6px;font-size:9px;color:${e.color}">✓</div>` : `<div style="position:absolute;top:4px;right:6px;font-size:9px;color:var(--muted2)">🔒</div>`}
+            <div style="font-size:22px;line-height:1;margin-bottom:6px;filter:${e.unlocked ? 'none' : 'grayscale(0.8)'}">${e.emoji}</div>
+            <div style="font-size:11px;font-weight:800;color:${e.unlocked ? e.color : 'var(--muted)'};line-height:1.2;margin-bottom:3px">${esc(e.nome)}</div>
+            <div style="font-size:9px;color:var(--muted);line-height:1.3">${esc(e.desc)}</div>
+            ${!e.unlocked && e.hint ? `<div style="font-size:8px;color:var(--muted2);margin-top:4px;font-style:italic">${esc(e.hint)}</div>` : ''}
+          </div>
+        `).join('')}
+      </div>
+    </div>
+  ` : '';
+
+  return `
+    <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:14px;margin-bottom:20px">
+      <div style="font-size:13px;font-weight:700;margin-bottom:14px;display:flex;align-items:center;justify-content:space-between">
+        <span>🏅 Conquistas</span>
+        <span style="font-size:11px;color:var(--muted);font-weight:600;background:var(--surface2);padding:3px 10px;border-radius:10px;border:1px solid var(--border)">${totals.unlocked} / ${totals.total}</span>
+      </div>
+      ${trilhasHTML}
+      ${especiaisHTML}
+    </div>
+  `;
 }
 
 // USER DETAIL (from ranking) - wrapper que injeta no rankTabContent
@@ -2791,27 +3032,8 @@ function userDetailHTML(uid, opts){
       ${s.fav_genre ? `<div class="stat-card"><div class="stat-card-n" style="font-size:14px;color:#fff">${esc(s.fav_genre)}</div><div class="stat-card-l">Gênero fav.</div><div class="stat-card-sub">média ${s.fav_genre_avg?fmt(s.fav_genre_avg):'—'}</div></div>` : ''}
     </div>
 
-    <!-- CONQUISTAS / BADGES -->
-    ${(() => {
-      const badges = calcConquistas(uid);
-      if(!badges.length) return '';
-      return `
-      <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:14px;margin-bottom:20px">
-        <div style="font-size:13px;font-weight:700;margin-bottom:12px;display:flex;align-items:center;justify-content:space-between">
-          <span>🏅 Conquistas</span>
-          <span style="font-size:10px;color:var(--muted2);font-weight:500">${badges.length}</span>
-        </div>
-        <div style="display:flex;gap:8px;overflow-x:auto;padding-bottom:4px;scrollbar-width:thin;-webkit-overflow-scrolling:touch">
-          ${badges.map(b => `
-            <div style="flex-shrink:0;min-width:128px;max-width:150px;background:var(--surface2);border:1px solid ${b.color}44;border-left:3px solid ${b.color};border-radius:8px;padding:10px;text-align:center">
-              <div style="font-size:24px;line-height:1;margin-bottom:6px">${b.emoji}</div>
-              <div style="font-size:11px;font-weight:800;color:${b.color};line-height:1.2;margin-bottom:3px">${esc(b.nome)}</div>
-              <div style="font-size:9px;color:var(--muted);line-height:1.3">${esc(b.desc)}</div>
-            </div>
-          `).join('')}
-        </div>
-      </div>`;
-    })()}
+    <!-- CONQUISTAS / BADGES (trilhas de progressão) -->
+    ${renderConquistasHTML(uid)}
 
     <!-- TOP 5 / BOT 5 lado a lado -->
     ${(top5.length || bot5.length) ? `
