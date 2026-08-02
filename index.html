@@ -1155,8 +1155,15 @@ function getRecentIds(){
 let RECENT_IDS = RAW.recent_ids; // será atualizado após load
 
 const AC = ['#e50914','#e67e22','#3498db','#9b59b6','#1abc9c','#2ecc71','#e91e63','#00bcd4','#8bc34a'];
-const UK = Object.keys(USERS);
-const aC = uid=>AC[UK.indexOf(uid)%AC.length];
+let UK = Object.keys(USERS);
+const aC = uid => {
+  let idx = UK.indexOf(uid);
+  if (idx === -1) {
+    UK = Object.keys(USERS); 
+    idx = UK.indexOf(uid);
+  }
+  return AC[Math.max(0, idx) % AC.length];
+};
 const ini = name=>name.split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase();
 const nC = n=>{
   if(!n) return '#666';
