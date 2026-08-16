@@ -4976,35 +4976,57 @@ async function addNewMember(){
   const legacy = document.getElementById('newMemberLegacy').value.trim();
   const msg = document.getElementById('newMemberMsg');
 
-  if(!nome||!email||!senha||!legacy){ msg.style.color='#e05555'; msg.textContent='⚠️ Preencha todos os campos.'; return; }
-  if(senha.length < 6){ msg.style.color='#e05555'; msg.textContent='⚠️ A senha precisa ter pelo menos 6 caracteres.'; return; }
-  if(!/^USER-\d{3}$/.test(legacy)){ msg.style.color='#e05555'; msg.textContent='⚠️ Legacy ID deve estar no formato USER-XXX (ex: USER-011).'; return; }
-  if(USERS[legacy]){ msg.style.color='#e05555'; msg.textContent='⚠️ Esse Legacy ID já existe.'; return; }
+  if(!nome||!email){ msg.style.color='#e05555'; msg.textContent='⚠️ Preencha todos os campos.'; return; }
+  if(senha && senha.length < 6){ msg.style.color='#e05555'; msg.textContent='⚠️ A senha precisa ter pelo menos 6 caracteres.'; return; }
+  if(legacy && !/^USER-\d{3}$/.test(legacy)){ msg.style.color='#e05555'; msg.textContent='⚠️ Legacy ID deve estar no formato USER-XXX (ex: USER-011).'; return; }
+  if(legacy && USERS[legacy]){ msg.style.color='#e05555'; msg.textContent='⚠️ Esse Legacy ID já existe.'; return; }
   if(Object.values(USERS).some(u=>u.nome.toLowerCase()===nome.toLowerCase())){ msg.style.color='#e05555'; msg.textContent='⚠️ Já existe um membro com esse nome.'; return; }
 
-  msg.style.color='#888'; msg.textContent='⏳ Criando via Apps Script...';
-
   try {
-    // Chama o Apps Script (que usa a service_role key guardada em Script Properties).
-    // Importante: SEM mode:'no-cors' aqui — precisamos ler a resposta JSON.
-    const params = new URLSearchParams({
-      acao: 'criarUsuario',
-      nome, email, senha, legacy_id: legacy
-    });
-    const resp = await fetch(APPS_SCRIPT_URL + '?' + params.toString(), { method: 'GET' });
-    if(!resp.ok) throw new Error('HTTP ' + resp.status);
-    const data = await resp.json();
-    if(!data.ok) throw new Error(data.error || 'Falha desconhecida');
+    if(senha){
+      msg.style.color='#888'; msg.textContent='⏳ Criando via Apps Script...';
 
-    msg.style.color='#46d369';
-    msg.textContent=`✅ Membro "${nome}" criado com sucesso!`;
+      // Chama o Apps Script (que usa a service_role key guardada em Script Properties).
+      // Importante: SEM mode:'no-cors' aqui — precisamos ler a resposta JSON.
+      const params = new URLSearchParams({
+        acao: 'criarUsuario',
+        nome, email, senha, legacy_id: legacy
+      });
+      const resp = await fetch(APPS_SCRIPT_URL + '?' + params.toString(), { method: 'GET' });
+      if(!resp.ok) throw new Error('HTTP ' + resp.status);
+      const data = await resp.json();
+      if(!data.ok) throw new Error(data.error || 'Falha desconhecida');
 
-    // Atualiza localmente
-    USERS[legacy] = { nome };
-    STATS[legacy] = { nome, in_ranking:true, quant:0, media:null, pendentes:[], nao_quer:[], inseridos:[], by_year:{}, by_genre:{}, genre_avg:{} };
-    RAW.usuarios[legacy] = { nome };
-    RAW.users_stats[legacy] = STATS[legacy];
-    buildUD();
+      msg.style.color='#46d369';
+      msg.textContent=`✅ Membro "${nome}" criado com sucesso!`;
+
+      // Atualiza localmente
+      USERS[legacy] = { nome };
+      STATS[legacy] = { nome, in_ranking:true, quant:0, media:null, pendentes:[], nao_quer:[], inseridos:[], by_year:{}, by_genre:{}, genre_avg:{} };
+      RAW.usuarios[legacy] = { nome };
+      RAW.users_stats[legacy] = STATS[legacy];
+      buildUD();
+    } else {
+      msg.style.color='#888'; msg.textContent='⏳ Cadastrando...';
+
+      // Sem senha: não cria conta de autenticação, só grava o registro em usuarios.
+      // legacy_id omitido quando vazio pra deixar o gatilho gerar o próximo USER-NNN.
+      const payload = { nome, email };
+      if(legacy) payload.legacy_id = legacy;
+      const { data, error } = await supa.from('usuarios').insert([payload]).select().single();
+      if(error) throw error;
+
+      const novoLegacy = data.legacy_id;
+      msg.style.color='#46d369';
+      msg.textContent=`✅ Membro "${nome}" cadastrado! Ele deve criar a própria conta no app usando o e-mail ${email} — o vínculo é automático.`;
+
+      // Atualiza localmente
+      USERS[novoLegacy] = { nome };
+      STATS[novoLegacy] = { nome, in_ranking:true, quant:0, media:null, pendentes:[], nao_quer:[], inseridos:[], by_year:{}, by_genre:{}, genre_avg:{} };
+      RAW.usuarios[novoLegacy] = { nome };
+      RAW.users_stats[novoLegacy] = STATS[novoLegacy];
+      buildUD();
+    }
 
     // Limpa formulário
     document.getElementById('newMemberNome').value = '';
