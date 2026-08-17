@@ -1489,7 +1489,7 @@ function renderFilmes(selectedId, forceGenre){
               <td class="td-name">${esc(f.nome)}</td>
               <td class="td-muted">${f.ano}</td>
               <td class="td-muted">${f.duracao_str}</td>
-              <td class="td-muted" style="max-width:80px;overflow:hidden;text-overflow:ellipsis">${esc(USERS[f.inserido_por]?.nome||f.inserido_por)}</td>
+              <td class="td-muted" style="max-width:80px;overflow:hidden;text-overflow:ellipsis">${esc(displayName(f.inserido_por))}</td>
             </tr>`;
           }).join('')}
           </tbody>
@@ -1589,7 +1589,7 @@ function filmDetailHTML(id){
           </div>`).join('')}
         </div>`:''}
       <div class="dp-footer">
-        <span>Inserido por: <strong style="color:#fff">${esc(USERS[f.inserido_por]?.nome||f.inserido_por)}</strong></span>
+        <span>Inserido por: <strong style="color:#fff">${esc(displayName(f.inserido_por))}</strong></span>
         <span>Cadastro: <strong style="color:#fff">${f.data_cadastro ? (f.data_cadastro.includes('-') ? f.data_cadastro.split('-').reverse().join('/') : f.data_cadastro) : '—'}</strong></span>
       </div>
       ${(()=>{
@@ -1661,7 +1661,7 @@ function renderPendentes(selId){
               <td class="td-name">${esc(f.nome)}</td>
               <td class="td-muted">${f.ano}</td>
               <td class="td-muted">${f.duracao_str}</td>
-              <td class="td-muted">${esc(USERS[f.inserido_por]?.nome||f.inserido_por)}</td>
+              <td class="td-muted">${esc(displayName(f.inserido_por))}</td>
               <td class="td-muted">${numAv}</td>
             </tr>`;
           }).join('')}
@@ -2215,16 +2215,6 @@ function buildUD(){
 
 function toggleUserMenu(){document.getElementById('userDropdown').classList.toggle('open');}
 document.addEventListener('click',e=>{if(!e.target.closest('.user-menu'))document.getElementById('userDropdown').classList.remove('open');});
-
-function selectUser(uid){
-  CU=uid;
-  const u=USERS[uid];
-  const av=document.getElementById('userAvatar');
-  av.textContent=ini(u.nome);av.style.background=aC(uid);av.style.color='#000';
-  document.getElementById('userDropdown').classList.remove('open');
-  buildUD();
-  render();
-}
 
 function showNeedLogin(vid){
   document.getElementById(vid).innerHTML=`<div class="empty-block"><div class="empty-icon">👤</div><div style="font-weight:700;font-size:16px;margin-bottom:8px">Selecione seu perfil</div><div style="color:var(--muted);font-size:13px">Clique no avatar no canto superior direito</div></div>`;
@@ -3506,7 +3496,7 @@ function rankAfinidadesHTML(){
   }
   function trunc(s,n){ return s.length>n?s.slice(0,n-1)+'…':s; }
 
-  const focusNome = STATS[focusUid]?.nome || '';
+  const focusNome = focusUid ? displayName(focusUid) : '';
   let cardIdx = 0;
   let html = `<div style="margin-bottom:24px">`;
   html += `<div style="font-size:15px;font-weight:800;color:#e5e5e5;margin-bottom:14px">🤝 Afinidade de ${esc(focusNome)} com o grupo</div>`;
@@ -3516,16 +3506,16 @@ function rankAfinidadesHTML(){
   } else {
     myPairs.forEach(({m, data}) => {
       const col = scoreColor(data.score);
-      const nomeA = STATS[focusUid]?.nome||'', nomeB = m.nome;
+      const nomeA = focusNome, nomeB = displayName(m.uid);
       const cid = 'afin_detail_' + (cardIdx++);
 
       html += `<div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:14px 16px;margin-bottom:10px;width:100%;box-sizing:border-box">`;
 
       // === CARD COMPACTO (sempre visível) ===
       html += `<div style="display:flex;align-items:center;gap:12px">
-        <div style="width:40px;height:40px;border-radius:8px;background:${aC(m.uid)};display:flex;align-items:center;justify-content:center;font-weight:800;font-size:14px;color:#000;flex-shrink:0">${ini(m.nome)}</div>
+        ${avatarHTML(m.uid,{size:40,fontSize:14})}
         <div style="flex:1;min-width:0">
-          <div style="font-weight:700;font-size:14px">${esc(m.nome)}</div>
+          <div style="font-weight:700;font-size:14px">${esc(nomeB)}</div>
           <div style="font-size:11px;color:var(--muted)">${data.shared} filmes em comum · ⏱ ${fmtTempo(data.minutos)}</div>
         </div>
         <div style="text-align:right;flex-shrink:0">
@@ -3633,9 +3623,9 @@ function rankAfinidadesHTML(){
         const memberQuant = STATS[m.uid]?.quant || 0;
         html += `<div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:14px 16px;margin-bottom:10px;width:100%;box-sizing:border-box;opacity:0.7">
           <div style="display:flex;align-items:center;gap:12px">
-            <div style="width:40px;height:40px;border-radius:8px;background:${aC(m.uid)};display:flex;align-items:center;justify-content:center;font-weight:800;font-size:14px;color:#000;flex-shrink:0">${ini(m.nome)}</div>
+            ${avatarHTML(m.uid,{size:40,fontSize:14})}
             <div style="flex:1;min-width:0">
-              <div style="font-weight:700;font-size:14px">${esc(m.nome)}</div>
+              <div style="font-weight:700;font-size:14px">${esc(displayName(m.uid))}</div>
               <div style="font-size:11px;color:var(--muted)">${memberQuant === 0 ? 'Ainda sem avaliações' : 'Poucos filmes em comum (mín. 3)'}</div>
             </div>
             <div style="text-align:right;flex-shrink:0">
@@ -3655,11 +3645,11 @@ function rankAfinidadesHTML(){
       <div style="font-size:18px;width:28px;text-align:center;flex-shrink:0">${medals[i]}</div>
       <div style="flex:1;min-width:0">
         <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px">
-          <div style="width:28px;height:28px;border-radius:6px;background:${aC(a.uid)};display:flex;align-items:center;justify-content:center;font-weight:800;font-size:10px;color:#000;flex-shrink:0">${ini(a.nome)}</div>
+          ${avatarHTML(a.uid,{size:28,radius:'6px',fontSize:10})}
           <div style="font-size:11px;color:var(--muted)">+</div>
-          <div style="width:28px;height:28px;border-radius:6px;background:${aC(b.uid)};display:flex;align-items:center;justify-content:center;font-weight:800;font-size:10px;color:#000;flex-shrink:0">${ini(b.nome)}</div>
+          ${avatarHTML(b.uid,{size:28,radius:'6px',fontSize:10})}
         </div>
-        <div style="font-size:13px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(a.nome)} & ${esc(b.nome)}</div>
+        <div style="font-size:13px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(displayName(a.uid))} & ${esc(displayName(b.uid))}</div>
         <div style="font-size:10px;color:var(--muted);margin-top:1px">${data.shared} filmes · ${fmtTempo(data.minutos)}</div>
       </div>
       <div style="text-align:right;flex-shrink:0">
@@ -3690,8 +3680,6 @@ function rankStatsHTML(){
     most_added:   src.reduce((a,b)=>b.inseridos.length>a.inseridos.length?b:a, src[0]),
     longest_away: src.filter(m=>m.ultima_av).reduce((a,b)=>monthsSince(b.ultima_av)>monthsSince(a.ultima_av)?b:a, src.find(m=>m.ultima_av)||src[0]),
   };
-  const un = uid => esc(RAW.users_stats[uid]?.nome||'—');
-
   // Monthly activity chart data
   const monthData = RAW.monthly_activity||{};
   const monthEntries = Object.entries(monthData).sort((a,b)=>a[0].localeCompare(b[0]));
@@ -4785,9 +4773,9 @@ function checkBirthdays(){
       const parts = p.bday.split('-');
       if(parts.length < 3) return;
       if(parts[1] !== mm || parts[2] !== dd) return;
-      const nome = USERS[uid]?.nome || uid;
-      nomesChecked.add(nome);
-      aniversariantes.push({ nome, uid, isSelf: uid === CU });
+      const realNome = USERS[uid]?.nome || uid;
+      nomesChecked.add(realNome);
+      aniversariantes.push({ nome: displayName(uid), realNome, uid, isSelf: uid === CU });
     });
 
     // 2. BDAYS_HARDCODED (fallback para quem não salvou no perfil)
@@ -4797,7 +4785,7 @@ function checkBirthdays(){
       const parts = hb.split('-');
       if(parts.length < 3) return;
       if(parts[1] !== mm || parts[2] !== dd) return;
-      aniversariantes.push({ nome: u.nome, uid, isSelf: uid === CU });
+      aniversariantes.push({ nome: displayName(uid), realNome: u.nome, uid, isSelf: uid === CU });
     });
 
     // 3. Datas especiais (só toast local, sem push pro grupo)
@@ -4818,7 +4806,7 @@ function checkBirthdays(){
         showToast(`🎉 Feliz aniversário, ${b.nome}!`);
       } else {
         const hoje = new Date();
-        const hb = profileData[b.uid]?.bday || BDAYS_HARDCODED[b.nome] || '';
+        const hb = profileData[b.uid]?.bday || BDAYS_HARDCODED[b.realNome] || '';
         const ano = parseInt(hb.split('-')[0]);
         const idade = ano > 0 ? ` (${hoje.getFullYear() - ano} anos)` : '';
         showToast(`🎂 Hoje é aniversário de ${b.nome}${idade}!`);
