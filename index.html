@@ -1570,9 +1570,9 @@ function filmDetailHTML(id){
         <div class="dp-section-title">Avaliações do grupo (${avList.length})</div>
         <div class="dp-ratings">
           ${avList.map(([uid,av])=>`<div class="dp-rating-row">
-            <div class="dp-r-av" style="background:${aC(uid)}">${ini(USERS[uid]?.nome||'?')}</div>
+            ${avatarHTML(uid,{size:30,radius:'50%',fontSize:11})}
             <div class="dp-r-name">
-              ${esc(USERS[uid]?.nome||uid)}
+              ${esc(displayName(uid))}
               ${av.data
                 ?`<div style="font-size:10px;color:var(--muted2);margin-top:1px;display:flex;align-items:center;gap:6px">
                     <span>${av.data}</span>
@@ -2199,7 +2199,7 @@ function buildUD(){
   const el = document.getElementById('udList');
   if(!el) return;
   const email = currentSession?.user?.email || '';
-  const nome = USERS[CU]?.nome || '';
+  const nome = CU ? displayName(CU) : '';
   el.innerHTML = `
     <div style="padding:6px 10px 2px;font-size:13px;color:#fff;font-weight:600">${esc(nome)}</div>
     <div style="padding:2px 10px 10px;font-size:11px;color:#666">${email}</div>
@@ -3181,9 +3181,9 @@ function rankGeralHTML(){
     const med=i===0?'🥇':i===1?'🥈':i===2?'🥉':'';
     return `<div class="rank-item" onclick="openUserDetail('${s.uid}')">
       <div class="rank-num">${med||i+1}</div>
-      <div class="rank-av" style="background:${aC(s.uid)}">${ini(s.nome)}</div>
+      ${avatarHTML(s.uid)}
       <div class="rank-info">
-        <div class="rank-name">${esc(s.nome)}</div>
+        <div class="rank-name">${esc(displayName(s.uid))}</div>
         <div class="rank-sub">${s.time_str} · última: ${s.ultima_av||'—'}</div>
       </div>
       <div class="rank-stats">
@@ -3232,9 +3232,9 @@ function rankAnoHTML(){
           const med=i===0?'🥇':i===1?'🥈':i===2?'🥉':i+1+'.';
           return `<div class="rank-item" style="margin-bottom:6px;padding:10px 14px;overflow:hidden" onclick="openUserYearDetail('${m.uid}','${rankYear}')">
             <div style="font-size:16px;width:28px;text-align:center;flex-shrink:0">${med}</div>
-            <div class="rank-av" style="background:${aC(m.uid)};width:32px;height:32px;font-size:11px">${ini(m.nome)}</div>
+            ${avatarHTML(m.uid,{size:32,fontSize:11})}
             <div style="flex:1;min-width:0;overflow:hidden">
-              <div style="font-size:13px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(m.nome)}</div>
+              <div style="font-size:13px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(displayName(m.uid))}</div>
               <div style="margin-top:4px;background:var(--surface2);border-radius:3px;overflow:hidden;height:4px">
                 <div style="height:100%;width:${max?Math.round(m.cnt/max*100):0}%;background:linear-gradient(90deg,var(--red),var(--yellow));border-radius:3px"></div>
               </div>
@@ -3268,9 +3268,9 @@ function openUserYearDetail(uid, year){
   document.getElementById('rankTabContent').innerHTML = `
     <button onclick="renderRankTab()" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:13px;margin-bottom:16px">← Voltar</button>
     <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px">
-      <div style="width:44px;height:44px;border-radius:8px;background:${aC(uid)};color:#000;font-weight:800;font-size:16px;display:flex;align-items:center;justify-content:center">${ini(s.nome)}</div>
+      ${avatarHTML(uid,{fontSize:16})}
       <div>
-        <div style="font-size:18px;font-weight:800">${esc(s.nome)} em ${year}</div>
+        <div style="font-size:18px;font-weight:800">${esc(displayName(uid))} em ${year}</div>
         <div style="font-size:12px;color:var(--muted)">${avList.length} filmes assistidos</div>
       </div>
     </div>
@@ -3348,9 +3348,9 @@ function rankGeneroHTML(){
           const medal=i===0?'🥇':i===1?'🥈':i===2?'🥉':i+1+'.';
           return `<div class="rank-item" style="margin-bottom:6px;padding:10px 14px;overflow:hidden">
             <div style="font-size:16px;width:28px;text-align:center;flex-shrink:0">${medal}</div>
-            <div class="rank-av" style="background:${aC(m.uid)};width:32px;height:32px;font-size:11px">${ini(m.nome)}</div>
+            ${avatarHTML(m.uid,{size:32,fontSize:11})}
             <div style="flex:1;min-width:0;overflow:hidden">
-              <div style="font-size:13px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(m.nome)}</div>
+              <div style="font-size:13px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(displayName(m.uid))}</div>
               <div style="margin-top:4px;background:var(--surface2);border-radius:3px;overflow:hidden;height:4px">
                 <div style="height:100%;width:${Math.round(m.cnt/maxCnt*100)}%;background:linear-gradient(90deg,var(--red),var(--yellow));border-radius:3px"></div>
               </div>
@@ -3756,7 +3756,7 @@ function rankStatsHTML(){
               <span style="font-size:18px;width:24px;text-align:center">${icon}</span>
               <div style="flex:1;min-width:0">
                 <div style="font-size:10px;color:var(--muted2);text-transform:uppercase;letter-spacing:.3px">${label}</div>
-                <div style="font-size:13px;font-weight:700">${uid?`<span style="display:inline-flex;align-items:center;gap:5px"><span style="width:18px;height:18px;border-radius:4px;background:${aC(uid)};color:#000;font-size:9px;font-weight:800;display:inline-flex;align-items:center;justify-content:center">${ini(RAW.users_stats[uid]?.nome||'?')}</span>${esc(RAW.users_stats[uid]?.nome||'?')}</span>`:''} <span style="color:var(--green);font-size:12px">${val}</span></div>
+                <div style="font-size:13px;font-weight:700">${uid?`<span style="display:inline-flex;align-items:center;gap:5px">${avatarHTML(uid,{size:18,radius:'4px',fontSize:9})}${esc(displayName(uid))}</span>`:''} <span style="color:var(--green);font-size:12px">${val}</span></div>
               </div>
             </div>`).join('')}
         </div>
@@ -3772,7 +3772,7 @@ function rankStatsHTML(){
               <span style="font-size:18px;width:24px;text-align:center">${icon}</span>
               <div style="flex:1;min-width:0">
                 <div style="font-size:10px;color:var(--muted2);text-transform:uppercase;letter-spacing:.3px">${label}</div>
-                <div style="font-size:13px;font-weight:700">${uid?`<span style="display:inline-flex;align-items:center;gap:5px"><span style="width:18px;height:18px;border-radius:4px;background:${aC(uid)};color:#000;font-size:9px;font-weight:800;display:inline-flex;align-items:center;justify-content:center">${ini(RAW.users_stats[uid]?.nome||'?')}</span>${esc(RAW.users_stats[uid]?.nome||'?')}</span>`:''} <span style="color:var(--yellow);font-size:12px">${val}</span></div>
+                <div style="font-size:13px;font-weight:700">${uid?`<span style="display:inline-flex;align-items:center;gap:5px">${avatarHTML(uid,{size:18,radius:'4px',fontSize:9})}${esc(displayName(uid))}</span>`:''} <span style="color:var(--yellow);font-size:12px">${val}</span></div>
               </div>
             </div>`).join('')}
         </div>
@@ -3996,8 +3996,7 @@ function rankAtividadesHTML(){
       html += `<div class="feed-date-divider">${grp}</div>`;
       lastGrp = grp;
     }
-    const user = USERS[ev.uid];
-    const uName = user ? user.nome : ev.uid;
+    const uName = displayName(ev.uid);
     const dotCls = ev.type==='avaliacao'?'rate':ev.type==='adicionado'?'add':'nao';
     const actText = ev.type==='avaliacao'?'avaliou':ev.type==='adicionado'?'adicionou ao catálogo':'marcou como "não quero"';
     const actIcon = ev.type==='avaliacao'?'⭐':ev.type==='adicionado'?'🎬':'❌';
@@ -4005,7 +4004,7 @@ function rankAtividadesHTML(){
     html += `<div class="feed-card">
       <div class="feed-dot ${dotCls}"></div>
       <div class="feed-header">
-        <div class="feed-avatar" style="background:${aC(ev.uid)}">${ini(uName)}</div>
+        ${avatarHTML(ev.uid,{size:30,fontSize:11})}
         <div class="feed-user">${esc(uName)} <span class="feed-action">${actText}</span></div>
         <div class="feed-date">${feedRelDate(ev.dateObj)}</div>
       </div>
@@ -4571,6 +4570,26 @@ async function saveProfiles(){
 
 function getProfile(uid){ return profileData[uid] || {}; }
 
+// ── Nome/avatar de exibição: usa apelido/foto de perfis quando existir, senão cai no nome/cor+iniciais de usuarios ──
+// getProfile() já retorna {} se não houver linha em perfis, então os fallbacks abaixo cobrem esse caso sem checagem extra.
+function displayName(uid){
+  const p = getProfile(uid);
+  return p.apelido || USERS[uid]?.nome || uid;
+}
+
+function avatarHTML(uid, opts){
+  opts = opts || {};
+  const size = opts.size || 44;
+  const radius = opts.radius || '8px';
+  const fontSize = opts.fontSize || Math.round(size*0.34);
+  const p = getProfile(uid);
+  if(p.photo){
+    return `<img src="${p.photo}" style="width:${size}px;height:${size}px;border-radius:${radius};object-fit:cover;flex-shrink:0">`;
+  }
+  const color = p.color || aC(uid);
+  return `<div style="width:${size}px;height:${size}px;border-radius:${radius};background:${color};color:#000;font-weight:800;font-size:${fontSize}px;display:flex;align-items:center;justify-content:center;flex-shrink:0">${ini(displayName(uid))}</div>`;
+}
+
 function openProfile(){
   if(!CU) return;
   const p = getProfile(CU);
@@ -5116,9 +5135,9 @@ function renderAdminMembros(){
       ${membros.map(([uid, u]) => {
         const s = STATS[uid] || {};
         return `<div style="background:#1a1a1a;border:1px solid #2a2a2a;border-radius:10px;padding:12px;margin-bottom:8px;display:flex;align-items:center;gap:12px">
-          <div style="width:36px;height:36px;border-radius:8px;background:${aC(uid)};color:#000;font-weight:800;font-size:14px;display:flex;align-items:center;justify-content:center;flex-shrink:0">${ini(u.nome)}</div>
+          ${avatarHTML(uid,{size:36,fontSize:14})}
           <div style="flex:1">
-            <div style="font-size:14px;font-weight:700">${esc(u.nome)} <span style="font-size:10px;color:#666">${uid}</span></div>
+            <div style="font-size:14px;font-weight:700">${esc(displayName(uid))} <span style="font-size:10px;color:#666">${uid}</span></div>
             <div style="font-size:11px;color:#888">${s.quant||0} assistidos · média ${s.media?fmt(s.media):'—'} · ${(s.pendentes||[]).length} pendentes</div>
           </div>
           <div style="font-size:11px;color:#666">${s.ultima_av||'—'}</div>
