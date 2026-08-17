@@ -2021,10 +2021,11 @@ function renderTmdbCandidates(){
   const enriched=(tmdbResult && tmdbResult._tmdbId===c.tmdbId) ? tmdbResult : null;
 
   // Candidato já cadastrado no app? (mesma regra de dedupe usada em saveFilme: nome+ano)
-  const cAno = parseInt(c.ano) || null;
+  // ano é TEXT no banco — compara como string pra não dar falso-negativo (coalesce(ano,'') no índice único)
+  const cAno = c.ano ? String(c.ano) : '';
   const jaCadastrado = FILMES.some(f =>
     f.nome.trim().toLowerCase() === c.titulo.trim().toLowerCase() &&
-    (f.ano === cAno || !cAno)
+    (String(f.ano||'') === cAno || !cAno)
   );
   const saveBtn = document.getElementById('saveFilmeBtn');
   if(saveBtn) saveBtn.disabled = jaCadastrado;
@@ -2048,7 +2049,7 @@ function renderTmdbCandidates(){
     ${c.poster?`<img class="tmdb-thumb" src="${esc(c.poster)}" alt="" onerror="this.style.display='none'">`:'<div class="tmdb-thumb-empty">🎬</div>'}
     <div class="tmdb-info">
       <div class="tmdb-title">${esc(c.titulo)}${c.ano?` (${c.ano})`:''}</div>
-      ${jaCadastrado?'<div style="color:#f5c518;font-size:11px;font-weight:700;margin:2px 0">✓ Já está no app — este filme já foi cadastrado</div>':''}
+      ${jaCadastrado?'<div style="color:#f5c518;font-size:11px;font-weight:700;margin:2px 0">✓ Esse filme já consta no catálogo.</div>':''}
       <div class="tmdb-meta">${metaHTML}</div>
     </div>
   </div>`;
@@ -2128,13 +2129,14 @@ async function saveFilme(){
   const durMin = td.duracao_min || 0;
   const durStr = td.duracao_str || (durMin ? `${Math.floor(durMin/60)}h ${durMin%60}min` : '');
 
-  // Verificar duplicata
+  // Verificar duplicata (ano é TEXT no banco — compara como string, mesma regra de coalesce(ano,'') do índice único)
+  const anoStr = td.ano ? String(td.ano) : '';
   const duplicado = FILMES.find(f =>
     f.nome.trim().toLowerCase() === nomeFinal.toLowerCase() &&
-    (f.ano === anoInt || !anoInt)
+    (String(f.ano||'') === anoStr || !anoStr)
   );
   if(duplicado){
-    showToast('⚠️ "' + nomeFinal + '" já está cadastrado!');
+    showToast('⚠️ Esse filme já consta no catálogo.');
     return;
   }
 
@@ -2181,10 +2183,12 @@ async function saveFilme(){
     // Abrir modal de avaliação automaticamente
     setTimeout(() => openRate(data.id || newId), 300);
   }catch(e){
-    if(e.code === '23505'){
-      showToast('⚠️ Esse filme já está cadastrado.');
+    console.error('Erro ao salvar filme:', e);
+    const msgTxt = String(e?.message||'').toLowerCase();
+    if(e?.code === '23505' || msgTxt.includes('duplicate key') || msgTxt.includes('unique constraint')){
+      showToast('⚠️ Esse filme já consta no catálogo.');
     } else {
-      showToast('❌ Erro ao salvar: '+e.message);
+      showToast('❌ Não foi possível salvar o filme. Tente novamente.');
     }
   }finally{
     if(btn){btn.textContent='Salvar';btn.disabled=false;}
@@ -4607,7 +4611,7 @@ function updateTopbarAvatar(){
 
 function showToast(msg){
   const t = document.createElement('div');
-  t.style.cssText = 'position:fixed;bottom:80px;left:50%;transform:translateX(-50%);background:#181818;border:1px solid #333;color:#fff;font-size:13px;font-weight:600;padding:10px 20px;border-radius:30px;z-index:900;white-space:nowrap';
+  t.style.cssText = 'position:fixed;bottom:80px;left:50%;transform:translateX(-50%);background:#181818;border:1px solid #333;color:#fff;font-size:13px;font-weight:600;padding:10px 20px;border-radius:16px;z-index:900;max-width:min(90vw,420px);white-space:normal;text-align:center;word-break:break-word';
   t.textContent = msg;
   document.body.appendChild(t);
   setTimeout(()=>t.remove(), 2500);
