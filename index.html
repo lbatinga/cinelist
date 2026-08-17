@@ -4346,11 +4346,18 @@ function applyUserToUI(){
   if(!u) return;
   const av = document.getElementById('userAvatar');
   if(!av) return;
-  const color = p.color || aC(CU);
-  const name = p.apelido || u.nome;
-  av.style.background = color;
-  av.style.color = '#000';
-  av.textContent = ini(name);
+  if(p.photo) {
+    av.style.background = 'transparent';
+    av.style.padding = '0';
+    av.innerHTML = `<img src="${p.photo}" style="width:36px;height:36px;border-radius:50%;object-fit:cover">`;
+  } else {
+    const color = p.color || aC(CU);
+    const name = p.apelido || u.nome;
+    av.style.background = color;
+    av.style.color = '#000';
+    av.innerHTML = '';
+    av.textContent = ini(name);
+  }
 }
 
 // SAVE RATING TO SUPABASE
@@ -4510,7 +4517,7 @@ async function loadProfilesFromSupabase(){
     const { data, error } = await supa.from('perfis').select('*');
     if(error || !data) return;
     data.forEach(p => {
-      profileData[p.usuario_id] = {
+      profileData[p.legacy_id] = {
         apelido: p.apelido || '',
         bday: p.bday || '',
         favFilme: p.fav_filme || '',
@@ -4534,8 +4541,8 @@ async function saveProfiles(){
   if(!CU) return;
   const p = profileData[CU] || {};
   try {
-    await supa.from('perfis').upsert({
-      usuario_id: CU,
+    const { error } = await supa.from('perfis').upsert({
+      legacy_id: CU,
       apelido: p.apelido || null,
       bday: p.bday || null,
       fav_filme: p.favFilme || null,
@@ -4543,9 +4550,14 @@ async function saveProfiles(){
       avatar_color: p.color || null,
       avatar_url: p.photo || null,
       updated_at: new Date().toISOString()
-    }, { onConflict: 'usuario_id' });
+    }, { onConflict: 'legacy_id' });
+    if(error){
+      console.error('Erro ao salvar perfil no Supabase:', error);
+      showToast('❌ Não foi possível salvar o perfil. Tente novamente.');
+    }
   } catch(e) {
-    console.warn('Erro ao salvar perfil no Supabase:', e);
+    console.error('Erro ao salvar perfil no Supabase:', e);
+    showToast('❌ Não foi possível salvar o perfil. Tente novamente.');
   }
 }
 
@@ -4656,14 +4668,48 @@ async function savePassword(){
 function handlePhotoUpload(event) {
   const file = event.target.files[0];
   if(!file) return;
-  if(file.size > 500000) { showToast('⚠️ Foto muito grande! Use menos de 500KB.'); return; }
-  const reader = new FileReader();
-  reader.onload = function(e) {
-    const b64 = e.target.result;
-    document.getElementById('pmAvatarPreview').innerHTML = `<img src="${b64}" style="width:100%;height:100%;object-fit:cover">`;
-    document.getElementById('pmAvatarPreview')._photo = b64;
+  const prev = document.getElementById('pmAvatarPreview');
+  const prevHTML = prev.innerHTML;
+  prev.innerHTML = '<div style="font-size:11px;color:#888">Processando...</div>';
+
+  const objectUrl = URL.createObjectURL(file);
+  const img = new Image();
+  img.onload = function(){
+    URL.revokeObjectURL(objectUrl);
+    try {
+      const SIZE = 256;
+      const canvas = document.createElement('canvas');
+      canvas.width = SIZE;
+      canvas.height = SIZE;
+      const ctx = canvas.getContext('2d');
+      // Corta no centro pra manter proporção quadrada (exibida em círculo)
+      const side = Math.min(img.naturalWidth, img.naturalHeight);
+      const sx = (img.naturalWidth - side) / 2;
+      const sy = (img.naturalHeight - side) / 2;
+      ctx.drawImage(img, sx, sy, side, side, 0, 0, SIZE, SIZE);
+
+      // Reduz qualidade progressivamente até caber em ~100KB
+      let quality = 0.8;
+      let b64 = canvas.toDataURL('image/jpeg', quality);
+      while(b64.length > 100000 && quality > 0.3){
+        quality -= 0.1;
+        b64 = canvas.toDataURL('image/jpeg', quality);
+      }
+
+      prev.innerHTML = `<img src="${b64}" style="width:100%;height:100%;object-fit:cover">`;
+      prev._photo = b64;
+    } catch(e) {
+      console.error('Erro ao processar foto:', e);
+      prev.innerHTML = prevHTML;
+      showToast('❌ Não foi possível processar essa foto. Tente outra.');
+    }
   };
-  reader.readAsDataURL(file);
+  img.onerror = function(){
+    URL.revokeObjectURL(objectUrl);
+    prev.innerHTML = prevHTML;
+    showToast('❌ Não foi possível ler essa imagem. Tente outro formato.');
+  };
+  img.src = objectUrl;
 }
 
 function removePhoto() {
