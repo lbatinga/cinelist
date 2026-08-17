@@ -4444,11 +4444,18 @@ async function ativarNotificacoes() {
     if (token) {
       const email = currentSession?.user?.email || window.CU_EMAIL || '';
       if (email && window.supa) {
-        await window.supa.from('fcm_tokens').upsert({
+        const { error } = await window.supa.from('fcm_tokens').upsert({
           email, token, updated_at: new Date().toISOString()
         }, { onConflict: 'email' });
+        if(error){
+          console.error('Erro ao salvar token FCM:', error);
+          showToast('❌ Não foi possível ativar as notificações. Tente novamente.');
+        } else {
+          showToast('✅ Notificações ativadas!');
+        }
+      } else {
+        showToast('❌ Não foi possível ativar as notificações. Tente novamente.');
       }
-      showToast('✅ Notificações ativadas!');
     } else {
       showToast('⚠️ Permissão concedida, mas não foi possível registrar o dispositivo. Tente reabrir o app.');
     }
@@ -4475,10 +4482,11 @@ window.addEventListener('cinelist:login', async () => {
     if (token) {
       const email = currentSession?.user?.email || window.CU_EMAIL || '';
       if (email && window.supa) {
-        await window.supa.from('fcm_tokens').upsert({
+        const { error } = await window.supa.from('fcm_tokens').upsert({
           email, token, updated_at: new Date().toISOString()
         }, { onConflict: 'email' });
-        console.log('FCM token renovado automaticamente');
+        if(error) console.error('Erro ao renovar token FCM:', error);
+        else console.log('FCM token renovado automaticamente');
       }
     }
   } catch(e) {
