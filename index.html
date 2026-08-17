@@ -468,6 +468,7 @@ tr.selected td{background:rgba(229,9,20,.05)}
 }
 /* RTABS FADE */
 #maisInfoModal, #ondeModal { z-index: 900; }
+#editDataModal { z-index: 950; }
 
 .rtabs-wrap::after{content:'';position:absolute;right:0;top:0;bottom:2px;width:40px;background:linear-gradient(to right,transparent,var(--bg));pointer-events:none}
 
@@ -689,7 +690,7 @@ tr.selected td{background:rgba(229,9,20,.05)}
     </div>
     <div class="modal-actions">
       <button class="btn-cancel" onclick="closeModal('addModal')">Cancelar</button>
-      <button class="btn-save" onclick="saveFilme()">Salvar</button>
+      <button class="btn-save" id="saveFilmeBtn" onclick="saveFilme()">Salvar</button>
     </div>
   </div>
 </div>
@@ -1942,6 +1943,8 @@ function openAdd(){
   tmdbResult=null;
   tmdbCandidates=[];
   tmdbSelectedIdx=0;
+  const saveBtn=document.getElementById('saveFilmeBtn');
+  if(saveBtn) saveBtn.disabled=false;
   document.getElementById('addModal').classList.add('open');
 }
 
@@ -2017,6 +2020,15 @@ function renderTmdbCandidates(){
   const showNav=tmdbCandidates.length>1;
   const enriched=(tmdbResult && tmdbResult._tmdbId===c.tmdbId) ? tmdbResult : null;
 
+  // Candidato já cadastrado no app? (mesma regra de dedupe usada em saveFilme: nome+ano)
+  const cAno = parseInt(c.ano) || null;
+  const jaCadastrado = FILMES.some(f =>
+    f.nome.trim().toLowerCase() === c.titulo.trim().toLowerCase() &&
+    (f.ano === cAno || !cAno)
+  );
+  const saveBtn = document.getElementById('saveFilmeBtn');
+  if(saveBtn) saveBtn.disabled = jaCadastrado;
+
   let html='';
   if(showNav){
     const prevDisabled=tmdbSelectedIdx===0;
@@ -2032,10 +2044,11 @@ function renderTmdbCandidates(){
     ?`🎬 ${enriched.categorias.join(', ')||'—'}<br>⏱️ ${enriched.duracao_str||'—'} &nbsp;|&nbsp; 🔞 ${enriched.classificacao||'—'}`
     :'<span style="opacity:.6">Carregando detalhes...</span>';
 
-  html+=`<div class="tmdb-card">
+  html+=`<div class="tmdb-card"${jaCadastrado?' style="opacity:.55"':''}>
     ${c.poster?`<img class="tmdb-thumb" src="${esc(c.poster)}" alt="" onerror="this.style.display='none'">`:'<div class="tmdb-thumb-empty">🎬</div>'}
     <div class="tmdb-info">
       <div class="tmdb-title">${esc(c.titulo)}${c.ano?` (${c.ano})`:''}</div>
+      ${jaCadastrado?'<div style="color:#f5c518;font-size:11px;font-weight:700;margin:2px 0">✓ Já está no app — este filme já foi cadastrado</div>':''}
       <div class="tmdb-meta">${metaHTML}</div>
     </div>
   </div>`;
@@ -2168,7 +2181,11 @@ async function saveFilme(){
     // Abrir modal de avaliação automaticamente
     setTimeout(() => openRate(data.id || newId), 300);
   }catch(e){
-    showToast('❌ Erro ao salvar: '+e.message);
+    if(e.code === '23505'){
+      showToast('⚠️ Esse filme já está cadastrado.');
+    } else {
+      showToast('❌ Erro ao salvar: '+e.message);
+    }
   }finally{
     if(btn){btn.textContent='Salvar';btn.disabled=false;}
   }
@@ -4047,6 +4064,64 @@ async function loginGoogle(){ loginEmailSenha(); }
 
 async function loginMicrosoft(){ loginEmailSenha(); }
 
+async function signUpEmailSenha(){
+  const email = document.getElementById('signupEmail').value.trim();
+  const senha = document.getElementById('signupSenha').value;
+  const errEl = document.getElementById('signupError');
+  if(errEl) errEl.style.display = 'none';
+  if(!email || !senha) {
+    if(errEl){ errEl.textContent = 'Preencha e-mail e senha.'; errEl.style.display = 'block'; }
+    return;
+  }
+  if(senha.length < 8) {
+    if(errEl){ errEl.textContent = 'A senha precisa ter pelo menos 8 caracteres.'; errEl.style.display = 'block'; }
+    return;
+  }
+  const btn = document.querySelector('.auth-btn-signup');
+  if(btn){ btn.textContent = 'Criando conta...'; btn.disabled = true; }
+  const { data, error } = await supa.auth.signUp({ email, password: senha });
+  if(btn){ btn.textContent = 'Criar conta'; btn.disabled = false; }
+  if(error) {
+    if(errEl){ errEl.textContent = error.message; errEl.style.display = 'block'; }
+    return;
+  }
+  if(data.session){
+    await onLogin(data.session);
+  } else {
+    const box = document.getElementById('authBox');
+    if(box) box.innerHTML = `
+      <div style="text-align:center;padding:20px">
+        <div style="font-size:40px;margin-bottom:16px">📩</div>
+        <div style="color:#fff;font-size:14px;font-weight:700;margin-bottom:12px">Confirme seu e-mail</div>
+        <div style="color:#888;font-size:12px;margin-bottom:24px">Enviamos um link de confirmação para ${esc(email)}. Verifique sua caixa de entrada (e a caixa de spam) para ativar a conta.</div>
+        <button class="auth-btn auth-btn-ms" onclick="showAuthScreen()" style="width:auto;padding:10px 20px">← Voltar ao login</button>
+      </div>
+    `;
+  }
+}
+
+async function forgotPassword(){
+  const email = document.getElementById('loginEmail').value.trim();
+  const errEl = document.getElementById('authError');
+  if(errEl) errEl.style.display = 'none';
+  if(!email) {
+    if(errEl){ errEl.textContent = 'Digite seu e-mail no campo acima primeiro.'; errEl.style.display = 'block'; }
+    return;
+  }
+  const { error } = await supa.auth.resetPasswordForEmail(email);
+  if(error) {
+    if(errEl){ errEl.textContent = error.message; errEl.style.display = 'block'; }
+    return;
+  }
+  if(errEl){
+    errEl.style.color = '#46d369';
+    errEl.style.background = 'rgba(70,211,105,.12)';
+    errEl.style.borderColor = '#46d369';
+    errEl.textContent = 'Link de redefinição enviado para ' + email + '. Verifique também a caixa de spam.';
+    errEl.style.display = 'block';
+  }
+}
+
 async function logout(){
   await supa.auth.signOut();
   location.reload();
@@ -4099,16 +4174,17 @@ async function onLogin(session){
     }
 
     if(!usuario) {
-      showAuthError('E-mail não cadastrado: ' + email + '\nApenas membros cadastrados têm acesso.');
+      showAuthError('Sua conta foi criada, mas você ainda não faz parte da tropa. Peça ao Lucas para liberar seu acesso.');
       return;
     }
 
     supaProfile = usuario;
     CU = usuario.legacy_id;
-    if(!CU || !USERS[CU]) {
+    if(!CU) {
       showAuthError('Perfil não configurado para ' + email + '. Fale com o administrador.');
       return;
     }
+    if(!USERS[CU]) USERS[CU] = { nome: usuario.nome };
     history.replaceState({view:'home'}, '', window.location.pathname);
     hideAuthScreen();
     window.CU_EMAIL = email;
@@ -4169,7 +4245,43 @@ function showAuthScreen(){
     <button class="auth-btn auth-btn-google" onclick="loginEmailSenha()" style="justify-content:center;font-size:15px;font-weight:700">
       Entrar
     </button>
+    <div style="margin-top:14px;font-size:12px;color:#888">
+      <span onclick="forgotPassword()" style="cursor:pointer;text-decoration:underline">Esqueci minha senha</span>
+      &nbsp;·&nbsp;
+      <span onclick="showSignupScreen()" style="cursor:pointer;text-decoration:underline">Criar conta</span>
+    </div>
     <div class="auth-footer">Apenas membros cadastrados têm acesso.</div>
+  `;
+}
+
+function showSignupScreen(){
+  const authBox = document.getElementById('authBox');
+  if(!authBox) return;
+  authBox.innerHTML = `
+    <div class="auth-logo"><svg width="160" height="48" viewBox="0 0 160 48" xmlns="http://www.w3.org/2000/svg">
+  <rect x="2" y="20" width="36" height="26" rx="2" fill="none" stroke="#fff" stroke-width="1.6"/>
+  <line x1="8" y1="29" x2="33" y2="29" stroke="#fff" stroke-width="0.7" stroke-opacity="0.35"/>
+  <line x1="8" y1="36" x2="33" y2="36" stroke="#fff" stroke-width="0.7" stroke-opacity="0.35"/>
+  <g transform="rotate(-26, 2, 20)">
+    <rect x="2" y="11" width="36" height="10" rx="2" fill="#111" stroke="#fff" stroke-width="1.6"/>
+    <rect x="1"  y="11" width="5" height="10" fill="#fff" fill-opacity="0.72"/>
+    <rect x="10" y="11" width="5" height="10" fill="#fff" fill-opacity="0.72"/>
+    <rect x="19" y="11" width="5" height="10" fill="#fff" fill-opacity="0.72"/>
+    <rect x="28" y="11" width="5" height="10" fill="#fff" fill-opacity="0.72"/>
+  </g>
+  <circle cx="2" cy="20" r="2.2" fill="#fff" fill-opacity="0.55"/>
+  <text x="46" y="35" font-family="Georgia,serif" font-size="28" font-weight="400" fill="#fff" letter-spacing="0.4">Cine<tspan font-style="italic" fill="#ccc">List</tspan></text>
+</svg></div>
+    <div class="auth-tagline">Criar conta</div>
+    <div id="signupError" style="display:none;background:rgba(229,9,20,.15);border:1px solid var(--red);color:#ff6b6b;padding:10px 14px;border-radius:8px;font-size:13px;margin-bottom:12px;text-align:left"></div>
+    <input class="form-input" id="signupEmail" type="email" placeholder="Seu e-mail" style="margin-bottom:10px;display:block;width:100%;background:#2a2a2a;border:1px solid #333;color:#fff;padding:12px 14px;border-radius:8px;font-family:inherit;font-size:14px;outline:none">
+    <input class="form-input" id="signupSenha" type="password" placeholder="Senha (mín. 8 caracteres)" style="margin-bottom:16px;display:block;width:100%;background:#2a2a2a;border:1px solid #333;color:#fff;padding:12px 14px;border-radius:8px;font-family:inherit;font-size:14px;outline:none" onkeydown="if(event.key==='Enter')signUpEmailSenha()">
+    <button class="auth-btn auth-btn-google auth-btn-signup" onclick="signUpEmailSenha()" style="justify-content:center;font-size:15px;font-weight:700">
+      Criar conta
+    </button>
+    <div style="margin-top:14px;font-size:12px;color:#888">
+      <span onclick="showAuthScreen()" style="cursor:pointer;text-decoration:underline">← Voltar ao login</span>
+    </div>
   `;
 }
 
@@ -4960,7 +5072,6 @@ function renderAdminMembros(){
       <div style="display:flex;flex-direction:column;gap:10px">
         <input id="newMemberNome" class="pm-input" placeholder="Nome (ex: João)">
         <input id="newMemberEmail" class="pm-input" type="email" placeholder="E-mail">
-        <input id="newMemberSenha" class="pm-input" type="password" placeholder="Senha inicial">
         <input id="newMemberLegacy" class="pm-input" placeholder="Legacy ID (ex: USER-010)">
         <button onclick="addNewMember()" style="background:var(--green);color:#000;border:none;border-radius:8px;padding:10px;font-family:inherit;font-size:14px;font-weight:800;cursor:pointer">Criar membro</button>
       </div>
@@ -4972,66 +5083,38 @@ function renderAdminMembros(){
 async function addNewMember(){
   const nome = document.getElementById('newMemberNome').value.trim();
   const email = document.getElementById('newMemberEmail').value.trim().toLowerCase();
-  const senha = document.getElementById('newMemberSenha').value;
   const legacy = document.getElementById('newMemberLegacy').value.trim();
   const msg = document.getElementById('newMemberMsg');
 
   if(!nome||!email){ msg.style.color='#e05555'; msg.textContent='⚠️ Preencha todos os campos.'; return; }
-  if(senha && senha.length < 6){ msg.style.color='#e05555'; msg.textContent='⚠️ A senha precisa ter pelo menos 6 caracteres.'; return; }
   if(legacy && !/^USER-\d{3}$/.test(legacy)){ msg.style.color='#e05555'; msg.textContent='⚠️ Legacy ID deve estar no formato USER-XXX (ex: USER-011).'; return; }
   if(legacy && USERS[legacy]){ msg.style.color='#e05555'; msg.textContent='⚠️ Esse Legacy ID já existe.'; return; }
   if(Object.values(USERS).some(u=>u.nome.toLowerCase()===nome.toLowerCase())){ msg.style.color='#e05555'; msg.textContent='⚠️ Já existe um membro com esse nome.'; return; }
 
   try {
-    if(senha){
-      msg.style.color='#888'; msg.textContent='⏳ Criando via Apps Script...';
+    msg.style.color='#888'; msg.textContent='⏳ Cadastrando...';
 
-      // Chama o Apps Script (que usa a service_role key guardada em Script Properties).
-      // Importante: SEM mode:'no-cors' aqui — precisamos ler a resposta JSON.
-      const params = new URLSearchParams({
-        acao: 'criarUsuario',
-        nome, email, senha, legacy_id: legacy
-      });
-      const resp = await fetch(APPS_SCRIPT_URL + '?' + params.toString(), { method: 'GET' });
-      if(!resp.ok) throw new Error('HTTP ' + resp.status);
-      const data = await resp.json();
-      if(!data.ok) throw new Error(data.error || 'Falha desconhecida');
+    // Não cria conta de autenticação, só grava o registro em usuarios.
+    // legacy_id omitido quando vazio pra deixar o gatilho gerar o próximo USER-NNN.
+    const payload = { nome, email };
+    if(legacy) payload.legacy_id = legacy;
+    const { data, error } = await supa.from('usuarios').insert([payload]).select().single();
+    if(error) throw error;
 
-      msg.style.color='#46d369';
-      msg.textContent=`✅ Membro "${nome}" criado com sucesso!`;
+    const novoLegacy = data.legacy_id;
+    msg.style.color='#46d369';
+    msg.textContent=`✅ Membro "${nome}" cadastrado! Ele deve criar a própria conta no app usando o e-mail ${email} — o vínculo é automático.`;
 
-      // Atualiza localmente
-      USERS[legacy] = { nome };
-      STATS[legacy] = { nome, in_ranking:true, quant:0, media:null, pendentes:[], nao_quer:[], inseridos:[], by_year:{}, by_genre:{}, genre_avg:{} };
-      RAW.usuarios[legacy] = { nome };
-      RAW.users_stats[legacy] = STATS[legacy];
-      buildUD();
-    } else {
-      msg.style.color='#888'; msg.textContent='⏳ Cadastrando...';
-
-      // Sem senha: não cria conta de autenticação, só grava o registro em usuarios.
-      // legacy_id omitido quando vazio pra deixar o gatilho gerar o próximo USER-NNN.
-      const payload = { nome, email };
-      if(legacy) payload.legacy_id = legacy;
-      const { data, error } = await supa.from('usuarios').insert([payload]).select().single();
-      if(error) throw error;
-
-      const novoLegacy = data.legacy_id;
-      msg.style.color='#46d369';
-      msg.textContent=`✅ Membro "${nome}" cadastrado! Ele deve criar a própria conta no app usando o e-mail ${email} — o vínculo é automático.`;
-
-      // Atualiza localmente
-      USERS[novoLegacy] = { nome };
-      STATS[novoLegacy] = { nome, in_ranking:true, quant:0, media:null, pendentes:[], nao_quer:[], inseridos:[], by_year:{}, by_genre:{}, genre_avg:{} };
-      RAW.usuarios[novoLegacy] = { nome };
-      RAW.users_stats[novoLegacy] = STATS[novoLegacy];
-      buildUD();
-    }
+    // Atualiza localmente
+    USERS[novoLegacy] = { nome };
+    STATS[novoLegacy] = { nome, in_ranking:true, quant:0, media:null, pendentes:[], nao_quer:[], inseridos:[], by_year:{}, by_genre:{}, genre_avg:{} };
+    RAW.usuarios[novoLegacy] = { nome };
+    RAW.users_stats[novoLegacy] = STATS[novoLegacy];
+    buildUD();
 
     // Limpa formulário
     document.getElementById('newMemberNome').value = '';
     document.getElementById('newMemberEmail').value = '';
-    document.getElementById('newMemberSenha').value = '';
     document.getElementById('newMemberLegacy').value = '';
 
     // Re-renderiza a lista pra mostrar o novo membro
