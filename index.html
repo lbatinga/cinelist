@@ -1091,16 +1091,6 @@ const USERS = RAW.usuarios;
 const STATS = RAW.users_stats;
 
 // ── ANIVERSÁRIOS ──
-// Mapa por nome do usuário → data no formato YYYY-MM-DD (ano opcional: 0000 se não souber)
-const BDAYS_HARDCODED = {
-  'Lucas':      '1994-04-20',
-  'Lidiane':    '1994-09-03',
-  'Jhefferson': '1994-02-20',
-  'Catharine':  '0000-05-06',
-  'Mauricio':   '0000-05-14',
-  'Pedro':      '1999-06-29',
-  'Victória':   '0000-01-26',
-};
 // Datas especiais fora do grupo (lembrete só local, sem push pro grupo)
 const BDAYS_ESPECIAIS = [
   { nome: 'Amélia', bday: '2020-05-05', emoji: '👶' },
@@ -4637,6 +4627,7 @@ function openProfile(){
   const p = getProfile(CU);
   document.getElementById('pmApelido').value = p.apelido || '';
   document.getElementById('pmBday').value = p.bday || '';
+  document.getElementById('pmBdayNoYear').checked = (p.bday||'').split('-')[0] === '1900';
   document.getElementById('pmFavFilme').value = p.favFilme || '';
   document.getElementById('pmBio').value = p.bio || '';
   const cp = document.getElementById('colorPicker');
@@ -4654,14 +4645,28 @@ function updateAvatarPreviewColor(color) {
 
 function closeProfile(){ document.getElementById('profileModal').classList.remove('open'); }
 
+function toggleBdayNoYear(){
+  const chk = document.getElementById('pmBdayNoYear');
+  const inp = document.getElementById('pmBday');
+  if(chk.checked){
+    const bp = (inp.value || '1900-01-01').split('-');
+    inp.value = `1900-${bp[1]||'01'}-${bp[2]||'01'}`;
+  }
+}
+
 function saveProfile(){
   if(!CU) return;
   const color = document.querySelector('.color-opt.selected')?.style.background || aC(CU);
   const prev = document.getElementById('pmAvatarPreview');
   const photo = prev?._photo || profileData[CU]?.photo || null;
+  let bday = document.getElementById('pmBday').value;
+  if(bday && document.getElementById('pmBdayNoYear').checked){
+    const bp = bday.split('-');
+    bday = `1900-${bp[1]}-${bp[2]}`;
+  }
   profileData[CU] = {
     apelido: document.getElementById('pmApelido').value.trim(),
-    bday: document.getElementById('pmBday').value,
+    bday,
     favFilme: document.getElementById('pmFavFilme').value.trim(),
     bio: document.getElementById('pmBio').value.trim(),
     color, photo
@@ -4821,30 +4826,18 @@ function checkBirthdays(){
     localStorage.setItem(todayKey, '1');
 
     const aniversariantes = []; // membros do grupo
-    const nomesChecked = new Set();
 
-    // 1. profileData (bday salvo pelo próprio usuário)
+    // 1. profileData (bday salvo em perfis, via Supabase)
     Object.entries(profileData || {}).forEach(([uid, p]) => {
       if(!p.bday) return;
       const parts = p.bday.split('-');
       if(parts.length < 3) return;
       if(parts[1] !== mm || parts[2] !== dd) return;
-      const realNome = USERS[uid]?.nome || uid;
-      nomesChecked.add(realNome);
-      aniversariantes.push({ nome: displayName(uid), realNome, uid, isSelf: uid === CU });
+      const ano = parseInt(parts[0]);
+      aniversariantes.push({ nome: displayName(uid), uid, ano, isSelf: uid === CU });
     });
 
-    // 2. BDAYS_HARDCODED (fallback para quem não salvou no perfil)
-    Object.entries(USERS || {}).forEach(([uid, u]) => {
-      const hb = BDAYS_HARDCODED[u.nome];
-      if(!hb || nomesChecked.has(u.nome)) return;
-      const parts = hb.split('-');
-      if(parts.length < 3) return;
-      if(parts[1] !== mm || parts[2] !== dd) return;
-      aniversariantes.push({ nome: displayName(uid), realNome: u.nome, uid, isSelf: uid === CU });
-    });
-
-    // 3. Datas especiais (só toast local, sem push pro grupo)
+    // 2. Datas especiais (só toast local, sem push pro grupo)
     BDAYS_ESPECIAIS.forEach(e => {
       const parts = e.bday.split('-');
       if(parts.length < 3) return;
@@ -4862,9 +4855,7 @@ function checkBirthdays(){
         showToast(`🎉 Feliz aniversário, ${b.nome}!`);
       } else {
         const hoje = new Date();
-        const hb = profileData[b.uid]?.bday || BDAYS_HARDCODED[b.realNome] || '';
-        const ano = parseInt(hb.split('-')[0]);
-        const idade = ano > 0 ? ` (${hoje.getFullYear() - ano} anos)` : '';
+        const idade = (b.ano > 0 && b.ano !== 1900) ? ` (${hoje.getFullYear() - b.ano} anos)` : '';
         showToast(`🎂 Hoje é aniversário de ${b.nome}${idade}!`);
       }
     });
@@ -6105,6 +6096,9 @@ function closePosterLightbox(){
       <div class="pm-field">
         <label class="pm-label">🎂 Data de Aniversário</label>
         <input class="pm-input" id="pmBday" type="date">
+        <label style="display:flex;align-items:center;gap:6px;margin-top:6px;font-size:12px;color:var(--muted);cursor:pointer">
+          <input type="checkbox" id="pmBdayNoYear" onchange="toggleBdayNoYear()"> Não sei o ano de nascimento
+        </label>
       </div>
       <div class="pm-field">
         <label class="pm-label">🎬 Filme favorito</label>
