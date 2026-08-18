@@ -1887,6 +1887,30 @@ async function saveRating(){
 
     closeModal('rateModal');
     render();
+
+    // Re-renderiza o painel de detalhes na view ativa + mobile modal (se aberto)
+    try {
+      const active = document.querySelector('.view.active');
+      const activeId = active?.id;
+      if(activeId === 'viewFilmes'){
+        const p = document.getElementById('filmDetailPanel');
+        if(p) p.innerHTML = filmDetailHTML(rateFilmeId);
+      } else if(activeId === 'viewPendentes'){
+        const p = document.getElementById('pendDetailPanel');
+        if(p) p.innerHTML = filmDetailHTML(rateFilmeId);
+      } else if(activeId === 'viewAvaliacoes'){
+        const p = document.getElementById('avDetailPanel');
+        if(p) p.innerHTML = filmDetailHTML(rateFilmeId);
+      } else if(activeId === 'viewRecentes'){
+        const p = document.getElementById('recentDetailPanel');
+        if(p) p.innerHTML = filmDetailHTML(rateFilmeId);
+      }
+      if(window._currentMobileFilmeId === rateFilmeId){
+        const mc = document.getElementById('mfmContent');
+        if(mc) mc.innerHTML = filmDetailHTML(rateFilmeId);
+      }
+    } catch(e){ console.warn('Re-render parcial falhou:', e); }
+
     haptic(isNao ? [10,40,10] : [15]);
     showToast(isNao ? '✅ Marcado como "Não quero assistir"' : `✅ Nota ${fmt(nota)} salva!`);
   }catch(e){
@@ -1925,6 +1949,30 @@ async function mudarDeOpiniao(filmeId){
     }
 
     render();
+
+    // Re-renderiza o painel de detalhes na view ativa + mobile modal (se aberto)
+    try {
+      const active = document.querySelector('.view.active');
+      const activeId = active?.id;
+      if(activeId === 'viewFilmes'){
+        const p = document.getElementById('filmDetailPanel');
+        if(p) p.innerHTML = filmDetailHTML(filmeId);
+      } else if(activeId === 'viewPendentes'){
+        const p = document.getElementById('pendDetailPanel');
+        if(p) p.innerHTML = filmDetailHTML(filmeId);
+      } else if(activeId === 'viewAvaliacoes'){
+        const p = document.getElementById('avDetailPanel');
+        if(p) p.innerHTML = filmDetailHTML(filmeId);
+      } else if(activeId === 'viewRecentes'){
+        const p = document.getElementById('recentDetailPanel');
+        if(p) p.innerHTML = filmDetailHTML(filmeId);
+      }
+      if(window._currentMobileFilmeId === filmeId){
+        const mc = document.getElementById('mfmContent');
+        if(mc) mc.innerHTML = filmDetailHTML(filmeId);
+      }
+    } catch(e){ console.warn('Re-render parcial falhou:', e); }
+
     showToast('✅ Filme movido para pendentes!');
   }catch(e){
     showToast('❌ Erro: '+e.message);
@@ -2173,9 +2221,15 @@ async function saveFilme(){
     RAW.filmes.unshift(f);
     RECENT_IDS = getRecentIds();
     RAW.recent_ids = RECENT_IDS;
-    
+
+    // Filme novo é pendente pra quem ainda não avaliou (o próprio CU incluso)
+    if(CU && STATS[CU]){
+      if(!STATS[CU].pendentes) STATS[CU].pendentes=[];
+      STATS[CU].pendentes.push(f.id);
+    }
+
     closeModal('addModal');
-    renderHome();
+    render();
     showToast(`✅ "${nomeFinal}" adicionado! Avalie agora 👇`);
     // Disparar notificação push para todos
     const nomeUsuario = USERS[CU]?.nome || 'Alguém';
@@ -4614,6 +4668,8 @@ function saveProfile(){
   };
   saveProfiles();
   updateTopbarAvatar();
+  buildUD();
+  render();
   closeProfile();
   showToast('✅ Perfil salvo!');
 }
