@@ -1165,6 +1165,12 @@ const nC = n=>{
   return '#c0392b';             // vermelho escuro — ruim
 };
 const fmt = n=>n!=null?n.toFixed(2).replace('.',','):'—';
+// Data local (YYYY-MM-DD) do dispositivo — ao contrário de toISOString(), não converte pra UTC
+// (evita virar o dia errado à noite em fusos negativos, tipo Brasil)
+function localDateStr(d){
+  d = d || new Date();
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+}
 const INACTIVE_MONTHS = 2;
 function monthsSince(dateStr){
   if(!dateStr) return 999;
@@ -1808,7 +1814,7 @@ function openRate(id){
     const p = existing.data.split('/');
     if(p.length===3) dateVal = `${p[2]}-${p[1].padStart(2,'0')}-${p[0].padStart(2,'0')}`;
   }
-  if(!dateVal){ const today=new Date(); dateVal=today.toISOString().split('T')[0]; }
+  if(!dateVal){ dateVal=localDateStr(); }
   document.getElementById('rateData').value=dateVal;
   document.getElementById('rateComent').value=existing?.comentario||'';
   document.getElementById('rateModal').classList.add('open');
@@ -1832,7 +1838,7 @@ function setVai(v){
 async function saveRating(){
   const isNao = vaiVal === 'Não';
   const nota = isNao ? null : parseFloat(document.getElementById('notaInput').value);
-  const data = isNao ? new Date().toISOString().split('T')[0] : document.getElementById('rateData').value;
+  const data = isNao ? localDateStr() : document.getElementById('rateData').value;
   const coment = isNao ? '' : document.getElementById('rateComent').value.trim();
   if(!isNao && !data){showToast('⚠️ Preencha a data de avaliação!');return;}
   if(!isNao && (nota<0||nota>10)){showToast('⚠️ Nota deve ser entre 0 e 10');return;}
@@ -5167,7 +5173,7 @@ function openEditDataAdmin(filmeId, uid){
     const p = av.data.split('/');
     if(p.length === 3) dateVal = `${p[2]}-${p[1].padStart(2,'0')}-${p[0].padStart(2,'0')}`;
   }
-  if(!dateVal){ dateVal = new Date().toISOString().split('T')[0]; }
+  if(!dateVal){ dateVal = localDateStr(); }
   document.getElementById('editDataInput').value = dateVal;
   document.getElementById('editDataMsg').textContent = '';
 
@@ -5828,7 +5834,7 @@ window._migrarNaoQuer = async function(lista){
   btn.disabled = true;
   btn.style.opacity = '.5';
 
-  const hoje = new Date().toISOString().split('T')[0];
+  const hoje = localDateStr();
   let ok = 0, erro = 0;
 
   // Upsert em lotes de 50
