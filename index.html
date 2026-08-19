@@ -3038,6 +3038,20 @@ function userDetailHTML(uid, opts){
       <span style="font-size:11px;font-weight:700;padding:5px 12px;border-radius:20px;background:${statusBg};color:${statusColor};flex-shrink:0">${statusLabel}</span>
     </div>
 
+    <!-- FILME FAVORITO -->
+    ${(() => {
+      const favF = p.favFilme ? FM[p.favFilme] : null;
+      if(!favF) return '';
+      return `
+      <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:14px;margin-bottom:20px;display:flex;align-items:center;gap:12px;cursor:pointer" onclick="openFilme('${favF.id}')">
+        ${favF.poster?`<img src="${esc(favF.poster)}" style="width:44px;height:66px;object-fit:cover;border-radius:6px;flex-shrink:0">`:'<div style="width:44px;height:66px;background:var(--surface2);border-radius:6px;flex-shrink:0"></div>'}
+        <div style="flex:1;min-width:0">
+          <div style="font-size:10px;color:var(--muted2);text-transform:uppercase;letter-spacing:.3px;margin-bottom:2px">🎬 Filme favorito</div>
+          <div style="font-size:14px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(favF.nome)}${favF.ano?` (${favF.ano})`:''}</div>
+        </div>
+      </div>`;
+    })()}
+
     <!-- COMPATIBILIDADE COM A TROPA -->
     ${(() => {
       const outros = Object.keys(USERS).filter(u => u !== uid && u !== 'USER-001' && USERS[u]);
@@ -4628,7 +4642,11 @@ function openProfile(){
   document.getElementById('pmApelido').value = p.apelido || '';
   document.getElementById('pmBday').value = p.bday || '';
   document.getElementById('pmBdayNoYear').checked = (p.bday||'').split('-')[0] === '1900';
-  document.getElementById('pmFavFilme').value = p.favFilme || '';
+  pmFavFilmeId = (p.favFilme && FM[p.favFilme]) ? p.favFilme : null;
+  document.getElementById('pmFavFilmeSearch').value = '';
+  document.getElementById('pmFavFilmeResults').style.display = 'none';
+  document.getElementById('pmFavFilmeResults').innerHTML = '';
+  renderFavFilmeSelected();
   document.getElementById('pmBio').value = p.bio || '';
   const cp = document.getElementById('colorPicker');
   const cur = p.color || aC(CU);
@@ -4654,6 +4672,63 @@ function toggleBdayNoYear(){
   }
 }
 
+// ── Filme favorito: autocomplete sobre o catálogo local (FILMES) ──
+var pmFavFilmeId = null;
+
+function onFavFilmeSearchInput(){
+  const q = document.getElementById('pmFavFilmeSearch').value.trim().toLowerCase();
+  const results = document.getElementById('pmFavFilmeResults');
+  if(q.length < 2){ results.style.display='none'; results.innerHTML=''; return; }
+  const matches = FILMES.filter(f => f.nome.toLowerCase().includes(q)).slice(0,8);
+  if(!matches.length){
+    results.innerHTML = `<div style="padding:10px;font-size:12px;color:#888">Nenhum filme encontrado</div>`;
+    results.style.display = 'block';
+    return;
+  }
+  results.innerHTML = matches.map(f => `
+    <div onclick="selectFavFilme('${f.id}')" style="display:flex;align-items:center;gap:8px;padding:8px 10px;cursor:pointer;border-bottom:1px solid #2a2a2a" onmouseover="this.style.background='#2a2a2a'" onmouseout="this.style.background='transparent'">
+      ${f.poster?`<img src="${esc(f.poster)}" style="width:28px;height:42px;object-fit:cover;border-radius:3px;flex-shrink:0">`:'<div style="width:28px;height:42px;background:#333;border-radius:3px;flex-shrink:0"></div>'}
+      <div style="font-size:13px;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(f.nome)}${f.ano?` (${f.ano})`:''}</div>
+    </div>`).join('');
+  results.style.display = 'block';
+}
+
+function selectFavFilme(id){
+  pmFavFilmeId = id;
+  document.getElementById('pmFavFilmeSearch').value = '';
+  document.getElementById('pmFavFilmeResults').style.display = 'none';
+  document.getElementById('pmFavFilmeResults').innerHTML = '';
+  renderFavFilmeSelected();
+}
+
+function clearFavFilme(){
+  pmFavFilmeId = null;
+  renderFavFilmeSelected();
+}
+
+function renderFavFilmeSelected(){
+  const el = document.getElementById('pmFavFilmeSelected');
+  const f = pmFavFilmeId ? FM[pmFavFilmeId] : null;
+  if(!f){
+    el.style.display = 'none';
+    el.innerHTML = '';
+    return;
+  }
+  el.style.display = 'flex';
+  el.innerHTML = `
+    ${f.poster?`<img src="${esc(f.poster)}" style="width:32px;height:48px;object-fit:cover;border-radius:4px;flex-shrink:0">`:'<div style="width:32px;height:48px;background:#333;border-radius:4px;flex-shrink:0"></div>'}
+    <div style="flex:1;font-size:13px;font-weight:600;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(f.nome)}</div>
+    <button type="button" onclick="clearFavFilme()" style="background:transparent;border:none;color:#888;cursor:pointer;font-size:16px;padding:2px 6px">✕</button>
+  `;
+}
+
+document.addEventListener('click', e => {
+  if(!e.target.closest('#pmFavFilmeSearch') && !e.target.closest('#pmFavFilmeResults')){
+    const r = document.getElementById('pmFavFilmeResults');
+    if(r) r.style.display = 'none';
+  }
+});
+
 function saveProfile(){
   if(!CU) return;
   const color = document.querySelector('.color-opt.selected')?.style.background || aC(CU);
@@ -4667,7 +4742,7 @@ function saveProfile(){
   profileData[CU] = {
     apelido: document.getElementById('pmApelido').value.trim(),
     bday,
-    favFilme: document.getElementById('pmFavFilme').value.trim(),
+    favFilme: pmFavFilmeId || '',
     bio: document.getElementById('pmBio').value.trim(),
     color, photo
   };
@@ -6102,7 +6177,11 @@ function closePosterLightbox(){
       </div>
       <div class="pm-field">
         <label class="pm-label">🎬 Filme favorito</label>
-        <input class="pm-input" id="pmFavFilme" placeholder="Fora do catálogo...">
+        <div style="position:relative">
+          <input class="pm-input" id="pmFavFilmeSearch" placeholder="Buscar filme no catálogo..." autocomplete="off" oninput="onFavFilmeSearchInput()" onfocus="onFavFilmeSearchInput()">
+          <div id="pmFavFilmeResults" style="display:none;position:absolute;left:0;right:0;top:100%;margin-top:4px;background:#242424;border:1px solid #333;border-radius:8px;max-height:240px;overflow-y:auto;z-index:20"></div>
+        </div>
+        <div id="pmFavFilmeSelected" style="display:none;align-items:center;gap:10px;margin-top:8px;background:#2a2a2a;border-radius:8px;padding:8px 10px"></div>
       </div>
       <div class="pm-field">
         <label class="pm-label">📝 Bio</label>
