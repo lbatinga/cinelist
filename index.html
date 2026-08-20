@@ -979,8 +979,14 @@ function calcUserStats(){
   FILMES.forEach(f => f.categorias.forEach(g => { gs.genre_counts[g] = (gs.genre_counts[g]||0) + 1; }));
   gs.top_genre = Object.entries(gs.genre_counts).sort((a,b)=>b[1]-a[1])[0]?.[0] || 'Ação';
 
-  // ── Anos e gêneros disponíveis (ao vivo, a partir do catálogo — não mais do STATIC) ──
-  RAW.anos = [...new Set(FILMES.map(f => f.ano).filter(Boolean).map(String))].sort((a,b) => b - a);
+  // ── Anos e gêneros disponíveis (ao vivo — não mais do STATIC) ──
+  // Anos vêm da data_avaliacao (mesma fonte de by_year), não do ano de lançamento do filme
+  RAW.anos = [...new Set(
+    FILMES.flatMap(f => Object.values(f.avaliacoes || {})
+      .filter(av => av.nota !== null && av.data)
+      .map(av => av.data.split('/')[2])
+    )
+  )].sort((a,b) => b - a);
   RAW.all_genres = Object.keys(gs.genre_counts).sort((a,b) => a.localeCompare(b, 'pt-BR'));
 
   // Total tempo de catálogo
