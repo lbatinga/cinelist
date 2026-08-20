@@ -8,6 +8,14 @@ CineList is a collaborative movie-tracking PWA for a closed group of friends (Ne
 
 Backend is Supabase (Postgres + Auth), project ref `iznikddtdwfvkkwqtwxg` (i.e. `https://iznikddtdwfvkkwqtwxg.supabase.co`, matching `SUPA_URL2` in `index.html`). Hosting is GitHub Pages, deployed by pushing to `main` (auto-publishes; Fastly CDN in front has a ~10 min edge cache, so a just-pushed change may take a few minutes to show up live — verify with a cache-busted `curl` if it matters, not by re-pushing).
 
+## Status (2026-08-20)
+
+Mid-way through a multi-phase plan to add achievement trilhas ("Conquistas") and a v2 compatibility formula ("Afinidades"). The full phase-by-phase prompt lives outside this repo — the user brings it into each session, it isn't checked in here.
+
+- **Fase 2 is closed**: the `conquistas` table exists and is backfilled (tag `v1`, the promoted/permanent one — 196 rows, 12 usuários, 10 trilhas, 65 rows with `precisao='indeterminada'`). See the Conquistas section below for the schema and rules.
+- **No screen in `index.html` reads from `conquistas` yet** — it's backend-only until Fase 5 (UI das conquistas).
+- **Next up: Fase 3** — a base comparison against the group average, which will feed both the new compatibility formula and four new especiais (Defensor, Estraga-Prazeres, Termômetro, Voz Dissonante). Not started.
+
 ## Commands
 
 There is no build/lint/test tooling — edit `index.html` directly.
@@ -42,15 +50,37 @@ No framework — every view is a function that builds an HTML string and assigns
 
 Always build "today" as a local calendar date with `localDateStr(d)`, never `new Date().toISOString().split('T')[0]` — `toISOString()` is UTC and rolls over to the next day in the evening in Brazil (UTC-3), which previously caused `avaliacoes.data_avaliacao` to be off by one day. `toISOString()`/`Date.now()`-style values are still correct for genuine instants (`created_at`/`updated_at` timestamp columns, backup export filenames) — the distinction is calendar-date-as-seen-by-a-human vs. absolute-instant.
 
-### Supabase schema (four tables + push tokens)
+### Supabase schema (five tables + push tokens)
 
 | Table | Key | Notes |
 |---|---|---|
 | `usuarios` | `legacy_id` (text PK, e.g. `USER-003`) | Membership list. SELECT requires an authenticated session (anon key alone returns nothing). `in_ranking` (bool) controls ranking inclusion. A DB trigger auto-generates the next sequential `legacy_id` (`USER-NNN`) when a new row is inserted with that field left empty — the admin "criar membro" flow relies on this and only sends `legacy_id` explicitly when overriding it. A separate DB trigger links a Supabase Auth account to a row here by matching email, in either direction (account created before or after the row). |
 | `perfis` | `legacy_id` (text PK, FK → `usuarios.legacy_id`) | Optional per-user profile: `apelido`, `bio`, `bday` (date; unknown year is stored as `1900`, not `0000` — Postgres doesn't accept year 0), `fav_filme` (stores a `filmes.id`, not a name — resolve via the in-memory `FM` map and treat a missing/stale id as "no favorite" rather than erroring), `fav_genre`, `avatar_color`, `avatar_url` (a data: URI — photos are resized client-side to 256×256 JPEG before upload). SELECT is open to anyone; write is restricted to the owning row. |
-| `filmes` | `id` (text/uuid, mixed formats) | `id` has two historical formats — `FILME-0211`-style strings from an old migration and UUIDs for everything added since — never assume one or the other. Unique on `(lower(btrim(nome)), coalesce(ano,''))`; a duplicate insert raises Postgres error `23505`, which the UI should catch and show a friendly message for, never the raw driver error. `ano` is `text`, not an integer — compare it as a string (or normalize both sides) rather than `parseInt`ing one side only. |
-| `avaliacoes` | `(filme_id, usuario_id)` composite | One row per user per film they've rated *or* marked "não quero assistir" (`nota IS NULL` + `vai_assistir='Não'` is the marker for the latter — there's no separate table for it). Writes are `upsert`s with `onConflict: 'filme_id,usuario_id'`. |
+| `filmes` | `id` (text/uuid, mixed formats) | `id` has two historical formats — `FILME-0211`-style strings from an old migration and UUIDs for everything added since — never assume one or the other. Unique on `(lower(btrim(nome)), coalesce(ano,''))`; a duplicate insert raises Postgres error `23505`, which the UI should catch and show a friendly message for, never the raw driver error. `ano` is `text`, not an integer — compare it as a string (or normalize both sides) rather than `parseInt`ing one side only. `tmdb_id` (int, unique partial index — allows null) is populated on insert from the TMDB search step; ~841/842 films have it, the one holdout being a non-standard "saga completa" catalog entry. |
+| `avaliacoes` | `(filme_id, usuario_id)` composite | One row per user per film they've rated *or* marked "não quero assistir" (`nota IS NULL` + `vai_assistir='Não'` is the marker for the latter — there's no separate table for it). Writes are `upsert`s with `onConflict: 'filme_id,usuario_id'`. `data_avaliacao` (text) has three live formats — empty string, ISO `YYYY-MM-DD`, and BR `DD/MM/YYYY` — never compare/sort it as a raw string; normalize first. ~1,293 rows have `nota` set but empty `data_avaliacao`, all inserted at the single instant `2026-04-05 03:13:39` (an AppSheet migration) — these are real ratings that lost their date, not "old" data (dated rows go back to 2023), so the UI must say "data não registrada", never guess a date or era for them. |
+| `conquistas` | `(usuario_id, trilha, tier)` composite unique, `id` bigserial PK | One row per achievement tier a member has crossed — see the Conquistas section below. SELECT is open to everyone; there is no insert/update/delete policy, so only the Supabase service role can write (RLS blocks anon/authenticated by default). |
 | `fcm_tokens` | `email` | Push notification device tokens; unrelated to `usuarios.legacy_id`, keyed by email directly. |
+
+### Conquistas (achievement trilhas)
+
+`conquistas` records, once and permanently, the moment each member crosses each tier of an achievement trilha (Volume, Curadoria, Pioneirismo, Maratona Mensal, Tempo na Tela, Diversidade de Gêneros, Viajante do Tempo, Filmes Longos, Consistência, Influência). It's populated by replaying `avaliacoes`/`filmes` chronologically per user — not something `index.html` does; there is no client-side "conquistas" computation, unlike the rest of `RAW.*`.
+
+**Selo nunca revogado**: once a `(usuario_id, trilha, tier)` row exists, no normal run ever updates or deletes it — every insert (backfill or incremental) uses `on conflict (usuario_id, trilha, tier) do nothing`. This holds for every trilha, not just the obviously volatile ones — Pioneirismo can lose its underlying condition the moment someone else rates a "solo" film, and a duplicate-film merge can retroactively lower any counter, but the achievement date/precision already on record must never change.
+
+**Correction model**: because of the above, deleting rows and re-running is only safe while a `versao_backfill` tag is still a test tag (see below). Once a tag is promoted, fixing bad data is an incremental replay — the same insert, same `on conflict do nothing` — never `delete` + re-run, since a delete would let the next run silently mint a *different* date for an achievement someone already experienced.
+
+**`versao_backfill`**: a free-text tag stamped on every row by whichever run inserted it, so one execution can be identified and, while still under test, wiped with `delete from conquistas where versao_backfill = '<tag>'`. The current promoted tag is `v1`.
+
+**`precisao='indeterminada'`** (with `data=null`) marks a tier crossed while replaying the ~1,293-row undated migration batch in `avaliacoes` (see the schema table above). Only Volume, Tempo na Tela, Diversidade, Viajante do Tempo and Filmes Longos can land there. Maratona Mensal and Consistência already exclude undated rows from their own counters entirely (an unrelated, older decision — see the "avaliações sem data" warnings surfaced in the Conquistas/Ranking UI); Curadoria always has a `created_at` fallback so it's never indeterminate; Pioneirismo and Influência depend on *other* members' dated activity so they essentially never land in the undated block either.
+
+**Degraus infinitos (trilhas sem teto)**: Volume, Curadoria, Pioneirismo, Maratona Mensal, Tempo na Tela, Filmes Longos, Consistência and Influência have no ceiling — past the last named tier, more are generated up to 12 total per trilha (named + synthetic) using
+
+```
+passo   = max(5, 5 * 10^(dígitos(limiar) - 2))
+próximo = ceil(limiar * 1.3 / passo) * passo
+```
+
+(`dígitos(x)` = number of digits in `floor(x)` — this proportional step, not a flat `/25`, is what keeps the ladder sane at both small scale, e.g. Consistência's 24→35→50→65→85, and large, e.g. Volume's 900→1200→2000→3000). The synthetic tier's name is the last named tier's selo plus a roman numeral (`Divindade II`, `Divindade III`, ...), except Tempo na Tela, whose synthetic name is just the value with a pt-BR thousand separator (`1.500 Horas`). Diversidade de Gêneros and Viajante do Tempo are capped ("teto") trilhas and never get synthetic tiers.
 
 ### Auth & admin
 
