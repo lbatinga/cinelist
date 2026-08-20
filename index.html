@@ -744,12 +744,11 @@ async function loadUsuariosFromSupabase() {
     const newStats = {};
     usuarios.forEach(u => {
       if (!u.legacy_id) return;
-      const existing = STATIC.users_stats[u.legacy_id] || {};
       newStats[u.legacy_id] = {
         nome: u.nome,
         in_ranking: u.in_ranking !== false,
         quant: 0, media: null, time_str: '0h 0min', ultima_av: null,
-        pendentes: [], nao_quer: existing.nao_quer || [],
+        pendentes: [], nao_quer: [],
         inseridos: [], by_year: {}, by_genre: {}, genre_avg: {}
       };
     });
@@ -890,18 +889,12 @@ function calcUserStats(){
       .filter(f => f.avaliacoes[uid] && f.avaliacoes[uid].nota !== null)
       .map(f => ({ ...f.avaliacoes[uid], id: f.id, nome: f.nome, poster: f.poster, categorias: f.categorias, ano: f.ano }));
 
-    // Rebuild nao_quer from avaliacoes (vai === 'Não' e sem nota)
+    // Rebuild nao_quer from avaliacoes (vai === 'Não' e sem nota) — só do Supabase, sem STATIC
     const naoQuerFromAvs = FILMES
       .filter(f => f.avaliacoes[uid] && f.avaliacoes[uid].vai === 'Não' && f.avaliacoes[uid].nota === null)
       .map(f => f.id);
     const ratedSet = new Set(minhasAvs.map(a => a.id));
-    const nqMerged = new Set([...(s.nao_quer||[]), ...naoQuerFromAvs]);
-    s.nao_quer = [...nqMerged].filter(id => !ratedSet.has(id));
-
-    // DIAGNÓSTICO: Loga quantos nao_quer foram reconstruídos do Supabase vs perdidos
-    if(naoQuerFromAvs.length > 0 || (s.nao_quer || []).length > 0){
-      console.log(`[DIAG nao_quer] ${USERS[uid]?.nome || uid}: ${naoQuerFromAvs.length} do DB, total final: ${s.nao_quer.length}`);
-    }
+    s.nao_quer = naoQuerFromAvs.filter(id => !ratedSet.has(id));
 
     // Quant e media
     s.quant = minhasAvs.length;
