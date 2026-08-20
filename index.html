@@ -605,7 +605,7 @@ tr.selected td{background:rgba(229,9,20,.05)}
   <div class="topbar-right">
     <div class="search-wrap">
       <span class="search-icon" onclick="toggleSearch()">🔍</span>
-      <input class="search-box" id="topSearch" placeholder="Buscar filmes..." oninput="handleSearch()">
+      <input class="search-box" id="topSearch" name="topSearch" type="search" autocomplete="off" placeholder="Buscar filmes..." oninput="handleSearch()">
     </div>
     <div class="user-menu">
       <div class="user-avatar" id="userAvatar" onclick="toggleUserMenu()" style="background:var(--surface2);color:#fff">?</div>
@@ -1311,6 +1311,18 @@ function handleSearch(){searchQ=document.getElementById('topSearch').value.toLow
 // ── HOME ──
 function renderHome(){
   const el=document.getElementById('viewHome');
+  if(searchQ){
+    clearInterval(heroTimer);
+    const list=[...FILMES].filter(f=>f.nome.toLowerCase().includes(searchQ));
+    applySortFilmes(list);
+    navList=list;
+    el.innerHTML = `<div class="rows-section">${
+      list.length
+        ? rowHTML(`🔍 Resultados da busca (${list.length})`, list, false, '#e50914')
+        : `<div class="empty-block"><div class="empty-icon">🔍</div><div>Nenhum filme encontrado.</div></div>`
+    }</div>`;
+    return;
+  }
   // Hero: pool dos top 30, embaralhado, pega 8 aleatórios
   const heroPool=[...FILMES].filter(f=>f.poster&&f.media&&f.num_avaliacoes>=3)
     .sort((a,b)=>{
@@ -4388,7 +4400,12 @@ function showAuthError(msg){
 function hideAuthScreen(){
   const loader = document.getElementById('startLoader');
   if(loader) loader.style.display = 'none';
-  document.getElementById('authScreen').style.display = 'none';
+  const authScreen = document.getElementById('authScreen');
+  authScreen.style.display = 'none';
+  // Remove os campos de e-mail/senha do DOM (não só ocultos) para o Chrome
+  // parar de associá-los ao campo de busca da topbar como se fosse um form de login.
+  const authBox = document.getElementById('authBox');
+  if(authBox) authBox.innerHTML = '';
 }
 
 function applyUserToUI(){
