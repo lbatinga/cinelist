@@ -779,7 +779,7 @@ async function loadFilmsFromSupabase() {
     while(true) {
       const { data: filmes, error } = await Promise.race([
         supa.from('filmes')
-          .select('id,nome,ano,duracao_str,duracao_min,poster,sinopse,categorias,classificacao,inserido_por,data_cadastro,data_ts')
+          .select('id,nome,ano,duracao_str,duracao_min,poster,sinopse,categorias,classificacao,inserido_por,data_cadastro,data_ts,tmdb_id')
           .range(from, from + batchSize - 1)
           .order('data_ts', { ascending: false }),
         new Promise((_, rej) => setTimeout(() => rej(new Error('Timeout filmes')), 15000))
@@ -2055,6 +2055,7 @@ async function enrichTMDBResult(candidate){
   const info=await(await fetch(`https://api.themoviedb.org/3/movie/${candidate.tmdbId}?api_key=${TMDB_KEY}&language=pt-BR&append_to_response=release_dates`)).json();
   const rt=info.runtime||0,h=Math.floor(rt/60),m=rt%60;
   return{
+    tmdbId:candidate.tmdbId,
     titulo:info.title||candidate.titulo,
     ano:info.release_date?.slice(0,4)||candidate.ano,
     poster:info.poster_path?'https://image.tmdb.org/t/p/w500'+info.poster_path:candidate.poster,
@@ -2216,6 +2217,7 @@ async function saveFilme(){
     categorias: td.categorias||[],
     classificacao: td.classificacao||null,
     inserido_por: CU,
+    tmdb_id: td.tmdbId||null,
     data_cadastro: (()=>{ const n=new Date(); return `${String(n.getDate()).padStart(2,'0')}/${String(n.getMonth()+1).padStart(2,'0')}/${n.getFullYear()}`; })()
   };
   
@@ -2539,6 +2541,7 @@ function renderDescobertas(){
         <div class="rtab ${descTab==='stats'?'active':''}" onclick="setDescTab('stats')">📊 Estatísticas</div>
         <div class="rtab ${descTab==='afinidades'?'active':''}" onclick="setDescTab('afinidades')">🤝 Afinidades</div>
         <div class="rtab ${descTab==='atividades'?'active':''}" onclick="setDescTab('atividades')">📢 Atividades</div>
+        <div class="rtab ${descTab==='pra_voce'?'active':''}" onclick="setDescTab('pra_voce')">🎯 Pra você</div>
       </div></div>
       <div id="descTabContent"></div>
     </div>
@@ -2555,6 +2558,191 @@ function renderDescTab(){
   if(tab==='afinidades') el.innerHTML = rankAfinidadesHTML();
   else if(tab==='atividades') el.innerHTML = rankAtividadesHTML();
   else if(tab==='stats') el.innerHTML = rankStatsHTML();
+  else if(tab==='pra_voce') renderParaVoce();
+}
+
+// ── PRA VOCÊ (recomendações personalizadas via TMDB) ──
+function dmyToSortable(s){
+  if(!s) return '';
+  const p = s.split('/');
+  return p.length===3 ? `${p[2]}-${p[1].padStart(2,'0')}-${p[0].padStart(2,'0')}` : s;
+}
+
+function getTop20RatedFilms(uid){
+  const rated = FILMES.filter(f => f.avaliacoes[uid] && f.avaliacoes[uid].nota != null);
+  rated.sort((a,b)=>{
+    const avA=a.avaliacoes[uid], avB=b.avaliacoes[uid];
+    if(avB.nota !== avA.nota) return avB.nota - avA.nota;
+    return dmyToSortable(avB.data).localeCompare(dmyToSortable(avA.data));
+  });
+  return rated.slice(0,20);
+}
+
+async function resolveTmdbId(f){
+  if(f.tmdb_id) return f.tmdb_id;
+  try{
+    const cands = await searchTMDB(f.nome, f.ano);
+    return cands.length ? cands[0].tmdbId : null;
+  }catch(e){ return null; }
+}
+
+async function fetchTmdbRecommendations(tmdbId){
+  try{
+    const r = await fetch(`https://api.themoviedb.org/3/movie/${tmdbId}/recommendations?api_key=${TMDB_KEY}&language=pt-BR&page=1`);
+    const d = await r.json();
+    return d.results || [];
+  }catch(e){ return []; }
+}
+
+// Roda `worker` sobre `items` em lotes paralelos de `limit`, evitando disparar tudo de uma vez no TMDB
+async function runBatched(items, limit, worker){
+  const out = [];
+  for(let i=0;i<items.length;i+=limit){
+    const batch = items.slice(i, i+limit);
+    out.push(...await Promise.all(batch.map(worker)));
+  }
+  return out;
+}
+
+async function computeRecommendations(uid){
+  const base = getTop20RatedFilms(uid);
+  const withIds = await runBatched(base, 5, async f => ({ f, tmdbId: await resolveTmdbId(f) }));
+  const validBases = withIds.filter(x => x.tmdbId);
+
+  const recLists = await runBatched(validBases, 5, x => fetchTmdbRecommendations(x.tmdbId));
+
+  const countMap = new Map(); // tmdbId -> {count, movie}
+  recLists.forEach(list => {
+    list.forEach(m => {
+      if(!countMap.has(m.id)) countMap.set(m.id, {count:0, movie:m});
+      countMap.get(m.id).count++;
+    });
+  });
+
+  const localByTmdbId = new Map();
+  FILMES.forEach(f => { if(f.tmdb_id) localByTmdbId.set(f.tmdb_id, f); });
+  const naoQuerIds = new Set(STATS[uid]?.nao_quer || []);
+
+  return [...countMap.values()]
+    .filter(({movie}) => {
+      const local = localByTmdbId.get(movie.id);
+      if(!local) return true;
+      if(local.avaliacoes[uid]?.nota != null) return false; // já avaliou
+      if(naoQuerIds.has(local.id)) return false; // não quero assistir
+      return true;
+    })
+    .map(({movie, count}) => {
+      const local = localByTmdbId.get(movie.id);
+      return {
+        tmdbId: movie.id,
+        titulo: movie.title || '',
+        ano: movie.release_date ? movie.release_date.slice(0,4) : '',
+        poster: movie.poster_path ? 'https://image.tmdb.org/t/p/w342'+movie.poster_path : '',
+        sinopse: movie.overview || '',
+        count,
+        noCatalogo: !!local,
+        catalogoMedia: local ? local.media : null,
+        catalogoNumAv: local ? local.num_avaliacoes : 0
+      };
+    })
+    .sort((a,b) => b.count - a.count);
+}
+
+function recsCacheKey(uid){ return 'cinelist_recs_'+uid; }
+
+function shouldRecalcRecs(uid, cache){
+  if(!cache) return true;
+  const currentRatedCount = FILMES.filter(f => f.avaliacoes[uid] && f.avaliacoes[uid].nota != null).length;
+  return (currentRatedCount - (cache.ratedCount||0)) >= 10;
+}
+
+function readRecsCache(uid){
+  try{ return JSON.parse(localStorage.getItem(recsCacheKey(uid)) || 'null'); }
+  catch(e){ return null; }
+}
+
+function writeRecsCache(uid, results){
+  const ratedCount = FILMES.filter(f => f.avaliacoes[uid] && f.avaliacoes[uid].nota != null).length;
+  const cache = { ratedCount, results, calculatedAt: new Date().toISOString() };
+  try{ localStorage.setItem(recsCacheKey(uid), JSON.stringify(cache)); }catch(e){}
+  return cache;
+}
+
+function renderParaVoce(){
+  const el = document.getElementById('descTabContent');
+  if(!CU){
+    el.innerHTML = '<div class="empty-block"><div class="empty-icon">🎯</div><div>Faça login para ver recomendações personalizadas.</div></div>';
+    return;
+  }
+  const cache = readRecsCache(CU);
+  if(cache && !shouldRecalcRecs(CU, cache)){
+    el.innerHTML = paraVoceHTML(cache.results, cache.calculatedAt);
+    return;
+  }
+  runParaVoceCalc();
+}
+
+async function runParaVoceCalc(){
+  const el = document.getElementById('descTabContent');
+  el.innerHTML = `
+    <div style="text-align:center;padding:60px 20px;color:var(--muted)">
+      <div style="font-size:32px;margin-bottom:12px">🎯</div>
+      <div>Calculando recomendações...</div>
+    </div>
+  `;
+  const uid = CU;
+  try{
+    const results = await computeRecommendations(uid);
+    const cache = writeRecsCache(uid, results);
+    // Usuário pode ter trocado de aba/usuário enquanto o cálculo rodava
+    if(CU===uid && CV==='descobertas' && window.descTab==='pra_voce'){
+      document.getElementById('descTabContent').innerHTML = paraVoceHTML(cache.results, cache.calculatedAt);
+    }
+  }catch(e){
+    console.error('Erro ao calcular recomendações:', e);
+    if(CU===uid && CV==='descobertas' && window.descTab==='pra_voce'){
+      document.getElementById('descTabContent').innerHTML = '<div class="empty-block"><div class="empty-icon">⚠️</div><div>Não foi possível calcular as recomendações agora. Tente novamente mais tarde.</div></div>';
+    }
+  }
+}
+
+function refreshParaVoce(){
+  try{ localStorage.removeItem(recsCacheKey(CU)); }catch(e){}
+  runParaVoceCalc();
+}
+
+function paraVoceHTML(list, calculatedAt){
+  const when = calculatedAt ? new Date(calculatedAt) : null;
+  const whenStr = when ? `Calculado em ${String(when.getDate()).padStart(2,'0')}/${String(when.getMonth()+1).padStart(2,'0')} às ${String(when.getHours()).padStart(2,'0')}:${String(when.getMinutes()).padStart(2,'0')}` : '';
+  const header = `
+    <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:16px">
+      <div style="font-size:12px;color:var(--muted)">${whenStr}</div>
+      <button class="btn-add" onclick="refreshParaVoce()">🔄 Atualizar recomendações</button>
+    </div>
+  `;
+  if(!list.length){
+    return header + '<div class="empty-block"><div class="empty-icon">🎯</div><div>Sem recomendações no momento. Avalie mais filmes para melhorar as sugestões.</div></div>';
+  }
+  return header + `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:16px">
+    ${list.map(recCardHTML).join('')}
+  </div>`;
+}
+
+function recCardHTML(r){
+  const syn = r.sinopse ? (r.sinopse.length>140 ? r.sinopse.slice(0,140)+'…' : r.sinopse) : '';
+  return `
+    <div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;overflow:hidden;display:flex;flex-direction:column">
+      ${r.poster
+        ? `<img src="${esc(r.poster)}" alt="" loading="lazy" style="width:100%;aspect-ratio:2/3;object-fit:cover;display:block;background:var(--surface2)" onerror="this.style.display='none'">`
+        : `<div style="width:100%;aspect-ratio:2/3;background:var(--surface2);display:flex;align-items:center;justify-content:center;font-size:36px;color:var(--muted)">🎬</div>`}
+      <div style="padding:10px 12px 12px;display:flex;flex-direction:column;gap:5px;flex:1">
+        <div style="font-weight:700;font-size:13px;color:#fff;line-height:1.3">${esc(r.titulo)}${r.ano?` <span style="color:var(--muted);font-weight:400">(${r.ano})</span>`:''}</div>
+        ${r.noCatalogo?`<div style="font-size:10px;font-weight:700;padding:3px 8px;border-radius:12px;background:rgba(70,211,105,.15);color:var(--green);width:fit-content">✓ Já no CineList${r.catalogoMedia?` · ★ ${fmt(r.catalogoMedia)} (${r.catalogoNumAv})`:''}</div>`:''}
+        <div style="font-size:10px;color:var(--muted2)">Recomendado por ${r.count} filme${r.count!==1?'s':''} que você amou</div>
+        ${syn?`<div style="font-size:11.5px;color:var(--muted);line-height:1.4">${esc(syn)}</div>`:''}
+      </div>
+    </div>
+  `;
 }
 
 function renderRanking(){
