@@ -14,7 +14,8 @@ Mid-way through a multi-phase plan to add achievement trilhas ("Conquistas") and
 
 - **Fase 2 is closed**: the `conquistas` table exists and is backfilled (tag `v1`, the promoted/permanent one — 196 rows, 12 usuários, 10 trilhas, 65 rows with `precisao='indeterminada'`). See the Conquistas section below for the schema and rules.
 - **No screen in `index.html` reads from `conquistas` yet** — it's backend-only until Fase 5 (UI das conquistas).
-- **Next up: Fase 3** — a base comparison against the group average, which will feed both the new compatibility formula and four new especiais (Defensor, Estraga-Prazeres, Termômetro, Voz Dissonante). Not started.
+- **Fase 3 is closed**: `v_filme_stats` and `v_avaliacao_comparativo` views exist, and three new especiais are calibrated (Defensor, Estraga-Prazeres, Termômetro). See the Base de comparação section below. Voz Dissonante was cut from this pass, pending Fase 5.
+- **Next up: Fase 4** — the `compatibilidade` table and a v2 compatibility formula (Pearson on desvios pessoais, weighted by peso de variância, sample-size shrinkage with K=15). Not started. pg_cron intentionally not enabled yet — the formula still needs calibration, no job should run automatically against a K in test.
 
 ## Commands
 
@@ -81,6 +82,26 @@ próximo = ceil(limiar * 1.3 / passo) * passo
 ```
 
 (`dígitos(x)` = number of digits in `floor(x)` — this proportional step, not a flat `/25`, is what keeps the ladder sane at both small scale, e.g. Consistência's 24→35→50→65→85, and large, e.g. Volume's 900→1200→2000→3000). The synthetic tier's name is the last named tier's selo plus a roman numeral (`Divindade II`, `Divindade III`, ...), except Tempo na Tela, whose synthetic name is just the value with a pt-BR thousand separator (`1.500 Horas`). Diversidade de Gêneros and Viajante do Tempo are capped ("teto") trilhas and never get synthetic tiers.
+
+### Base de comparação com a tropa (Fase 3)
+
+Two views feed both the compatibility formula (Fase 4) and the leave-one-out especiais below. Both are plain (non-materialized) views — the dataset is small enough (841 filmes, 14 usuários `in_ranking`) to recompute live, so no refresh strategy is needed. Both scope to `nota is not null` and `usuarios.in_ranking = true`; dated and undated `avaliacoes` rows are both included (excluding undated rows would drop 38% of the base — see the `avaliacoes` schema row above).
+
+- **`v_filme_stats`** — per-filme `n_avaliacoes`, `media_tropa` (full population), `variancia` (`var_pop`, not `var_samp` — `var_samp` doubles the variance at n=2, which would inflate exactly the small samples that should carry the least weight), `peso` (`variancia / média_da_variância_dos_filmes_com_n≥2`, clamped to `[0.25, 2.2]`). Filmes with `n_avaliacoes = 1` are excluded entirely — a film only one person rated can never be a "filme em comum" between two people, so including it only pollutes the peso distribution (it would always sit at the floor).
+- **`v_avaliacao_comparativo`** — one row per avaliação, with three distinctly-named means so they never get swapped: `media_pessoa`/`desvio_pessoal` (that person's own average across their own avaliações — feeds the Pearson correlation in Fase 4), `media_tropa`/`desvio_tropa` (the full-population average from `v_filme_stats` — feeds peso/compatibilidade, never leave-one-out), and `media_tropa_sem_ele`/`desvio_tropa_sem_ele`/`n_outros` (leave-one-out, excludes the person's own nota — feeds only the especiais below, never compatibilidade).
+
+**Regra de método**: leave-one-out vale para todo selo/especial que compara uma pessoa contra a tropa — sem isso a pessoa competiria contra a própria contribuição (com n=4, uma nota isolada já é 25% da média). NÃO vale para peso/compatibilidade — ali a variância é propriedade do filme, não de quem está sendo comparado.
+
+**Regra de calibração** (vale para estes três e para qualquer especial futuro, incluindo Voz Dissonante na Fase 5): alvo de 1 a 4 pessoas de 14 por especial. Especial que zera não existe; especial que 11 de 14 têm não é conquista, é comportamento normal da base.
+
+**Três especiais novos calibrados nesta fase** (todos leave-one-out, `n_outros ≥ 4`, i.e. 5 avaliações no total — a mediana de avaliações por filme na base é 4, então esse piso é o "normal" da base, não um corte artificialmente apertado):
+- **Defensor** — `media_tropa_sem_ele < 6.5` e `nota ≥ 8` → 9 casos, 5 pessoas hoje.
+- **Estraga-Prazeres** — `media_tropa_sem_ele > 8.2` e `nota ≤ 6` → 4 casos, 2 pessoas hoje. `nota ≤ 6` foi calibrado, não escolhido: com `≤ 5` (o corte simétrico "óbvio" ao 8+ do Defensor) dava 1 caso em 1 pessoa — a tropa avalia alto demais para "dar 5 num filme amado" acontecer.
+- **Termômetro** — 60%+ das avaliações elegíveis a menos de 0,5 de `media_tropa_sem_ele`, piso de 50 filmes elegíveis (`n_outros ≥ 4`) → 3 pessoas hoje. 60% também foi calibrado: com tolerância de 0,5 mas sem corte proporcional (contagem absoluta), 11 de 14 pessoas ganhavam — o selo saturava, porque a tropa concorda demais para "estar perto da média" ser incomum.
+
+6.5 ("tropa afundou") e 8.2 ("tropa amou") são estatisticamente simétricos — mesma fração de filmes (11,5%) de cada lado da distribuição de `media_tropa` — não valores redondos escolhidos à mão.
+
+**Voz Dissonante — cortado desta leva, pendente de Fase 5.** O critério original (10 filmes a 3+ pontos da média) dá zero pessoas: a tropa concorda demais para "discordar muito" acontecer 10 vezes com distância bruta. Um corte proporcional (15%+ das avaliações a 2+ pontos, piso de 50) também zera; forçar pra baixo (5%) só captura "discordar de 1 filme em 20", que numa tropa homogênea é ruído, não característica de personalidade. Ideia a revisitar: usar o `peso` de variância de `v_filme_stats` — discordar especificamente nos filmes que racharam a tropa (peso alto), não distância bruta da média num grupo que raramente racha.
 
 ### Auth & admin
 
