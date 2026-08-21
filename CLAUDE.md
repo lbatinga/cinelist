@@ -67,6 +67,10 @@ Always build "today" as a local calendar date with `localDateStr(d)`, never `new
 
 `conquistas` records, once and permanently, the moment each member crosses each tier of an achievement trilha (Volume, Curadoria, Pioneirismo, Maratona Mensal, Tempo na Tela, Diversidade de Gêneros, Viajante do Tempo, Filmes Longos, Consistência, Influência). It's populated by replaying `avaliacoes`/`filmes` chronologically per user — not something `index.html` does; there is no client-side "conquistas" computation, unlike the rest of `RAW.*`.
 
+**Trilha vs. especial — not the same nature, and it's easy to trip on this**: a **trilha** is história — frozen, never revoked, has a date, lives in `conquistas` (rule below). A **especial** is *estado* — recalculated live from current data every render, can be lost if the underlying condition stops holding (e.g. the tropa's average for a film shifts and a Defensor case no longer qualifies), and has no achievement date because there isn't one to have. Especiais are never written to `conquistas` — doing so would require building the same never-revoke/backfill/promotion machinery Fase 2 built for trilhas, for something that isn't behaviorally permanent. This is the same nature as `compatibilidade` (Fase 4), which is also *estado*. **The UI must never notify or show a delta when a especial is gained or lost** — same rule as compatibilidade, opposite of a trilha tier.
+
+**Especiais set (Fase 5): Otimista, Crítico, Fã de Ação, Apaixonado, Defensor, Estraga-Prazeres, Termômetro — seven, this is the current set**, computed live off the Fase 3 views (Defensor/Estraga-Prazeres/Termômetro) or off `RAW.users_stats`/`FILMES` directly (the other four), same pattern as compatibilidade. Three older especiais still coded in `index.html`'s pre-Fase-5 `getAchievementData()` are retired and must not carry into the Fase 5 rebuild: **Bom Humor** (duplicated Otimista's axis), **Difícil de Agradar** (duplicated Crítico's axis), and **Implacável** (required five notas 0, which nobody in the tropa has — a especial that zeros isn't a especial, same calibration rule as Fase 3's). Voz Dissonante stays cut, not part of this set either (see Fase 3 section above).
+
 **Selo nunca revogado**: once a `(usuario_id, trilha, tier)` row exists, no normal run ever updates or deletes it — every insert (backfill or incremental) uses `on conflict (usuario_id, trilha, tier) do nothing`. This holds for every trilha, not just the obviously volatile ones — Pioneirismo can lose its underlying condition the moment someone else rates a "solo" film, and a duplicate-film merge can retroactively lower any counter, but the achievement date/precision already on record must never change.
 
 **Correction model**: because of the above, deleting rows and re-running is only safe while a `versao_backfill` tag is still a test tag (see below). Once a tag is promoted, fixing bad data is an incremental replay — the same insert, same `on conflict do nothing` — never `delete` + re-run, since a delete would let the next run silently mint a *different* date for an achievement someone already experienced.
@@ -83,6 +87,23 @@ próximo = ceil(limiar * 1.3 / passo) * passo
 ```
 
 (`dígitos(x)` = number of digits in `floor(x)` — this proportional step, not a flat `/25`, is what keeps the ladder sane at both small scale, e.g. Consistência's 24→35→50→65→85, and large, e.g. Volume's 900→1200→2000→3000). The synthetic tier's name is the last named tier's selo plus a roman numeral (`Divindade II`, `Divindade III`, ...), except Tempo na Tela, whose synthetic name is just the value with a pt-BR thousand separator (`1.500 Horas`). Diversidade de Gêneros and Viajante do Tempo are capped ("teto") trilhas and never get synthetic tiers.
+
+**Catálogo canônico de degraus** — this table is the single source of truth for every named tier. It never lived in this file before Fase 5, which is exactly why `index.html`'s old client-side `getAchievementData()` (pre-Fase 5) had silently drifted from what the Fase 2 backfill actually used — different names on Curadoria/Maratona/Diversidade/Décadas, a fully different structure on Épicos, and Tempo na Tela measured in *days* client-side vs. *hours* in the backfill. `index.html` must define this catalog in exactly one place (a single array/object), consumed both by the live "current value + progress to next tier" calculation and by any future replay/backfill tooling — two lists is what caused the drift in the first place.
+
+| slug | trilha exibida | métrica | teto? | degraus nomeados (nome · limiar · emoji) |
+|---|---|---|---|---|
+| `volume` | Volume | filmes avaliados (`nota is not null`) | não | Iniciante·10·🌱, Aprendiz·30·🎞️, Aficionado·75·🍿, Cinéfilo·150·🎬, Mestre·250·🎭, Veterano·400·⭐, Lenda·550·👑, Imortal·700·💫, Divindade·900·🏆 |
+| `curadoria` | Curadoria | filmes adicionados | não | Colaborador·10·📥, Colecionador·30·📦, Curador·75·📚, Guardião·150·🛡️, Patrono·300·🏛️ |
+| `pioneirismo` | Pioneirismo | filmes que ninguém mais viu | não | Pioneiro·5·🌟, Explorador·20·💎, Desbravador·50·🗺️ |
+| `maratona` | Maratona Mensal | filmes no mesmo mês | não | Maratonista·20·🏃, Ultramaratonista·50·🥇, Imparável·100·🔥 |
+| `tempo` | Tempo na Tela | horas assistidas, `sum(duracao_min)/60` (numérica, não roteirizada) | não | 100 Horas·100·⏱️, 250 Horas·250·⏰, 500 Horas·500·🕯️, 1.000 Horas·1000·🌙 |
+| `diversidade` | Diversidade de Gêneros | gêneros com 5+ filmes | **sim** | Versátil·8·🎨, Come de Tudo·13·🧩, Sem Fronteiras·18·🎪 |
+| `decadas` | Viajante do Tempo | décadas com 10+ filmes | **sim** | Três Décadas·3·📽️, Cinco Décadas·5·🕰️, Sete Décadas·7·⏳ |
+| `epicos` | Filmes Longos | filmes com `duracao_min >= 150` | não | Paciente·10·🛋️, Resistente·30·🎞️, Inabalável·60·⚔️ |
+| `consistencia` | Consistência | meses distintos com avaliação | não | Regular·6·📆, Assíduo·12·🗓️, Fiel·24·📅 |
+| `influencia` | Influência | filmes que a pessoa inseriu e a tropa aprovou (5+ avaliações de outros membros com nota ≥ 8) | não | Indicador·3·📣, Formador de Gosto·10·🎙️, Referência·25·🗿 |
+
+Note on Épicos: the DB backfill only has rows for `Paciente@10` and `Resistente@30` — that's a backfill absence, not a catalog absence. The trilha does have a third degrau, `Inabalável@60` (it's in the table above), nobody has just crossed it yet. The relabel itself was intended, not drift: "Fã de Épicos" was retired because it collided with the especial "Fã de Ação" (same `Fã de <categoria>` pattern), `Resistente` moved from 60 down to 30, and `Inabalável` was added at 60. Diversidade de Gêneros and Décadas are the two "teto" trilhas — no synthetic tiers past their last named one, ever.
 
 ### Base de comparação com a tropa (Fase 3)
 
@@ -115,6 +136,8 @@ Replaces the old client-side formula in `index.html` (`calcAfinGlobal()`, around
 **Validation** (91 pairs, 75 with `pct`, 16 `NULL` — 13 of those are one `in_ranking` member with zero avaliações, 3 are small-sample coincidence): range is **55–83**. Similar spread to the old formula's real 59–97 (this is fine — the old formula wasn't actually compressed, see above; equal spread isn't a failure of v2). What v2 fixes is **ordering**: on USER-002's compatibility list, a pair with only 4 filmes em comum (old formula's 3-filme floor barely admits it) went from 1st (92%, old) to 3rd (76%, new); a similar low-`n_comum` pair fell from 1st to 9th; the pair with 326 filmes em comum rose from 3rd to 1st. The brake still doesn't erase a genuinely high `r_bruto` from a small sample (n_comum=1 pairs land around pct 72, not shoved to the group average) — it just stops small samples from *outranking* large, well-supported ones. `K=15` was validated against this behavior and is not being recalibrated.
 
 Validated first under a throwaway tag `versao_formula = 'v2-teste'`, then re-run unchanged under the promoted tag `'v2'` — `recalcular_compatibilidade()` upserts by `(a,b)`, so the same 91 rows just got their `versao_formula` overwritten, no new rows, no formula changes between the two runs.
+
+**Security fix (found while starting Fase 5)**: `compatibilidade` was the one table of the seven created without RLS enabled at all — fully open to the anon key for read *and* write. Fixed: `alter table compatibilidade enable row level security;` plus a select-only policy (`compat_select_all`, `using (true)`), matching `conquistas`'s pattern — no write policy, so only the service role (i.e. `recalcular_compatibilidade()`) can write.
 
 ### Auth & admin
 
