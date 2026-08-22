@@ -2570,16 +2570,41 @@ async function openOndeAssistir(id, nome, ano){
   }
 }
 
+// ── OMDB (compartilhado entre "Mais Info" e as notas IMDb/RT) ──
+// Uma chamada por título+ano já traz nota IMDb, Rotten Tomatoes E prêmios/direção/roteiro —
+// openMaisInfo() e loadExtRatings() pediam isso cada uma por conta própria, dobrando as
+// chamadas. Cache em memória por filmId, JSON bruto (cada função formata o que precisa):
+// null (SEM gravar em _omdbCache) = falha de infraestrutura (erro de rede, cota diária
+// estourada — a OMDB devolve isso como Response:"False", Error:"Request limit reached!",
+// no MESMO formato de "filme não existe") — não é fato sobre o filme, então não fica
+// cacheado; a próxima abertura tenta de novo. null GRAVADO em _omdbCache = a OMDB
+// respondeu especificamente Error:"Movie not found!" — isso sim é fato sobre o filme
+// (não existe no catálogo deles), cacheia. Regra pra manter na etapa 2 (banco): nunca
+// persistir resultado de falha de infraestrutura como se fosse fato sobre o filme.
+const OMDB_KEY = '419a30fd';
+const _omdbCache = {};
+async function fetchOmdbBasic(filmId, nome, ano){
+  if(_omdbCache[filmId] !== undefined) return _omdbCache[filmId];
+  try {
+    const r = await fetch('https://www.omdbapi.com/?t='+encodeURIComponent(decodeURIComponent(nome))+'&y='+ano+'&apikey='+OMDB_KEY);
+    const d = await r.json();
+    if(d.Response==='True'){ _omdbCache[filmId] = d; return d; }
+    if(d.Error==='Movie not found!'){ _omdbCache[filmId] = null; return null; }
+    return null; // qualquer outro erro (cota, chave inválida, etc.) — não cacheia
+  } catch(e) {
+    return null;
+  }
+}
+
 // ── MAIS INFO ──
 async function openMaisInfo(id, nome, ano){
   document.getElementById('maisInfoBody').innerHTML = '<div style="text-align:center;padding:30px;color:#888"><div style="font-size:28px;margin-bottom:8px">⏳</div>Carregando...</div>';
   openBSheet('maisInfo');
-  const OMDB = '419a30fd';
   try {
     const nomeD = decodeURIComponent(nome);
-    const [tmdbRes, omdbRes] = await Promise.all([
+    const [tmdbRes, omdbBasic] = await Promise.all([
       fetch('https://api.themoviedb.org/3/search/movie?api_key='+TMDB_KEY+'&language=pt-BR&query='+nome+'&year='+ano).then(r=>r.json()),
-      fetch('https://www.omdbapi.com/?t='+encodeURIComponent(nomeD)+'&y='+ano+'&apikey='+OMDB).then(r=>r.json())
+      fetchOmdbBasic(id, nome, ano)
     ]);
     const tmdbMovie = tmdbRes.results?.[0];
     let tmdbD = null, tmdbC = null;
@@ -2589,12 +2614,13 @@ async function openMaisInfo(id, nome, ano){
         fetch('https://api.themoviedb.org/3/movie/'+tmdbMovie.id+'/credits?api_key='+TMDB_KEY+'&language=pt-BR').then(r=>r.json())
       ]);
     }
-    // Se OMDB não achou pelo nome PT-BR, tenta com o título original do TMDB
-    let omdb = omdbRes.Response==='True' ? omdbRes : null;
+    // Se o OMDB não achou pelo nome PT-BR, tenta com o título original do TMDB — só cai
+    // aqui se fetchOmdbBasic (cache compartilhado com loadExtRatings) não achou nada.
+    let omdb = omdbBasic;
     if(!omdb && tmdbMovie?.original_title && tmdbMovie.original_title !== nomeD) {
       try {
-        const omdbRes2 = await fetch('https://www.omdbapi.com/?t='+encodeURIComponent(tmdbMovie.original_title)+'&y='+ano+'&apikey='+OMDB).then(r=>r.json());
-        if(omdbRes2.Response==='True') omdb = omdbRes2;
+        const omdbRes2 = await fetch('https://www.omdbapi.com/?t='+encodeURIComponent(tmdbMovie.original_title)+'&y='+ano+'&apikey='+OMDB_KEY).then(r=>r.json());
+        if(omdbRes2.Response==='True'){ omdb = omdbRes2; _omdbCache[id] = omdb; } // atualiza o cache compartilhado — loadExtRatings passa a ver o resultado melhor também
       } catch(e2) {}
     }
     // Extrai dados de Oscar da string do OMDB
@@ -2629,24 +2655,17 @@ async function openMaisInfo(id, nome, ano){
 }
 
 // ── EXTERNAL RATINGS (IMDb + RT) ──
-const _extRC = {};
 async function loadExtRatings(filmId, nome, ano){
   const el = document.getElementById('extRatings_'+filmId);
   if(!el) return;
-  if(_extRC[filmId] !== undefined){ el.innerHTML = _extRC[filmId]; return; }
-  const OMDB = '419a30fd';
-  try {
-    const r = await fetch('https://www.omdbapi.com/?t='+encodeURIComponent(decodeURIComponent(nome))+'&y='+ano+'&apikey='+OMDB);
-    const d = await r.json();
-    if(d.Response!=='True'){ el.innerHTML=''; _extRC[filmId]=''; return; }
-    const imdb = d.imdbRating!=='N/A' ? d.imdbRating : null;
-    const rt = d.Ratings?.find(r=>r.Source==='Rotten Tomatoes')?.Value||null;
-    let html = '';
-    if(imdb) html += '<span style="background:#f5c518;color:#000;font-size:11px;font-weight:800;padding:3px 8px;border-radius:6px;display:inline-flex;align-items:center;gap:3px">IMDb '+imdb+'</span>';
-    if(rt){ const pct=parseInt(rt); const col=pct>=75?'#46d369':pct>=60?'#f5c518':'#e05555'; html += '<span style="background:'+col+';color:#000;font-size:11px;font-weight:800;padding:3px 8px;border-radius:6px">🍅 '+rt+'</span>'; }
-    _extRC[filmId] = html;
-    el.innerHTML = html;
-  } catch(e){ el.innerHTML=''; }
+  const d = await fetchOmdbBasic(filmId, nome, ano);
+  if(!d){ el.innerHTML=''; return; }
+  const imdb = d.imdbRating!=='N/A' ? d.imdbRating : null;
+  const rt = d.Ratings?.find(r=>r.Source==='Rotten Tomatoes')?.Value||null;
+  let html = '';
+  if(imdb) html += '<span style="background:#f5c518;color:#000;font-size:11px;font-weight:800;padding:3px 8px;border-radius:6px;display:inline-flex;align-items:center;gap:3px">IMDb '+imdb+'</span>';
+  if(rt){ const pct=parseInt(rt); const col=pct>=75?'#46d369':pct>=60?'#f5c518':'#e05555'; html += '<span style="background:'+col+';color:#000;font-size:11px;font-weight:800;padding:3px 8px;border-radius:6px">🍅 '+rt+'</span>'; }
+  el.innerHTML = html;
 }
 
 // INIT — registra Service Worker imediatamente para PWA funcionar
