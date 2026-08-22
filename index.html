@@ -718,7 +718,11 @@ var RAW = {
   global_stats: STATIC.global_stats,
   highlights: STATIC.highlights,
   monthly_activity: STATIC.monthly_activity,
-  user_personal: STATIC.user_personal
+  user_personal: STATIC.user_personal,
+  conquistas: {},      // Fase 5: usuario_id -> [{trilha,tier,selo,data,precisao,valor_no_momento}]
+  comparativo: {},     // Fase 5: usuario_id -> [{filme_id,nota,media_tropa_sem_ele,n_outros}] (v_avaliacao_comparativo)
+  filme_stats: {},     // Fase 5: filme_id -> {n_avaliacoes,media_tropa,peso} (v_filme_stats)
+  conquistasLoadFailed: false // Fase 5: true se loadConquistasEFilmeStatsFromSupabase() falhou — UI deve avisar, não só logar
 };
 
 // ═══════════════════════════════════════════
@@ -763,6 +767,71 @@ async function loadUsuariosFromSupabase() {
   } catch(e) {
     console.warn('⚠️ Erro ao carregar usuários, usando STATIC:', e);
     return false;
+  }
+}
+
+// ═══════════════════════════════════════════
+// CARREGA CONQUISTAS + PESO POR FILME (Fase 5)
+// conquistas = histórico (fonte única de "concluído", nunca o cálculo ao vivo)
+// v_filme_stats = peso por filme (759 linhas, ~64KB — pequeno, cabe no arranque)
+// v_avaliacao_comparativo NÃO entra aqui: 3.500+ linhas (~356KB, 4 páginas) só pra
+// alimentar 3 especiais que a maioria dos perfis nem abre — carregada sob demanda
+// por usuario_id em loadComparativoParaUsuario(), na abertura de cada perfil.
+// ═══════════════════════════════════════════
+async function loadConquistasEFilmeStatsFromSupabase() {
+  try {
+    const { data: conq, error: errConq } = await supa
+      .from('conquistas')
+      .select('usuario_id,trilha,tier,selo,data,precisao,valor_no_momento');
+    if (errConq) throw errConq;
+
+    const newConquistas = {};
+    (conq || []).forEach(c => {
+      if (!newConquistas[c.usuario_id]) newConquistas[c.usuario_id] = [];
+      newConquistas[c.usuario_id].push(c);
+    });
+    RAW.conquistas = newConquistas;
+
+    const { data: fstats, error: errFstats } = await supa
+      .from('v_filme_stats')
+      .select('filme_id,n_avaliacoes,media_tropa,peso');
+    if (errFstats) throw errFstats;
+    const newFilmeStats = {};
+    (fstats || []).forEach(f => { newFilmeStats[f.filme_id] = f; });
+    RAW.filme_stats = newFilmeStats;
+
+    RAW.conquistasLoadFailed = false;
+    console.log(`✅ ${(conq||[]).length} conquistas, ${(fstats||[]).length} filme_stats carregados`);
+    return true;
+  } catch(e) {
+    console.warn('⚠️ Erro ao carregar conquistas/filme_stats:', e);
+    RAW.conquistasLoadFailed = true;
+    return false;
+  }
+}
+
+// Carrega a base comparativa (Fase 3) de UM usuário sob demanda, só quando o perfil dele
+// é aberto — evita puxar as 3.500+ linhas da tropa inteira no arranque pra alimentar
+// 3 especiais (Defensor/Estraga-Prazeres/Termômetro) que a maioria dos perfis nem mostra.
+// RAW.comparativo[uid] === undefined -> nunca buscado; [] -> buscado e vazio de verdade.
+async function loadComparativoParaUsuario(uid) {
+  if (!uid || RAW.comparativo[uid] !== undefined) return;
+  if (!RAW._comparativoEmCarregamento) RAW._comparativoEmCarregamento = new Set();
+  if (RAW._comparativoEmCarregamento.has(uid)) return;
+  RAW._comparativoEmCarregamento.add(uid);
+  try {
+    const { data: rows, error } = await supa
+      .from('v_avaliacao_comparativo')
+      .select('filme_id,usuario_id,nota,media_tropa_sem_ele,n_outros')
+      .eq('usuario_id', uid);
+    if (error) throw error;
+    RAW.comparativo[uid] = rows || [];
+    render(); // Defensor/Estraga-Prazeres/Termômetro chegaram depois do primeiro paint — atualiza a tela atual
+  } catch(e) {
+    console.warn(`⚠️ Erro ao carregar comparativo de ${uid}:`, e);
+    // não seta RAW.comparativo[uid] — fica undefined, permite tentar de novo na próxima renderização
+  } finally {
+    RAW._comparativoEmCarregamento.delete(uid);
   }
 }
 
@@ -849,6 +918,9 @@ async function loadFilmsFromSupabase() {
     // Calcula estatísticas dinâmicas
     document.getElementById('loaderMsg').textContent = 'Carregando membros...';
     await loadUsuariosFromSupabase();
+
+    document.getElementById('loaderMsg').textContent = 'Carregando conquistas...';
+    await loadConquistasEFilmeStatsFromSupabase();
 
     // Calcula estatísticas dinâmicas
     document.getElementById('loaderMsg').textContent = 'Calculando estatísticas...';
@@ -2802,9 +2874,99 @@ function afinColor(score){
   return '#e05555';
 }
 
-// ── CONQUISTAS / BADGES ──
-// Retorna estrutura completa com trilhas de progressão + conquistas especiais
-// (cada trilha tem múltiplos níveis; usuário sempre pode ver o próximo nível)
+// ── CONQUISTAS / BADGES (Fase 5) ──
+// Fonte única dos degraus nomeados de cada trilha — usada tanto pelo cálculo ao vivo
+// abaixo quanto por qualquer replay/backfill futuro. Ver CLAUDE.md "Catálogo canônico
+// de degraus": duas listas divergindo foi o que causou o desalinhamento com o backfill v1.
+const TRILHAS_DEF = [
+  { slug:'volume', nome:'Volume', icon:'🎬', unit:'filmes avaliados', teto:false,
+    levels:[
+      {nome:'Iniciante',emoji:'🌱',threshold:10},{nome:'Aprendiz',emoji:'🎞️',threshold:30},
+      {nome:'Aficionado',emoji:'🍿',threshold:75},{nome:'Cinéfilo',emoji:'🎬',threshold:150},
+      {nome:'Mestre',emoji:'🎭',threshold:250},{nome:'Veterano',emoji:'⭐',threshold:400},
+      {nome:'Lenda',emoji:'👑',threshold:550},{nome:'Imortal',emoji:'💫',threshold:700},
+      {nome:'Divindade',emoji:'🏆',threshold:900}
+    ] },
+  { slug:'curadoria', nome:'Curadoria', icon:'📚', unit:'filmes adicionados', teto:false,
+    levels:[
+      {nome:'Colaborador',emoji:'📥',threshold:10},{nome:'Colecionador',emoji:'📦',threshold:30},
+      {nome:'Curador',emoji:'📚',threshold:75},{nome:'Guardião',emoji:'🛡️',threshold:150},
+      {nome:'Patrono',emoji:'🏛️',threshold:300}
+    ] },
+  { slug:'pioneirismo', nome:'Pioneirismo', icon:'🗺️', unit:'filmes que ninguém mais viu', teto:false,
+    levels:[
+      {nome:'Pioneiro',emoji:'🌟',threshold:5},{nome:'Explorador',emoji:'💎',threshold:20},
+      {nome:'Desbravador',emoji:'🗺️',threshold:50}
+    ] },
+  { slug:'maratona', nome:'Maratona Mensal', icon:'🏃', unit:'filmes no mesmo mês', teto:false,
+    levels:[
+      {nome:'Maratonista',emoji:'🏃',threshold:20},{nome:'Ultramaratonista',emoji:'🥇',threshold:50},
+      {nome:'Imparável',emoji:'🔥',threshold:100}
+    ] },
+  { slug:'tempo', nome:'Tempo na Tela', icon:'⏰', unit:'horas assistidas', teto:false, numericName:true,
+    levels:[
+      {nome:'100 Horas',emoji:'⏱️',threshold:100},{nome:'250 Horas',emoji:'⏰',threshold:250},
+      {nome:'500 Horas',emoji:'🕯️',threshold:500},{nome:'1.000 Horas',emoji:'🌙',threshold:1000}
+    ] },
+  { slug:'diversidade', nome:'Diversidade de Gêneros', icon:'🧩', unit:'gêneros com 5+ filmes', teto:true,
+    levels:[
+      {nome:'Versátil',emoji:'🎨',threshold:8},{nome:'Come de Tudo',emoji:'🧩',threshold:13},
+      {nome:'Sem Fronteiras',emoji:'🎪',threshold:18}
+    ] },
+  { slug:'decadas', nome:'Viajante do Tempo', icon:'🕰️', unit:'décadas com 10+ filmes', teto:true,
+    levels:[
+      {nome:'Três Décadas',emoji:'📽️',threshold:3},{nome:'Cinco Décadas',emoji:'🕰️',threshold:5},
+      {nome:'Sete Décadas',emoji:'⏳',threshold:7}
+    ] },
+  { slug:'epicos', nome:'Filmes Longos', icon:'🎞️', unit:'filmes com 2h30+', teto:false,
+    levels:[
+      {nome:'Paciente',emoji:'🛋️',threshold:10},{nome:'Resistente',emoji:'🎞️',threshold:30},
+      {nome:'Inabalável',emoji:'⚔️',threshold:60}
+    ] },
+  { slug:'consistencia', nome:'Consistência', icon:'📅', unit:'meses com avaliações', teto:false,
+    levels:[
+      {nome:'Regular',emoji:'📆',threshold:6},{nome:'Assíduo',emoji:'🗓️',threshold:12},
+      {nome:'Fiel',emoji:'📅',threshold:24}
+    ] },
+  { slug:'influencia', nome:'Influência', icon:'📣', unit:'filmes inseridos aprovados pela tropa', teto:false,
+    levels:[
+      {nome:'Indicador',emoji:'📣',threshold:3},{nome:'Formador de Gosto',emoji:'🎙️',threshold:10},
+      {nome:'Referência',emoji:'🗿',threshold:25}
+    ] }
+];
+
+function romanoSimples(n){
+  const map = [[10,'X'],[9,'IX'],[5,'V'],[4,'IV'],[1,'I']];
+  let s = '';
+  map.forEach(([v,sym]) => { while(n>=v){ s+=sym; n-=v; } });
+  return s;
+}
+
+// Escada completa de uma trilha: degraus nomeados + sintéticos até 12 no total
+// (trilhas "teto" não geram sintéticos). Fórmula documentada em CLAUDE.md.
+function trilhaLadder(def){
+  const named = def.levels;
+  if(def.teto) return named.slice();
+  const ladder = named.slice();
+  let limiar = named[named.length-1].threshold;
+  let romano = 1;
+  while(ladder.length < 12){
+    const digitos = String(Math.floor(limiar)).length;
+    const passo = Math.max(5, 5 * Math.pow(10, digitos-2));
+    const proximo = Math.ceil(limiar * 1.3 / passo) * passo;
+    romano++;
+    const nome = def.numericName
+      ? `${proximo.toLocaleString('pt-BR')} Horas`
+      : `${named[named.length-1].nome} ${romanoSimples(romano)}`;
+    ladder.push({ nome, emoji: named[named.length-1].emoji, threshold: proximo, synthetic: true });
+    limiar = proximo;
+  }
+  return ladder;
+}
+
+// Retorna estrutura completa com trilhas de progressão + conquistas especiais.
+// Trilhas: "concluído" vem de RAW.conquistas (histórico, nunca desconquista).
+// Especiais: estado, recalculado ao vivo, sem tier, sem data — ver CLAUDE.md.
 function getAchievementData(uid){
   const s = RAW.users_stats[uid];
   if(!s) return null;
@@ -2849,15 +3011,12 @@ function getAchievementData(uid){
 
   // Notas
   const dezes = minhasAvs.filter(a => a.nota === 10).length;
-  const zeros = minhasAvs.filter(a => a.nota === 0).length;
-  const aprovados = minhasAvs.filter(a => a.nota >= 7).length;
-  const pctAprov = quant > 0 ? aprovados / quant : 0;
 
-  // Tempo
+  // Tempo — HORAS, não dias (Fase 5: alinhado ao backfill de conquistas, ver CLAUDE.md)
   const totalMin = minhasAvs.reduce((t,a) => t + (a.duracao_min || 0), 0);
-  const dias = Math.floor(totalMin / 1440);
+  const horas = Math.floor(totalMin / 60);
 
-  // Diversidade — MUDOU: critério subiu de 3+ para 5+ filmes por gênero
+  // Diversidade (5+ filmes por gênero)
   const generosVistos = Object.keys(s.by_genre || {}).filter(g => (s.by_genre[g]||0) >= 5).length;
 
   // Décadas (10+ filmes na mesma década)
@@ -2872,115 +3031,56 @@ function getAchievementData(uid){
   // Filmes longos (2h30+)
   const longos = minhasAvs.filter(a => a.duracao_min >= 150).length;
 
-  // ── TRILHAS de progressão (ordenadas do iniciante ao máximo) ──
-  const trilhas = [
-    {
-      id: 'volume', nome: 'Volume', icon: '🎬', unit: 'filmes avaliados',
-      current: quant,
-      levels: [
-        { id:'iniciante',   emoji:'🌱', nome:'Iniciante',   threshold:10,  color:'#80deea' },
-        { id:'aprendiz',    emoji:'🎞️', nome:'Aprendiz',    threshold:30,  color:'#80deea' },
-        { id:'aficionado',  emoji:'🍿', nome:'Aficionado',  threshold:75,  color:'#f5c518' },
-        { id:'cinefilo',    emoji:'🎬', nome:'Cinéfilo',    threshold:150, color:'#46d369' },
-        { id:'mestre',      emoji:'🎭', nome:'Mestre',      threshold:250, color:'#C0C0C0' },
-        { id:'veterano',    emoji:'⭐', nome:'Veterano',    threshold:400, color:'#C0C0C0' },
-        { id:'lenda',       emoji:'👑', nome:'Lenda',       threshold:550, color:'#FFD700' },
-        { id:'imortal',     emoji:'💫', nome:'Imortal',     threshold:700, color:'#FFD700' },
-        { id:'divindade',   emoji:'🏆', nome:'Divindade',   threshold:900, color:'#FFD700' }
-      ]
-    },
-    {
-      id: 'curadoria', nome: 'Curadoria', icon: '📚', unit: 'filmes adicionados',
-      current: inseridos,
-      levels: [
-        { id:'colaborador',   emoji:'📥', nome:'Colaborador',   threshold:10,  color:'#80deea' },
-        { id:'colecionador',  emoji:'📦', nome:'Colecionador',  threshold:30,  color:'#f5c518' },
-        { id:'curador',       emoji:'📚', nome:'Curador',       threshold:75,  color:'#f39c12' },
-        { id:'mestrecurador', emoji:'🎖️', nome:'Mestre Curador', threshold:150, color:'#f39c12' },
-        { id:'patrono',       emoji:'🏛️', nome:'Patrono',       threshold:300, color:'#FFD700' }
-      ]
-    },
-    {
-      id: 'pioneirismo', nome: 'Pioneirismo', icon: '🗺️', unit: 'filmes que só ele viu',
-      current: soEle,
-      levels: [
-        { id:'pioneiro',    emoji:'🌟', nome:'Pioneiro',    threshold:5,  color:'#80deea' },
-        { id:'explorador',  emoji:'💎', nome:'Explorador',  threshold:20, color:'#ce93d8' },
-        { id:'desbravador', emoji:'🗺️', nome:'Desbravador', threshold:50, color:'#ab47bc' }
-      ]
-    },
-    {
-      id: 'maratona', nome: 'Maratona Mensal', icon: '🏃', unit: 'filmes no mesmo mês',
-      current: maxMes, aviso: semDataAviso,
-      levels: [
-        { id:'maratonista',  emoji:'🏃', nome:'Maratonista',  threshold:20,  color:'#e67e22' },
-        { id:'lendamensal',  emoji:'🏆', nome:'Lenda Mensal', threshold:50,  color:'#FFD700' },
-        { id:'imparavel',    emoji:'🔥', nome:'Imparável',    threshold:100, color:'#FFD700' }
-      ]
-    },
-    {
-      id: 'notas10', nome: 'Notas 10', icon: '💯', unit: 'notas 10 distribuídas',
-      current: dezes,
-      levels: [
-        { id:'apaixonado',     emoji:'❤️',  nome:'Apaixonado',     threshold:3,  color:'#e91e63' },
-        { id:'perfeccionista', emoji:'💯', nome:'Perfeccionista', threshold:10, color:'#f5c518' },
-        { id:'devoto',         emoji:'🌟', nome:'Devoto',         threshold:25, color:'#FFD700' },
-        { id:'lendadezes',     emoji:'💎', nome:'Lenda dos Dezes', threshold:50, color:'#FFD700' }
-      ]
-    },
-    {
-      id: 'tempo', nome: 'Tempo na Tela', icon: '⏰', unit: 'dias assistindo',
-      current: dias,
-      levels: [
-        { id:'tempo7',    emoji:'⏱️', nome:'Uma Semana Inteira', threshold:7,   color:'#4a90e2' },
-        { id:'tempo30',   emoji:'⏰', nome:'Um Mês de Cinema',   threshold:30,  color:'#80deea' },
-        { id:'tempo60',   emoji:'📅', nome:'Dois Meses',         threshold:60,  color:'#ce93d8' },
-        { id:'tempo100',  emoji:'🌙', nome:'Cem Noites',         threshold:100, color:'#FFD700' }
-      ]
-    },
-    {
-      id: 'diversidade', nome: 'Diversidade de Gêneros', icon: '🧩', unit: 'gêneros com 5+ filmes',
-      current: generosVistos,
-      levels: [
-        { id:'versatil',  emoji:'🎨', nome:'Versátil',  threshold:8,  color:'#80deea' },
-        { id:'eclético',  emoji:'🧩', nome:'Eclético',  threshold:13, color:'#46d369' },
-        { id:'onivoro',   emoji:'🎪', nome:'Onívoro',   threshold:18, color:'#FFD700' }
-      ]
-    },
-    // ── NOVAS TRILHAS ──
-    {
-      id: 'decadas', nome: 'Viajante do Tempo', icon: '🕰️', unit: 'décadas com 10+ filmes',
-      current: decadasCobertas,
-      levels: [
-        { id:'nostalgico',  emoji:'📽️',  nome:'Nostálgico',  threshold:3, color:'#80deea' },
-        { id:'viajante',    emoji:'🕰️', nome:'Viajante',    threshold:5, color:'#f39c12' },
-        { id:'arqueologo',  emoji:'⏳', nome:'Arqueólogo',  threshold:7, color:'#FFD700' }
-      ]
-    },
-    {
-      id: 'epicos', nome: 'Filmes Longos', icon: '🎞️', unit: 'filmes com 2h30+',
-      current: longos,
-      levels: [
-        { id:'paciente',    emoji:'🛋️', nome:'Paciente',       threshold:10, color:'#80deea' },
-        { id:'epico',       emoji:'🎞️', nome:'Fã de Épicos',   threshold:30, color:'#f39c12' },
-        { id:'resistente',  emoji:'⚔️', nome:'Resistente',     threshold:60, color:'#FFD700' }
-      ]
-    },
-    {
-      id: 'consistencia', nome: 'Consistência', icon: '📅', unit: 'meses com avaliações',
-      current: mesesAtivos, aviso: semDataAviso,
-      levels: [
-        { id:'regular',  emoji:'📆', nome:'Regular',  threshold:6,  color:'#80deea' },
-        { id:'assiduo',  emoji:'📅', nome:'Assíduo',  threshold:12, color:'#f5c518' },
-        { id:'fiel',     emoji:'🗓️', nome:'Fiel',     threshold:24, color:'#FFD700' }
-      ]
-    }
-  ];
+  // Influência — filmes que uid inseriu e a tropa aprovou (5+ avaliações de OUTROS membros
+  // in_ranking com nota >= 8 — alinhado ao backfill, que só conta aprovador in_ranking=true)
+  const influenciaCount = FILMES.filter(f => f.inserido_por === uid && f.avaliacoes).filter(f => {
+    const aprovadores = Object.entries(f.avaliacoes).filter(([u,av]) =>
+      u !== uid && av?.nota != null && av.nota >= 8 && STATS[u]?.in_ranking);
+    return aprovadores.length >= 5;
+  }).length;
 
-  // ── CONQUISTAS ESPECIAIS (sem progressão, só acerta ou não) ──
+  const valoresAoVivo = {
+    volume: quant, curadoria: inseridos, pioneirismo: soEle, maratona: maxMes,
+    tempo: horas, diversidade: generosVistos, decadas: decadasCobertas,
+    epicos: longos, consistencia: mesesAtivos, influencia: influenciaCount
+  };
+  const avisos = { maratona: semDataAviso, consistencia: semDataAviso };
+
+  // ── TRILHAS: "concluído" vem de RAW.conquistas (histórico), nunca do valor ao vivo —
+  // é isso que garante que um degrau já cruzado nunca "descruze" (selo nunca revogado,
+  // ver CLAUDE.md). O valor ao vivo só serve pra barra de progresso até o próximo degrau. ──
+  const historico = RAW.conquistas[uid] || [];
+  const trilhas = TRILHAS_DEF.map(def => {
+    const ladder = trilhaLadder(def);
+    const cruzados = historico.filter(c => c.trilha === def.slug);
+    const current = valoresAoVivo[def.slug] || 0;
+
+    const levels = ladder.map((l, i) => {
+      const row = cruzados.find(c => c.tier === i);
+      return {
+        ...l,
+        done: !!row,
+        data: row ? row.data : null,
+        precisao: row ? row.precisao : null,
+        // nome exibido: o gravado no banco pros degraus já cruzados (fonte única —
+        // pode divergir do catálogo se um critério for recalibrado depois de alguém cruzar)
+        nome: row ? row.selo : l.nome
+      };
+    });
+
+    const currentLevel = levels.filter(l => l.done).slice(-1)[0] || null;
+    const nextLevel = levels.find(l => !l.done) || null;
+
+    return {
+      slug: def.slug, nome: def.nome, icon: def.icon, unit: def.unit, teto: def.teto,
+      current, currentLevel, nextLevel, levels,
+      aviso: avisos[def.slug] || null
+    };
+  });
+
+  // ── ESPECIAIS: estado, recalculado ao vivo, sem tier, sem data (ver CLAUDE.md) ──
   const especiais = [];
 
-  // Perfil de notas — precisa de 50+ avaliações
   if(quant >= 50 && media != null){
     especiais.push({
       id:'otimista', emoji:'💝', nome:'Otimista',
@@ -2998,7 +3098,6 @@ function getAchievementData(uid){
     });
   }
 
-  // Gênero dominante
   if(s.fav_genre && s.by_genre && quant >= 30){
     const favCount = s.by_genre[s.fav_genre] || 0;
     const pct = Math.round((favCount / quant) * 100);
@@ -3011,40 +3110,62 @@ function getAchievementData(uid){
     });
   }
 
-  // NOVAS especiais
-  if(quant >= 100){
-    especiais.push({
-      id:'bomhumor', emoji:'😊', nome:'Bom Humor',
-      desc:'70%+ dos filmes com nota ≥ 7',
-      color:'#46d369',
-      unlocked: pctAprov >= 0.7,
-      hint: `${Math.round(pctAprov*100)}% atual`
-    });
-    especiais.push({
-      id:'dificil', emoji:'🦁', nome:'Difícil de Agradar',
-      desc:'Menos de 30% com nota ≥ 7',
-      color:'#e74c3c',
-      unlocked: pctAprov < 0.3,
-      hint: `${Math.round(pctAprov*100)}% atual`
-    });
-  }
-
-  // Implacável
   especiais.push({
-    id:'implacavel', emoji:'💀', nome:'Implacável',
-    desc:'Deu 5+ notas 0',
-    color:'#8e44ad',
-    unlocked: zeros >= 5,
-    hint: zeros >= 5 ? `${zeros} notas 0` : `${zeros}/5 notas 0`
+    id:'apaixonado', emoji:'❤️', nome:'Apaixonado',
+    desc:'Deu nota 10 pelo menos 3 vezes',
+    color:'#e91e63',
+    unlocked: dezes >= 3,
+    hint: dezes >= 3 ? `${dezes} notas 10` : `${dezes}/3 notas 10`
   });
+
+  // Defensor / Estraga-Prazeres / Termômetro — Fase 3, leave-one-out, n_outros>=4.
+  // Comparativo é carregado sob demanda (não no arranque, ver loadComparativoParaUsuario) —
+  // undefined dispara a busca em segundo plano e re-renderiza quando chegar; até lá os três
+  // especiais simplesmente não aparecem ainda, igual a "ninguém qualificado no momento".
+  if(RAW.comparativo[uid] === undefined) loadComparativoParaUsuario(uid);
+  const comp = (RAW.comparativo[uid] || []).filter(r => (r.n_outros||0) >= 4);
+  if(comp.length){
+    const defensorCasos = comp.filter(r => r.media_tropa_sem_ele < 6.5 && r.nota >= 8);
+    especiais.push({
+      id:'defensor', emoji:'🛡️', nome:'Defensor',
+      desc:'Deu 8+ num filme que a tropa afundou (média < 6.5)',
+      color:'#4a90e2',
+      unlocked: defensorCasos.length > 0,
+      hint: defensorCasos.length > 0 ? `${defensorCasos.length} caso${defensorCasos.length!==1?'s':''}` : null
+    });
+
+    const estragaCasos = comp.filter(r => r.media_tropa_sem_ele > 8.2 && r.nota <= 6);
+    especiais.push({
+      id:'estragaprazeres', emoji:'🌧️', nome:'Estraga-Prazeres',
+      desc:'Deu 6- num filme que a tropa amou (média > 8.2)',
+      color:'#e74c3c',
+      unlocked: estragaCasos.length > 0,
+      hint: estragaCasos.length > 0 ? `${estragaCasos.length} caso${estragaCasos.length!==1?'s':''}` : null
+    });
+
+    if(comp.length >= 50){
+      const perto = comp.filter(r => Math.abs(r.nota - r.media_tropa_sem_ele) <= 0.5).length;
+      const pctPerto = perto / comp.length;
+      especiais.push({
+        id:'termometro', emoji:'🌡️', nome:'Termômetro',
+        desc:'60%+ das notas a até 0,5 da média da tropa (mín. 50 filmes)',
+        color:'#f39c12',
+        unlocked: pctPerto >= 0.6,
+        hint: `${Math.round(pctPerto*100)}% atual`
+      });
+    }
+  }
 
   return { trilhas, especiais, totals: {
     unlocked: (
-      trilhas.reduce((n,t) => n + t.levels.filter(l => t.current >= l.threshold).length, 0) +
+      trilhas.reduce((n,t) => n + t.levels.filter(l => l.done).length, 0) +
       especiais.filter(e => e.unlocked).length
     ),
     total: (
-      trilhas.reduce((n,t) => n + t.levels.length, 0) +
+      // Só degraus NOMEADOS contam no denominador — sintético (12 por trilha sem teto)
+      // só entra no numerador quando cruzado. Contar sintético nos dois lados infla o
+      // total pra ~110 e a barra nunca sobe; 39 nomeados no catálogo hoje (ver TRILHAS_DEF).
+      trilhas.reduce((n,t) => n + t.levels.filter(l => !l.synthetic).length, 0) +
       especiais.length
     )
   }};
@@ -3052,17 +3173,30 @@ function getAchievementData(uid){
 
 // Renderiza a seção completa de conquistas (trilhas + especiais)
 function renderConquistasHTML(uid){
+  // Se o load de conquistas/comparativo falhou, RAW.conquistas fica {} e toda trilha
+  // renderizaria como "não iniciado" pra todo mundo — silenciosamente errado, não vazio de
+  // verdade. Avisa em vez de fingir que ninguém tem conquista nenhuma.
+  if(RAW.conquistasLoadFailed){
+    return `
+      <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:20px;margin-bottom:20px;text-align:center">
+        <div style="font-size:24px;margin-bottom:8px">⚠️</div>
+        <div style="font-size:13px;font-weight:700;margin-bottom:4px">Não foi possível carregar as conquistas agora</div>
+        <div style="font-size:11px;color:var(--muted)">Puxe pra atualizar ou tente de novo em instantes.</div>
+      </div>
+    `;
+  }
+
   const data = getAchievementData(uid);
   if(!data) return '';
   const { trilhas, especiais, totals } = data;
 
+  // Placeholder visual — Etapa B substitui isto pela grade de cartas com cor por raridade.
+  // Etapa A só troca a fonte do "concluído" (banco, não valor ao vivo); layout fica como estava.
+  const ACCENT = '#f5c518';
   const trilhasHTML = trilhas.map(t => {
-    // nível atual = o maior threshold já alcançado
-    const achieved = t.levels.filter(l => t.current >= l.threshold);
-    const currentLevel = achieved.length ? achieved[achieved.length-1] : null;
-    const nextLevel = t.levels.find(l => t.current < l.threshold);
+    const currentLevel = t.currentLevel;
+    const nextLevel = t.nextLevel;
 
-    // Barra de progresso até o próximo nível
     let progressHTML = '';
     if(nextLevel){
       const prev = currentLevel ? currentLevel.threshold : 0;
@@ -3070,40 +3204,39 @@ function renderConquistasHTML(uid){
       const pct = Math.min(100, Math.max(0, ((t.current - prev) / span) * 100));
       progressHTML = `
         <div style="height:4px;background:var(--surface3);border-radius:2px;overflow:hidden;margin-top:10px">
-          <div style="height:100%;width:${pct}%;background:linear-gradient(90deg,${nextLevel.color}66,${nextLevel.color});transition:width .6s"></div>
+          <div style="height:100%;width:${pct}%;background:linear-gradient(90deg,${ACCENT}66,${ACCENT});transition:width .6s"></div>
         </div>
         <div style="font-size:10px;color:var(--muted);margin-top:5px;display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap">
           <span><b style="color:var(--text)">${t.current}</b> / ${nextLevel.threshold} ${esc(t.unit)}</span>
-          <span style="color:var(--muted2)">próximo: ${nextLevel.emoji} <b style="color:${nextLevel.color}">${esc(nextLevel.nome)}</b></span>
+          <span style="color:var(--muted2)">próximo: ${nextLevel.emoji} <b style="color:${ACCENT}">${esc(nextLevel.nome)}</b></span>
         </div>
       `;
     } else {
       progressHTML = `
         <div style="height:4px;background:linear-gradient(90deg,#FFD700,#ffa500,#FFD700);border-radius:2px;margin-top:10px"></div>
-        <div style="font-size:10px;color:#FFD700;margin-top:5px;font-weight:700">✨ Trilha completa! ${t.current} ${esc(t.unit)}</div>
+        <div style="font-size:10px;color:#FFD700;margin-top:5px;font-weight:700">✨ Todos os degraus catalogados, cruzados! ${t.current} ${esc(t.unit)}</div>
       `;
     }
 
     // Steps visuais
     const stepsHTML = t.levels.map(l => {
-      const done = t.current >= l.threshold;
-      const isNext = !done && nextLevel && nextLevel.id === l.id;
-      const bgColor = done ? l.color+'22' : (isNext ? l.color+'11' : 'transparent');
-      const borderColor = done ? l.color+'77' : (isNext ? l.color+'88' : 'rgba(255,255,255,0.05)');
-      const opacity = done ? '1' : (isNext ? '0.9' : '0.35');
-      const shadow = isNext ? `box-shadow:0 0 12px ${l.color}33;` : '';
+      const isNext = l === nextLevel;
+      const bgColor = l.done ? ACCENT+'22' : (isNext ? ACCENT+'11' : 'transparent');
+      const borderColor = l.done ? ACCENT+'77' : (isNext ? ACCENT+'88' : 'rgba(255,255,255,0.05)');
+      const opacity = l.done ? '1' : (isNext ? '0.9' : '0.35');
+      const shadow = isNext ? `box-shadow:0 0 12px ${ACCENT}33;` : '';
       return `
         <div style="flex:1;min-width:0;display:flex;flex-direction:column;align-items:center;gap:3px;padding:8px 3px;border-radius:6px;background:${bgColor};border:1px solid ${borderColor};${shadow}opacity:${opacity};position:relative" title="${esc(l.nome)} · ${l.threshold}+ ${esc(t.unit)}">
-          ${done ? `<div style="position:absolute;top:2px;right:2px;font-size:9px;color:${l.color}">✓</div>` : (isNext ? `<div style="position:absolute;top:2px;right:3px;font-size:8px;color:${l.color}">◉</div>` : '')}
-          <div style="font-size:18px;line-height:1;filter:${done ? 'none' : 'grayscale(0.8)'}">${l.emoji}</div>
-          <div style="font-size:8px;font-weight:700;color:${done ? l.color : 'var(--muted2)'};line-height:1.1;text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;width:100%">${esc(l.nome)}</div>
+          ${l.done ? `<div style="position:absolute;top:2px;right:2px;font-size:9px;color:${ACCENT}">✓</div>` : (isNext ? `<div style="position:absolute;top:2px;right:3px;font-size:8px;color:${ACCENT}">◉</div>` : '')}
+          <div style="font-size:18px;line-height:1;filter:${l.done ? 'none' : 'grayscale(0.8)'}">${l.emoji}</div>
+          <div style="font-size:8px;font-weight:700;color:${l.done ? ACCENT : 'var(--muted2)'};line-height:1.1;text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;width:100%">${esc(l.nome)}</div>
           <div style="font-size:8px;color:var(--muted2);line-height:1">${l.threshold}+</div>
         </div>
       `;
     }).join('');
 
     const headerBadge = currentLevel
-      ? `<span style="font-size:10px;color:${currentLevel.color};font-weight:700;background:${currentLevel.color}22;padding:2px 7px;border-radius:10px;border:1px solid ${currentLevel.color}44">${currentLevel.emoji} ${esc(currentLevel.nome)}</span>`
+      ? `<span style="font-size:10px;color:${ACCENT};font-weight:700;background:${ACCENT}22;padding:2px 7px;border-radius:10px;border:1px solid ${ACCENT}44">${currentLevel.emoji} ${esc(currentLevel.nome)}</span>`
       : `<span style="font-size:10px;color:var(--muted2);font-weight:500">não iniciado</span>`;
 
     return `
@@ -3113,7 +3246,7 @@ function renderConquistasHTML(uid){
           <span style="font-size:12px;font-weight:700;flex:1">${esc(t.nome)}</span>
           ${headerBadge}
         </div>
-        <div style="display:flex;gap:3px">${stepsHTML}</div>
+        <div style="display:flex;gap:3px;flex-wrap:wrap">${stepsHTML}</div>
         ${progressHTML}
         ${t.aviso ? `<div style="font-size:9.5px;color:var(--muted2);margin-top:8px;line-height:1.35">⚠️ ${esc(t.aviso)}</div>` : ''}
       </div>
