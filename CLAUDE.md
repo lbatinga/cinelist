@@ -190,6 +190,12 @@ Sem resolver — cada uma é uma linha, o detalhe (quando existe) está na seç�
 - Pico isolado de outubro/2024 no gráfico "Top 10 meses" de atividade mensal — não confirmado se é real ou resíduo de parsing de data.
 - `auth_leaked_password_protection` desabilitado no Supabase Auth — ver Segurança.
 - Detalhe da compatibilidade usa diferença bruta de nota, placar usa desvio pessoal (v2) — inconsistência conhecida e aceita, ver Compatibilidade.
+- TMDB não tem cache nenhum — `openMaisInfo` faz 3 chamadas (busca, detalhe, créditos) do zero a cada abertura, mesmo reabrindo o mesmo filme. Diferente da OMDB, dados de produção do TMDB (elenco, país, orçamento, bilheteria, direção) são fatos fixos que não mudam depois do lançamento — poderiam ser cacheados sem validade nenhuma. Escopo próprio, não foi feito.
+- Lista de sugestões da aba "Pra você" tem ~300 itens; cortar pra ~20, ranqueando por compatibilidade real (tabela `compatibilidade`) e não só por similaridade de gênero. Pedido do Pedro.
+- Poder agir direto da lista de sugestões: avaliar filme que já está no CineList, adicionar o que não está, e marcar "quero ver" (provavelmente reusando `vai_assistir`). Pedido do Pedro.
+- Trilha Oscar de Melhor Filme (lista finita, ~97 vencedores, 11 no catálogo hoje) — marcar por `tmdb_id`, nunca por nome ("Pantera Negra" e "O Rei Leão 2019" dão falso positivo com outros filmes de mesmo nome); limiares absolutos, nunca proporção, porque a lista cresce todo ano.
+- Trilha Cult (filmes antigos) — o catálogo só tem 12 filmes anteriores a 1990, então hoje ela mediria "quem viu aqueles 12", não uma trilha de verdade. Fazer depois da Oscar, que naturalmente traz clássicos pro acervo. Limiares acima do recorde atual (10) pra não nascer trivial.
+- Remodelar os menus — sem problema definido ainda; precisa virar "quero fazer X e demoro Y cliques" antes de virar tarefa.
 
 ## Working conventions established in this repo
 

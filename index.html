@@ -904,7 +904,7 @@ async function loadFilmsFromSupabase() {
     while(true) {
       const { data: filmes, error } = await Promise.race([
         supa.from('filmes')
-          .select('id,nome,ano,duracao_str,duracao_min,poster,sinopse,categorias,classificacao,inserido_por,data_cadastro,data_ts,tmdb_id')
+          .select('id,nome,ano,duracao_str,duracao_min,poster,sinopse,categorias,classificacao,inserido_por,data_cadastro,data_ts,tmdb_id,omdb_imdb_rating,omdb_rt_rating,omdb_awards,omdb_atualizado_em')
           .range(from, from + batchSize - 1)
           .order('data_ts', { ascending: false }),
         new Promise((_, rej) => setTimeout(() => rej(new Error('Timeout filmes')), 15000))
@@ -2573,27 +2573,95 @@ async function openOndeAssistir(id, nome, ano){
 // ── OMDB (compartilhado entre "Mais Info" e as notas IMDb/RT) ──
 // Uma chamada por título+ano já traz nota IMDb, Rotten Tomatoes E prêmios/direção/roteiro —
 // openMaisInfo() e loadExtRatings() pediam isso cada uma por conta própria, dobrando as
-// chamadas. Cache em memória por filmId, JSON bruto (cada função formata o que precisa):
-// null (SEM gravar em _omdbCache) = falha de infraestrutura (erro de rede, cota diária
-// estourada — a OMDB devolve isso como Response:"False", Error:"Request limit reached!",
-// no MESMO formato de "filme não existe") — não é fato sobre o filme, então não fica
-// cacheado; a próxima abertura tenta de novo. null GRAVADO em _omdbCache = a OMDB
-// respondeu especificamente Error:"Movie not found!" — isso sim é fato sobre o filme
-// (não existe no catálogo deles), cacheia. Regra pra manter na etapa 2 (banco): nunca
-// persistir resultado de falha de infraestrutura como se fosse fato sobre o filme.
+// chamadas. Cache em duas camadas: memória (_omdbCache, por sessão) e banco (filmes.omdb_*,
+// entre sessões e entre pessoas — grava via cache_omdb_rating(), a única forma de escrever
+// essas colunas; ver CLAUDE.md, seção Segurança). Ordem de leitura: memória primeiro; se não
+// tem, olha o banco (já veio junto no carregamento inicial via FM, não é leitura extra) —
+// fresco usa direto, velho USA O QUE TEM na hora e rebusca em segundo plano (nunca deixa a
+// tela esperando rede nem em branco). Nunca teve cache nenhum: busca síncrona mesmo, é a
+// primeira vez, alguém vai esperar de qualquer jeito.
+//
+// null (sem persistir em memória nem banco) = falha de infraestrutura (erro de rede, cota
+// diária estourada — a OMDB devolve isso como Response:"False", Error:"Request limit
+// reached!", no MESMO formato de "filme não existe") — não é fato sobre o filme, não fica
+// em lugar nenhum; a próxima abertura tenta de novo. null PERSISTIDO (memória e banco) = a
+// OMDB respondeu especificamente Error:"Movie not found!" — isso sim é fato sobre o filme,
+// cacheia. Regra que vale nas duas camadas: nunca persistir falha de infraestrutura como se
+// fosse fato sobre o filme.
+//
+// A validade (7 dias pra lançamento recente, 90 pro resto) mora de verdade na função SQL,
+// que decide se grava ou não — omdbEhFresco() aqui é só otimização, pra não fazer viagem de
+// rede à toa quando já dá pra saber que ainda está fresco; se o JS calcular errado, o banco
+// não reescreve o mesmo dado sem necessidade de qualquer forma.
 const OMDB_KEY = '419a30fd';
 const _omdbCache = {};
-async function fetchOmdbBasic(filmId, nome, ano){
-  if(_omdbCache[filmId] !== undefined) return _omdbCache[filmId];
+
+function omdbEhFresco(atualizadoEm, ano){
+  if(!atualizadoEm) return false;
+  const anoNum = /^\d{4}$/.test(ano||'') ? parseInt(ano,10) : null;
+  const recente = anoNum !== null && anoNum >= new Date().getFullYear() - 1;
+  const ttlMs = (recente ? 7 : 90) * 24 * 60 * 60 * 1000;
+  return (Date.now() - new Date(atualizadoEm).getTime()) < ttlMs;
+}
+
+// Persiste no banco via RPC (fire-and-forget — a UI já reflete o resultado pelo _omdbCache,
+// não precisa esperar a escrita).
+function persistOmdbCache(filmId, d){
+  const imdb = d.imdbRating!=='N/A' ? d.imdbRating : null;
+  const rt = d.Ratings?.find(r=>r.Source==='Rotten Tomatoes')?.Value || null;
+  const awards = d.Awards && d.Awards!=='N/A' ? d.Awards : null;
+  supa.rpc('cache_omdb_rating', { p_filme_id: filmId, p_imdb: imdb, p_rt: rt, p_awards: awards }).catch(()=>{});
+}
+
+// Busca de fato no OMDB e persiste (memória + banco) só em sucesso ou "não encontrado".
+async function fetchAndCacheOmdb(filmId, nome, ano){
   try {
     const r = await fetch('https://www.omdbapi.com/?t='+encodeURIComponent(decodeURIComponent(nome))+'&y='+ano+'&apikey='+OMDB_KEY);
     const d = await r.json();
-    if(d.Response==='True'){ _omdbCache[filmId] = d; return d; }
-    if(d.Error==='Movie not found!'){ _omdbCache[filmId] = null; return null; }
-    return null; // qualquer outro erro (cota, chave inválida, etc.) — não cacheia
+    if(d.Response==='True'){ _omdbCache[filmId] = d; persistOmdbCache(filmId, d); return d; }
+    if(d.Error==='Movie not found!'){
+      _omdbCache[filmId] = null;
+      // NULL explícito, não uma string "N/A" — a próxima leitura (fetchOmdbBasic, via FM)
+      // não pode confundir "sabemos que não tem" com "tem um valor literal N/A".
+      supa.rpc('cache_omdb_rating', { p_filme_id: filmId, p_imdb: null, p_rt: null, p_awards: null }).catch(()=>{});
+      return null;
+    }
+    return null; // cota, chave inválida etc — não persiste em lugar nenhum
   } catch(e) {
     return null;
   }
+}
+
+// Rebusca em segundo plano quando o cache do banco está velho, e reaproveita loadExtRatings
+// pra repintar só o badge do filme se ele ainda estiver na tela — nunca chama o render()
+// genérico (ver CLAUDE.md, seção Rendering, sobre sub-estado que não sobrevive a isso).
+// Não atualiza "Mais Info" se estiver aberto pro mesmo filme (só o Awards depende disso lá,
+// já que Director/Writer vêm do TMDB) — fica pra reabrir; achei desproporcional refazer as
+// chamadas de TMDB (elenco, orçamento) só pra re-render de uma tela mais efêmera que os badges.
+async function refreshOmdbInBackground(filmId, nome, ano){
+  await fetchAndCacheOmdb(filmId, nome, ano);
+  if(document.getElementById('extRatings_'+filmId)) loadExtRatings(filmId, nome, ano);
+}
+
+async function fetchOmdbBasic(filmId, nome, ano){
+  if(_omdbCache[filmId] !== undefined) return _omdbCache[filmId];
+
+  const f = FM[filmId];
+  if(f && f.omdb_atualizado_em){
+    const temDados = f.omdb_imdb_rating || f.omdb_rt_rating || f.omdb_awards;
+    // O banco só guarda nota/Rotten/prêmios (as 4 colunas do escopo desta etapa) — não é
+    // problema pro Director/Writer de "Mais Info", que vêm do TMDB, não daqui.
+    const dbCached = temDados ? {
+      imdbRating: f.omdb_imdb_rating || 'N/A',
+      Ratings: f.omdb_rt_rating ? [{ Source:'Rotten Tomatoes', Value: f.omdb_rt_rating }] : [],
+      Awards: f.omdb_awards || ''
+    } : null;
+    _omdbCache[filmId] = dbCached;
+    if(!omdbEhFresco(f.omdb_atualizado_em, ano)) refreshOmdbInBackground(filmId, nome, ano);
+    return dbCached;
+  }
+
+  return await fetchAndCacheOmdb(filmId, nome, ano);
 }
 
 // ── MAIS INFO ──
@@ -2602,25 +2670,41 @@ async function openMaisInfo(id, nome, ano){
   openBSheet('maisInfo');
   try {
     const nomeD = decodeURIComponent(nome);
-    const [tmdbRes, omdbBasic] = await Promise.all([
-      fetch('https://api.themoviedb.org/3/search/movie?api_key='+TMDB_KEY+'&language=pt-BR&query='+nome+'&year='+ano).then(r=>r.json()),
-      fetchOmdbBasic(id, nome, ano)
-    ]);
-    const tmdbMovie = tmdbRes.results?.[0];
+    const tmdbId = FM[id]?.tmdb_id;
     let tmdbD = null, tmdbC = null;
-    if(tmdbMovie){
+
+    // Com tmdb_id em mãos (840/841 filmes hoje — só a entrada "saga completa" não tem),
+    // pula a busca por nome e vai direto no filme certo: uma chamada TMDB a menos no
+    // caminho comum, e direção/roteiro (abaixo) param de depender de a busca por nome
+    // PT-BR acertar — antes, se a busca falhasse, tmdbMovie ficava undefined e a seção
+    // inteira de direção/roteiro sumia, mesmo o filme existindo no TMDB.
+    const omdbPromise = fetchOmdbBasic(id, nome, ano);
+    if(tmdbId){
       [tmdbD, tmdbC] = await Promise.all([
-        fetch('https://api.themoviedb.org/3/movie/'+tmdbMovie.id+'?api_key='+TMDB_KEY+'&language=pt-BR').then(r=>r.json()),
-        fetch('https://api.themoviedb.org/3/movie/'+tmdbMovie.id+'/credits?api_key='+TMDB_KEY+'&language=pt-BR').then(r=>r.json())
+        fetch('https://api.themoviedb.org/3/movie/'+tmdbId+'?api_key='+TMDB_KEY+'&language=pt-BR').then(r=>r.json()),
+        fetch('https://api.themoviedb.org/3/movie/'+tmdbId+'/credits?api_key='+TMDB_KEY+'&language=pt-BR').then(r=>r.json())
       ]);
+    } else {
+      // Sem tmdb_id — caminho antigo, busca por nome (só a "saga completa" cai aqui hoje).
+      const tmdbRes = await fetch('https://api.themoviedb.org/3/search/movie?api_key='+TMDB_KEY+'&language=pt-BR&query='+nome+'&year='+ano).then(r=>r.json());
+      const tmdbMovie = tmdbRes.results?.[0];
+      if(tmdbMovie){
+        [tmdbD, tmdbC] = await Promise.all([
+          fetch('https://api.themoviedb.org/3/movie/'+tmdbMovie.id+'?api_key='+TMDB_KEY+'&language=pt-BR').then(r=>r.json()),
+          fetch('https://api.themoviedb.org/3/movie/'+tmdbMovie.id+'/credits?api_key='+TMDB_KEY+'&language=pt-BR').then(r=>r.json())
+        ]);
+      }
     }
-    // Se o OMDB não achou pelo nome PT-BR, tenta com o título original do TMDB — só cai
-    // aqui se fetchOmdbBasic (cache compartilhado com loadExtRatings) não achou nada.
+    const omdbBasic = await omdbPromise;
+
+    // Se o OMDB não achou pelo nome PT-BR, tenta com o título original do TMDB (vem do
+    // detalhe por id agora, não mais da busca — o campo é o mesmo nos dois endpoints) — só
+    // cai aqui se fetchOmdbBasic (cache compartilhado com loadExtRatings) não achou nada.
     let omdb = omdbBasic;
-    if(!omdb && tmdbMovie?.original_title && tmdbMovie.original_title !== nomeD) {
+    if(!omdb && tmdbD?.original_title && tmdbD.original_title !== nomeD) {
       try {
-        const omdbRes2 = await fetch('https://www.omdbapi.com/?t='+encodeURIComponent(tmdbMovie.original_title)+'&y='+ano+'&apikey='+OMDB_KEY).then(r=>r.json());
-        if(omdbRes2.Response==='True'){ omdb = omdbRes2; _omdbCache[id] = omdb; } // atualiza o cache compartilhado — loadExtRatings passa a ver o resultado melhor também
+        const omdbRes2 = await fetch('https://www.omdbapi.com/?t='+encodeURIComponent(tmdbD.original_title)+'&y='+ano+'&apikey='+OMDB_KEY).then(r=>r.json());
+        if(omdbRes2.Response==='True'){ omdb = omdbRes2; _omdbCache[id] = omdb; persistOmdbCache(id, omdb); } // atualiza memória E banco — loadExtRatings e a próxima sessão de qualquer um passam a ver o resultado melhor também
       } catch(e2) {}
     }
     // Extrai dados de Oscar da string do OMDB
@@ -2636,8 +2720,14 @@ async function openMaisInfo(id, nome, ano){
       if(oscarNoms) parts.push('<span style="color:#aaa;font-weight:600">🎬 '+oscarNoms+' indicaç'+(oscarNoms==='1'?'ão':'ões')+'</span>');
       html += '<div class="bsheet-section"><div class="bsheet-section-title">🏆 Oscar</div><div style="font-size:14px;display:flex;gap:16px;flex-wrap:wrap">'+parts.join('')+'</div></div>';
     }
-    const dir = omdb?.Director && omdb.Director!=='N/A' ? omdb.Director : null;
-    const wri = omdb?.Writer && omdb.Writer!=='N/A' ? omdb.Writer.split(',').slice(0,2).join(', ') : null;
+    // Direção/roteiro vêm do TMDB (créditos, que já é buscado abaixo pro elenco), não da OMDB —
+    // assim independem de a OMDB ter achado o filme ou estourado cota, e sobrevivem intactos
+    // quando "Mais Info" é servido do cache do banco (que não guarda Director/Writer, só
+    // nota/Rotten/prêmios).
+    const tmdbDirectors = [...new Set((tmdbC?.crew||[]).filter(c=>c.job==='Director').map(c=>c.name))];
+    const dir = tmdbDirectors.length ? tmdbDirectors.join(', ') : null;
+    const tmdbWriters = [...new Set((tmdbC?.crew||[]).filter(c=>['Writer','Screenplay','Story'].includes(c.job)).map(c=>c.name))];
+    const wri = tmdbWriters.length ? tmdbWriters.slice(0,2).join(', ') : null;
     if(dir||wri) html += '<div class="bsheet-section"><div class="bsheet-section-title">🎬 Direção e Roteiro</div>'+(dir?'<div style="margin-bottom:6px"><span style="color:#888;font-size:11px">Diretor</span><br><span style="font-size:14px;font-weight:600">'+esc(dir)+'</span></div>':'')+(wri?'<div><span style="color:#888;font-size:11px">Roteiro</span><br><span style="font-size:13px">'+esc(wri)+'</span></div>':'')+'</div>';
     const cast = tmdbC?.cast?.slice(0,6)||[];
     if(cast.length) html += '<div class="bsheet-section"><div class="bsheet-section-title">🎭 Elenco Principal</div><div style="display:flex;gap:10px;overflow-x:auto;padding-bottom:4px">'+cast.map(a=>'<div style="text-align:center;min-width:60px"><div style="width:52px;height:52px;border-radius:50%;overflow:hidden;margin:0 auto 4px;background:#2a2a2a">'+(a.profile_path?'<img src="https://image.tmdb.org/t/p/w200'+a.profile_path+'" style="width:100%;height:100%;object-fit:cover">':'<div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;font-size:18px">👤</div>')+'</div><div style="font-size:9px;font-weight:600;line-height:1.2">'+esc(a.name.split(' ').slice(0,2).join(' '))+'</div></div>').join('')+'</div></div>';
