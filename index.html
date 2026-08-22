@@ -2605,12 +2605,18 @@ function omdbEhFresco(atualizadoEm, ano){
 }
 
 // Persiste no banco via RPC (fire-and-forget — a UI já reflete o resultado pelo _omdbCache,
-// não precisa esperar a escrita).
+// não precisa esperar a escrita). O builder do supa.rpc() é "preguiçoso": só monta e manda a
+// requisição de verdade dentro do then()/await, e implementa só then() — não tem .catch()
+// nem .finally() como método próprio. Encadear .catch() nele lança TypeError na hora, síncrono,
+// antes de qualquer request sair — foi exatamente isso que escondeu essa escrita nunca
+// acontecendo (o TypeError subia e era engolido pelo try/catch de fora). .then({error}) é o
+// jeito certo de checar falha nesse builder. Nunca ()=>{} — sempre loga.
 function persistOmdbCache(filmId, d){
   const imdb = d.imdbRating!=='N/A' ? d.imdbRating : null;
   const rt = d.Ratings?.find(r=>r.Source==='Rotten Tomatoes')?.Value || null;
   const awards = d.Awards && d.Awards!=='N/A' ? d.Awards : null;
-  supa.rpc('cache_omdb_rating', { p_filme_id: filmId, p_imdb: imdb, p_rt: rt, p_awards: awards }).catch(()=>{});
+  supa.rpc('cache_omdb_rating', { p_filme_id: filmId, p_imdb: imdb, p_rt: rt, p_awards: awards })
+    .then(({error}) => { if(error) console.warn('cache_omdb_rating falhou:', filmId, error); });
 }
 
 // Busca de fato no OMDB e persiste (memória + banco) só em sucesso ou "não encontrado".
@@ -2623,7 +2629,8 @@ async function fetchAndCacheOmdb(filmId, nome, ano){
       _omdbCache[filmId] = null;
       // NULL explícito, não uma string "N/A" — a próxima leitura (fetchOmdbBasic, via FM)
       // não pode confundir "sabemos que não tem" com "tem um valor literal N/A".
-      supa.rpc('cache_omdb_rating', { p_filme_id: filmId, p_imdb: null, p_rt: null, p_awards: null }).catch(()=>{});
+      supa.rpc('cache_omdb_rating', { p_filme_id: filmId, p_imdb: null, p_rt: null, p_awards: null })
+        .then(({error}) => { if(error) console.warn('cache_omdb_rating falhou:', filmId, error); });
       return null;
     }
     return null; // cota, chave inválida etc — não persiste em lugar nenhum
