@@ -2571,33 +2571,44 @@ async function openOndeAssistir(id, nome, ano){
 }
 
 // ── OMDB (compartilhado entre "Mais Info" e as notas IMDb/RT) ──
-// Uma chamada por título+ano já traz nota IMDb, Rotten Tomatoes E prêmios/direção/roteiro —
-// openMaisInfo() e loadExtRatings() pediam isso cada uma por conta própria, dobrando as
-// chamadas. Cache em duas camadas: memória (_omdbCache, por sessão) e banco (filmes.omdb_*,
-// entre sessões e entre pessoas — grava via cache_omdb_rating(), a única forma de escrever
-// essas colunas; ver CLAUDE.md, seção Segurança). Ordem de leitura: memória primeiro; se não
-// tem, olha o banco (já veio junto no carregamento inicial via FM, não é leitura extra) —
-// fresco usa direto, velho USA O QUE TEM na hora e rebusca em segundo plano (nunca deixa a
-// tela esperando rede nem em branco). Nunca teve cache nenhum: busca síncrona mesmo, é a
-// primeira vez, alguém vai esperar de qualquer jeito.
+// Uma chamada por título+ano já traz nota IMDb, Rotten Tomatoes E prêmios — openMaisInfo() e
+// loadExtRatings() pediam isso cada uma por conta própria, dobrando as chamadas; Director/
+// Writer vêm do TMDB, não daqui (ver openMaisInfo). Cache em duas camadas: memória
+// (_omdbCache, por sessão) e banco (filmes.omdb_*, entre sessões e entre pessoas — grava via
+// cache_omdb_rating(), a única forma de escrever essas colunas; ver CLAUDE.md, seção
+// Segurança). Ordem de leitura: memória primeiro; se não tem, olha o banco (já veio junto no
+// carregamento inicial via FM, não é leitura extra) — fresco usa direto, velho USA O QUE TEM
+// na hora e rebusca em segundo plano (nunca deixa a tela esperando rede nem em branco). Nunca
+// teve cache nenhum: busca síncrona mesmo, é a primeira vez, alguém vai esperar de qualquer
+// jeito.
+//
+// fetchAndCacheOmdb tenta o título original do TMDB primeiro, o nome PT-BR como reserva (ver
+// o comentário na própria função) — sem isso, filme estrangeiro com título traduzido virava
+// "Movie not found!" gravado como fato permanente: bug real que já aconteceu (4 de 6 filmes
+// testados, incluindo A Lista de Schindler — 7 Oscars — registrado como sem nenhum).
 //
 // null (sem persistir em memória nem banco) = falha de infraestrutura (erro de rede, cota
 // diária estourada — a OMDB devolve isso como Response:"False", Error:"Request limit
 // reached!", no MESMO formato de "filme não existe") — não é fato sobre o filme, não fica
 // em lugar nenhum; a próxima abertura tenta de novo. null PERSISTIDO (memória e banco) = a
-// OMDB respondeu especificamente Error:"Movie not found!" — isso sim é fato sobre o filme,
-// cacheia. Regra que vale nas duas camadas: nunca persistir falha de infraestrutura como se
-// fosse fato sobre o filme.
+// OMDB respondeu especificamente Error:"Movie not found!" nos dois títulos tentados — isso
+// sim é fato sobre o filme, cacheia.
 //
-// A validade (7 dias pra lançamento recente, 90 pro resto) mora de verdade na função SQL,
-// que decide se grava ou não — omdbEhFresco() aqui é só otimização, pra não fazer viagem de
-// rede à toa quando já dá pra saber que ainda está fresco; se o JS calcular errado, o banco
-// não reescreve o mesmo dado sem necessidade de qualquer forma.
+// Validade mora de verdade na função SQL cache_omdb_rating: dado real sempre grava, sem
+// checagem de prazo — quem evita reescrita desnecessária de dado real por dado real é o lado
+// da leitura (omdbEhFresco, abaixo). "Não encontrado" só reescreve "não encontrado" depois de
+// 3 dias, bem mais curto que nota real (7 dias lançamento recente, 90 pro resto) — e a função
+// nunca deixa um "não encontrado" apagar dado real já gravado, não importa o prazo, porque a
+// OMDB não some com filme já indexado: se isso chegar depois de já termos nota real, é falha
+// transitória, não fato novo. omdbEhFresco() aqui só evita viagem de rede à toa quando já dá
+// pra saber que ainda está fresco; se o JS calcular errado, o banco não reescreve sem
+// necessidade de qualquer forma — as duas contas (JS e SQL) precisam concordar nos prazos.
 const OMDB_KEY = '419a30fd';
 const _omdbCache = {};
 
-function omdbEhFresco(atualizadoEm, ano){
+function omdbEhFresco(atualizadoEm, ano, temDados){
   if(!atualizadoEm) return false;
+  if(!temDados) return (Date.now() - new Date(atualizadoEm).getTime()) < 3 * 24 * 60 * 60 * 1000;
   const anoNum = /^\d{4}$/.test(ano||'') ? parseInt(ano,10) : null;
   const recente = anoNum !== null && anoNum >= new Date().getFullYear() - 1;
   const ttlMs = (recente ? 7 : 90) * 24 * 60 * 60 * 1000;
@@ -2619,24 +2630,53 @@ function persistOmdbCache(filmId, d){
     .then(({error}) => { if(error) console.warn('cache_omdb_rating falhou:', filmId, error); });
 }
 
-// Busca de fato no OMDB e persiste (memória + banco) só em sucesso ou "não encontrado".
-async function fetchAndCacheOmdb(filmId, nome, ano){
+async function omdbFetchOnce(titulo, ano){
   try {
-    const r = await fetch('https://www.omdbapi.com/?t='+encodeURIComponent(decodeURIComponent(nome))+'&y='+ano+'&apikey='+OMDB_KEY);
-    const d = await r.json();
-    if(d.Response==='True'){ _omdbCache[filmId] = d; persistOmdbCache(filmId, d); return d; }
-    if(d.Error==='Movie not found!'){
-      _omdbCache[filmId] = null;
-      // NULL explícito, não uma string "N/A" — a próxima leitura (fetchOmdbBasic, via FM)
-      // não pode confundir "sabemos que não tem" com "tem um valor literal N/A".
-      supa.rpc('cache_omdb_rating', { p_filme_id: filmId, p_imdb: null, p_rt: null, p_awards: null })
-        .then(({error}) => { if(error) console.warn('cache_omdb_rating falhou:', filmId, error); });
-      return null;
-    }
-    return null; // cota, chave inválida etc — não persiste em lugar nenhum
+    const r = await fetch('https://www.omdbapi.com/?t='+encodeURIComponent(titulo)+'&y='+ano+'&apikey='+OMDB_KEY);
+    return await r.json();
   } catch(e) {
     return null;
   }
+}
+
+// Busca de fato no OMDB e persiste (memória + banco) só em sucesso ou "não encontrado" — só
+// depois de tentar os dois títulos. Tenta primeiro o original_title (via tmdb_id — 840/841
+// filmes já têm, sem precisar buscar por nome no TMDB) porque a OMDB é base americana indexada
+// por título original/inglês e a maioria do catálogo é filme estrangeiro; o nome PT-BR entra
+// só como reserva. Pra filme brasileiro (original_title já é o nome) não perde nada. A ordem
+// inversa (nome PT-BR primeiro) foi o bug original: filme estrangeiro com nome traduzido virava
+// "Movie not found!" gravado como fato.
+async function fetchAndCacheOmdb(filmId, nome, ano){
+  const nomeD = decodeURIComponent(nome);
+  let titulo1 = nomeD, titulo2 = null;
+
+  const tmdbId = FM[filmId]?.tmdb_id;
+  if(tmdbId){
+    try {
+      const tmdbD = await fetch('https://api.themoviedb.org/3/movie/'+tmdbId+'?api_key='+TMDB_KEY+'&language=pt-BR').then(r=>r.json());
+      if(tmdbD?.original_title){
+        titulo1 = tmdbD.original_title;
+        if(tmdbD.original_title !== nomeD) titulo2 = nomeD;
+      }
+    } catch(e) { /* TMDB falhou — segue só com o nome PT-BR */ }
+  }
+
+  let d = await omdbFetchOnce(titulo1, ano);
+  if(d?.Error === 'Movie not found!' && titulo2){
+    const d2 = await omdbFetchOnce(titulo2, ano);
+    if(d2) d = d2;
+  }
+
+  if(d?.Response === 'True'){ _omdbCache[filmId] = d; persistOmdbCache(filmId, d); return d; }
+  if(d?.Error === 'Movie not found!'){
+    _omdbCache[filmId] = null;
+    // NULL explícito, não uma string "N/A" — a próxima leitura (fetchOmdbBasic, via FM)
+    // não pode confundir "sabemos que não tem" com "tem um valor literal N/A".
+    supa.rpc('cache_omdb_rating', { p_filme_id: filmId, p_imdb: null, p_rt: null, p_awards: null })
+      .then(({error}) => { if(error) console.warn('cache_omdb_rating falhou:', filmId, error); });
+    return null;
+  }
+  return null; // cota, chave inválida, rede etc — não persiste em lugar nenhum
 }
 
 // Rebusca em segundo plano quando o cache do banco está velho, e reaproveita loadExtRatings
@@ -2664,7 +2704,7 @@ async function fetchOmdbBasic(filmId, nome, ano){
       Awards: f.omdb_awards || ''
     } : null;
     _omdbCache[filmId] = dbCached;
-    if(!omdbEhFresco(f.omdb_atualizado_em, ano)) refreshOmdbInBackground(filmId, nome, ano);
+    if(!omdbEhFresco(f.omdb_atualizado_em, ano, temDados)) refreshOmdbInBackground(filmId, nome, ano);
     return dbCached;
   }
 
@@ -2676,7 +2716,6 @@ async function openMaisInfo(id, nome, ano){
   document.getElementById('maisInfoBody').innerHTML = '<div style="text-align:center;padding:30px;color:#888"><div style="font-size:28px;margin-bottom:8px">⏳</div>Carregando...</div>';
   openBSheet('maisInfo');
   try {
-    const nomeD = decodeURIComponent(nome);
     const tmdbId = FM[id]?.tmdb_id;
     let tmdbD = null, tmdbC = null;
 
@@ -2702,18 +2741,9 @@ async function openMaisInfo(id, nome, ano){
         ]);
       }
     }
-    const omdbBasic = await omdbPromise;
-
-    // Se o OMDB não achou pelo nome PT-BR, tenta com o título original do TMDB (vem do
-    // detalhe por id agora, não mais da busca — o campo é o mesmo nos dois endpoints) — só
-    // cai aqui se fetchOmdbBasic (cache compartilhado com loadExtRatings) não achou nada.
-    let omdb = omdbBasic;
-    if(!omdb && tmdbD?.original_title && tmdbD.original_title !== nomeD) {
-      try {
-        const omdbRes2 = await fetch('https://www.omdbapi.com/?t='+encodeURIComponent(tmdbD.original_title)+'&y='+ano+'&apikey='+OMDB_KEY).then(r=>r.json());
-        if(omdbRes2.Response==='True'){ omdb = omdbRes2; _omdbCache[id] = omdb; persistOmdbCache(id, omdb); } // atualiza memória E banco — loadExtRatings e a próxima sessão de qualquer um passam a ver o resultado melhor também
-      } catch(e2) {}
-    }
+    // fetchOmdbBasic() já tentou original_title (primeiro) e nome PT-BR (reserva)
+    // internamente — não precisa repetir aqui.
+    const omdb = await omdbPromise;
     // Extrai dados de Oscar da string do OMDB
     // Ex: "Won 2 Oscars. Another 31 wins & 71 nominations total"
     // Ex: "Nominated for 4 Oscars. Another 19 wins & 71 nominations total"
