@@ -1777,6 +1777,27 @@ function applyPendSort(list){
 }
 function setPendSort(val){ pendSortKey=val; renderPendentes(); }
 
+// Quem rola a lista de #viewPendentes muda por breakpoint — desktop: .detail-list tem
+// overflow-y próprio; mobile: .detail-list vira height:auto e quem rola é a página inteira,
+// #appScroll (confirmado por grep no CSS: só esses dois têm overflow-y:auto/scroll no
+// caminho entre a lista e o body). Por seletor fixo, não por índice numa cadeia de
+// ancestrais — pareamento por índice quebra se um dos dois virar/deixar de ser scrollável
+// entre a captura (antes do render) e a restauração (depois, lista uma linha menor), porque
+// aí os índices desalinham e o scrollTop de um container vai parar no outro.
+const PEND_SCROLL_SELECTORS = ['#viewPendentes .detail-list', '#appScroll'];
+function capturePendScroll(){
+  return PEND_SCROLL_SELECTORS.map(sel => document.querySelector(sel)?.scrollTop ?? null);
+}
+function restorePendScroll(saved){
+  PEND_SCROLL_SELECTORS.forEach((sel, i) => {
+    if(saved[i] == null) return;
+    const el = document.querySelector(sel);
+    if(!el) return;
+    void el.offsetHeight; // força reflow antes de atribuir — scrollTop pode ser ignorado em silêncio se o layout do innerHTML= ainda não foi calculado
+    el.scrollTop = saved[i];
+  });
+}
+
 function renderPendentes(selId){
   if(!CU){showNeedLogin('viewPendentes');return;}
   const s=STATS[CU];
@@ -2032,7 +2053,15 @@ async function saveRating(){
     }
 
     closeModal('rateModal');
+
+    // renderPendentes() reconstrói a tabela de pendentes inteira (render() chama ela abaixo,
+    // se CV==='pendentes') — o container que rola nasce de novo com scrollTop=0. Captura antes
+    // e restaura depois pra quem tem muitos pendentes não perder o lugar a cada avaliação.
+    const pendScroll = capturePendScroll();
+
     render();
+
+    restorePendScroll(pendScroll);
 
     // Re-renderiza o painel de detalhes na view ativa + mobile modal (se aberto)
     try {
