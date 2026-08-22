@@ -3340,14 +3340,56 @@ function renderConquistasHTML(uid){
   if(!data) return '';
   const { trilhas, especiais, totals } = data;
 
-  // Grade de cartas (Fase 5 Etapa B) — uma carta por trilha, só o degrau ATUAL (o mais alto
-  // já cruzado; se nenhum ainda, o primeiro degrau como alvo). Anel circular = progresso até
-  // o próximo degrau. Cor por raridade (posição no catálogo NOMEADO, ver raridadeColor).
   const degrauCounts = contagemPorDegrau();
   const totalMemb = totalMembrosConquistas();
   const R = 27, C = 2 * Math.PI * R;
 
-  const trilhaCards = trilhas.map(t => {
+  // Trilhas com teto (Diversidade, Décadas) já completadas saem da grade "Em jogo" e vão
+  // pro Panteão — é isso que mantém a grade do mesmo tamanho daqui a 5 anos, em vez de
+  // acumular cartas "completo" pra sempre. Trilha sem teto nunca completa (ver trilhaLadder,
+  // gera degrau sintético até 12), então nunca sai da grade e nunca entra no Panteão.
+  const panteaoTrilhas = trilhas.filter(t => t.teto && t.currentLevel && !t.nextLevel);
+  const emJogoTrilhas = trilhas.filter(t => !(t.teto && t.currentLevel && !t.nextLevel));
+
+  // Lista achatada de todo selo de trilha já cruzado (todas as trilhas, inclusive as que já
+  // foram pro Panteão) — fonte única pra "Seus mais raros" e "Linha do tempo", que precisam
+  // dos mesmos dados em duas ordenações diferentes.
+  const achievedFlat = [];
+  trilhas.forEach(t => {
+    const totalNamedT = t.levels.filter(l => !l.synthetic).length;
+    t.levels.forEach((lvl, i) => {
+      if(!lvl.done) return;
+      achievedFlat.push({
+        trilhaNome: t.nome, nome: lvl.nome, emoji: lvl.emoji,
+        data: lvl.data, precisao: lvl.precisao,
+        color: raridadeColor(i, totalNamedT),
+        count: degrauCounts[t.slug + '|' + i] || 0
+      });
+    });
+  });
+
+  // Fase 5 Etapa E — bloco 1: os 3 selos que menos gente da tropa tem, não aparece se a
+  // pessoa não tiver nenhum selo ainda.
+  const maisRaros = achievedFlat.slice().sort((a, b) => a.count - b.count).slice(0, 3);
+  const maisRarosHTML = maisRaros.length ? `
+    <div style="margin-bottom:14px">
+      <div style="font-size:11px;font-weight:700;color:var(--muted);margin-bottom:8px;text-transform:uppercase;letter-spacing:0.5px">💎 Seus mais raros</div>
+      <div style="display:flex;gap:10px;overflow-x:auto;padding-bottom:4px;scrollbar-width:thin;-webkit-overflow-scrolling:touch">
+        ${maisRaros.map(r => `
+          <div style="flex-shrink:0;width:112px;background:var(--surface2);border:1px solid ${r.color}55;border-radius:10px;padding:12px 10px;text-align:center">
+            <div style="font-size:26px;margin-bottom:6px">${r.emoji}</div>
+            <div style="font-family:Georgia,'Times New Roman',serif;font-size:12.5px;font-weight:700;color:${r.color};line-height:1.25">${esc(r.nome)}</div>
+            <div style="font-size:9px;color:var(--muted2);margin-top:6px">${r.count} de ${totalMemb} têm</div>
+          </div>
+        `).join('')}
+      </div>
+    </div>
+  ` : '';
+
+  // Grade de cartas (Fase 5 Etapa B) — uma carta por trilha, só o degrau ATUAL (o mais alto
+  // já cruzado; se nenhum ainda, o primeiro degrau como alvo). Anel circular = progresso até
+  // o próximo degrau. Cor por raridade (posição no catálogo NOMEADO, ver raridadeColor).
+  const trilhaCards = emJogoTrilhas.map(t => {
     const currentLevel = t.currentLevel;
     const nextLevel = t.nextLevel;
     const achieved = !!currentLevel;
@@ -3410,20 +3452,80 @@ function renderConquistasHTML(uid){
     return b.pct - a.pct;
   });
 
-  const trilhasHTML = `<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">${trilhaCards.map(c => c.html).join('')}</div>`;
+  const trilhasHTML = `
+    <div style="margin-bottom:14px">
+      <div style="font-size:11px;font-weight:700;color:var(--muted);margin-bottom:8px;text-transform:uppercase;letter-spacing:0.5px">⚔️ Em jogo</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">${trilhaCards.map(c => c.html).join('')}</div>
+    </div>
+  `;
 
-  // Especiais — grid de cards
+  // Fase 5 Etapa E — bloco 3: trilhas de teto já completadas (ver panteaoTrilhas acima).
+  // Compacto, 3 colunas — não compete visualmente com a grade "Em jogo".
+  const panteaoHTML = panteaoTrilhas.length ? `
+    <div style="margin-bottom:14px">
+      <div style="font-size:11px;font-weight:700;color:var(--muted);margin-bottom:8px;text-transform:uppercase;letter-spacing:0.5px">🏛️ Panteão</div>
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px">
+        ${panteaoTrilhas.map(t => {
+          const lvl = t.currentLevel;
+          const i = t.levels.indexOf(lvl);
+          const totalNamedT = t.levels.filter(l => !l.synthetic).length;
+          const color = raridadeColor(i, totalNamedT);
+          return `
+            <div style="background:var(--surface2);border:1px solid ${color}55;border-radius:10px;padding:10px;text-align:center">
+              <div style="font-size:22px;margin-bottom:4px">${lvl.emoji}</div>
+              <div style="font-family:Georgia,'Times New Roman',serif;font-size:11.5px;font-weight:700;color:${color};line-height:1.2">${esc(lvl.nome)}</div>
+              <div style="font-size:9px;color:var(--muted2);margin-top:3px">${esc(t.nome)}</div>
+              <div style="font-size:8.5px;color:var(--muted2);margin-top:2px">${fraseDataConquista(lvl, 'carta')}</div>
+            </div>
+          `;
+        }).join('')}
+      </div>
+    </div>
+  ` : '';
+
+  // Fase 5 Etapa E — bloco 4: todos os selos cruzados, mais recente primeiro. Indeterminadas
+  // (sem data) vão todas pro fim, não misturadas com as datadas. Mostra 15 e para — sem
+  // expandir — pra não virar uma lista infinita conforme a pessoa acumula selos.
+  const comData = achievedFlat
+    .filter(a => a.precisao !== 'indeterminada' && a.data)
+    .sort((a, b) => new Date(b.data + 'T00:00:00') - new Date(a.data + 'T00:00:00'));
+  const semData = achievedFlat.filter(a => a.precisao === 'indeterminada' || !a.data);
+  const timelineFull = comData.concat(semData);
+  const timelineShown = timelineFull.slice(0, 15);
+  const timelineRestante = timelineFull.length - timelineShown.length;
+
+  const timelineHTML = timelineFull.length ? `
+    <div style="margin-bottom:14px">
+      <div style="font-size:11px;font-weight:700;color:var(--muted);margin-bottom:8px;text-transform:uppercase;letter-spacing:0.5px">🕐 Linha do tempo</div>
+      <div>
+        ${timelineShown.map(a => `
+          <div style="display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid var(--border)">
+            <div style="width:76px;flex-shrink:0;font-size:10px;color:var(--muted2)">${fraseDataConquista(a, 'timeline')}</div>
+            <div style="font-size:20px;flex-shrink:0">${a.emoji}</div>
+            <div style="flex:1;min-width:0">
+              <div style="font-size:12.5px;font-weight:700;color:#fff">${esc(a.nome)}</div>
+              <div style="font-size:9.5px;color:var(--muted2);margin-top:1px">${esc(a.trilhaNome)}</div>
+            </div>
+          </div>
+        `).join('')}
+        ${timelineRestante > 0 ? `<div style="text-align:center;font-size:10.5px;color:var(--muted2);padding-top:10px">e mais ${timelineRestante} selo${timelineRestante!==1?'s':''}</div>` : ''}
+      </div>
+    </div>
+  ` : '';
+
+  // Especiais — bloco 5, por último e visualmente menor: são binários (tem/não tem), não
+  // pesam degrau nem raridade, não merecem o mesmo peso das trilhas.
   const especiaisHTML = especiais.length ? `
-    <div style="margin-top:14px">
-      <div style="font-size:11px;font-weight:700;color:var(--muted);margin-bottom:8px;text-transform:uppercase;letter-spacing:0.5px">✨ Especiais</div>
-      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:8px">
+    <div>
+      <div style="font-size:10px;font-weight:700;color:var(--muted2);margin-bottom:7px;text-transform:uppercase;letter-spacing:0.5px">✨ Especiais</div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(110px,1fr));gap:6px">
         ${especiais.map(e => `
-          <div style="background:var(--surface2);border:1px solid ${e.unlocked ? e.color+'66' : 'var(--border)'};border-left:3px solid ${e.unlocked ? e.color : 'var(--muted2)'};border-radius:8px;padding:10px;text-align:center;opacity:${e.unlocked ? '1' : '0.55'};position:relative">
-            ${e.unlocked ? `<div style="position:absolute;top:4px;right:6px;font-size:9px;color:${e.color}">✓</div>` : `<div style="position:absolute;top:4px;right:6px;font-size:9px;color:var(--muted2)">🔒</div>`}
-            <div style="font-size:22px;line-height:1;margin-bottom:6px;filter:${e.unlocked ? 'none' : 'grayscale(0.8)'}">${e.emoji}</div>
-            <div style="font-size:11px;font-weight:800;color:${e.unlocked ? e.color : 'var(--muted)'};line-height:1.2;margin-bottom:3px">${esc(e.nome)}</div>
-            <div style="font-size:9px;color:var(--muted);line-height:1.3">${esc(e.desc)}</div>
-            ${!e.unlocked && e.hint ? `<div style="font-size:8px;color:var(--muted2);margin-top:4px;font-style:italic">${esc(e.hint)}</div>` : ''}
+          <div style="background:var(--surface2);border:1px solid ${e.unlocked ? e.color+'66' : 'var(--border)'};border-left:3px solid ${e.unlocked ? e.color : 'var(--muted2)'};border-radius:7px;padding:8px;text-align:center;opacity:${e.unlocked ? '1' : '0.55'};position:relative">
+            ${e.unlocked ? `<div style="position:absolute;top:3px;right:5px;font-size:8px;color:${e.color}">✓</div>` : `<div style="position:absolute;top:3px;right:5px;font-size:8px;color:var(--muted2)">🔒</div>`}
+            <div style="font-size:17px;line-height:1;margin-bottom:5px;filter:${e.unlocked ? 'none' : 'grayscale(0.8)'}">${e.emoji}</div>
+            <div style="font-size:9.5px;font-weight:800;color:${e.unlocked ? e.color : 'var(--muted)'};line-height:1.2;margin-bottom:2px">${esc(e.nome)}</div>
+            <div style="font-size:8px;color:var(--muted);line-height:1.25">${esc(e.desc)}</div>
+            ${!e.unlocked && e.hint ? `<div style="font-size:7.5px;color:var(--muted2);margin-top:3px;font-style:italic">${esc(e.hint)}</div>` : ''}
           </div>
         `).join('')}
       </div>
@@ -3436,7 +3538,10 @@ function renderConquistasHTML(uid){
         <span>🏅 Conquistas</span>
         <span style="font-size:11px;color:var(--muted);font-weight:600;background:var(--surface2);padding:3px 10px;border-radius:10px;border:1px solid var(--border)">${totals.unlocked} / ${totals.total}</span>
       </div>
+      ${maisRarosHTML}
       ${trilhasHTML}
+      ${panteaoHTML}
+      ${timelineHTML}
       ${especiaisHTML}
     </div>
   `;
