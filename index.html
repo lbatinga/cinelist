@@ -1946,6 +1946,7 @@ function openRecentPanel(id){
 
 // ── RANKING V2 injected ──
 var rankTab = 'geral', rankYear = new Date().getFullYear().toString(), rankGenre = 'Ação'; // inicializado cedo
+var rankDetailUid = null; // uid do perfil aberto em #rankTabContent, ou null se for a lista da aba — ver renderRankTab()
 
 
 
@@ -2922,14 +2923,25 @@ function renderRanking(){
   renderRankTab();
 }
 
-function setRankTab(tab){ rankTab=tab; renderRanking(); }
+function setRankTab(tab){ rankTab=tab; rankDetailUid=null; renderRanking(); }
 
+// Perfil aberto (rankDetailUid) tem prioridade sobre a aba — é o que faz renderRankTab()
+// sobreviver a um render() genérico disparado por um carregamento em segundo plano (ex.
+// loadComparativoParaUsuario) enquanto um perfil está aberto, em vez de voltar pra lista
+// por baixo dos pés de quem está vendo o perfil. Ver CLAUDE.md, seção Rendering.
 function renderRankTab(){
   const el = document.getElementById('rankTabContent');
+  if(rankDetailUid){ el.innerHTML = userDetailHTML(rankDetailUid, { context: 'ranking' }); return; }
   if(rankTab==='geral') el.innerHTML = rankGeralHTML();
   else if(rankTab==='ano') el.innerHTML = rankAnoHTML();
   else if(rankTab==='filmes') el.innerHTML = rankFilmesHTML();
   else if(rankTab==='genero') el.innerHTML = rankGeneroHTML();
+}
+
+// Fecha o perfil aberto e volta pra lista da aba atual — usado pelo botão "← Voltar".
+function closeRankDetail(){
+  rankDetailUid = null;
+  renderRankTab();
 }
 
 // ── CONQUISTAS / BADGES (Fase 5) ──
@@ -3608,6 +3620,7 @@ function renderConquistasHTML(uid){
 function openUserDetail(uid){
   const html = userDetailHTML(uid, { context: 'ranking' });
   if(!html) return;
+  rankDetailUid = uid;
   document.getElementById('rankTabContent').innerHTML = html;
   document.getElementById('appScroll').scrollTop = 0;
 }
@@ -3688,7 +3701,7 @@ function userDetailHTML(uid, opts){
     .filter(([u]) => u !== 'USER-001' && RAW.users_stats[u])
     .sort((a,b) => a[1].nome.localeCompare(b[1].nome));
   const navHTML = ctx === 'ranking'
-    ? `<button onclick="renderRankTab()" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:13px;margin-bottom:16px;font-family:inherit;display:flex;align-items:center;gap:4px;padding:0">← Voltar</button>`
+    ? `<button onclick="closeRankDetail()" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:13px;margin-bottom:16px;font-family:inherit;display:flex;align-items:center;gap:4px;padding:0">← Voltar</button>`
     : ctx === 'descobertas'
       ? `<div style="display:flex;align-items:center;gap:10px;margin-bottom:16px;flex-wrap:wrap">
           <span style="font-size:12px;color:var(--muted);font-weight:600">Ver perfil de:</span>
@@ -4021,7 +4034,7 @@ function openUserYearDetail(uid, year){
     .sort((a,b)=>b.avaliacoes[uid].nota-a.avaliacoes[uid].nota);
   
   document.getElementById('rankTabContent').innerHTML = `
-    <button onclick="renderRankTab()" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:13px;margin-bottom:16px">← Voltar</button>
+    <button onclick="closeRankDetail()" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:13px;margin-bottom:16px">← Voltar</button>
     <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px">
       ${avatarHTML(uid,{fontSize:16})}
       <div>
