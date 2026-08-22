@@ -8,14 +8,14 @@ CineList is a collaborative movie-tracking PWA for a closed group of friends (Ne
 
 Backend is Supabase (Postgres + Auth), project ref `iznikddtdwfvkkwqtwxg` (i.e. `https://iznikddtdwfvkkwqtwxg.supabase.co`, matching `SUPA_URL2` in `index.html`). Hosting is GitHub Pages, deployed by pushing to `main` (auto-publishes; Fastly CDN in front has a ~10 min edge cache, so a just-pushed change may take a few minutes to show up live — verify with a cache-busted `curl` if it matters, not by re-pushing).
 
-## Status (2026-08-20)
+## Status (2026-08-21)
 
 Mid-way through a multi-phase plan to add achievement trilhas ("Conquistas") and a v2 compatibility formula ("Afinidades"). The full phase-by-phase prompt lives outside this repo — the user brings it into each session, it isn't checked in here.
 
 - **Fase 2 is closed**: the `conquistas` table exists and is backfilled (tag `v1`, the promoted/permanent one — 196 rows, 12 usuários, 10 trilhas, 65 rows with `precisao='indeterminada'`). See the Conquistas section below for the schema and rules.
 - **Fase 3 is closed**: `v_filme_stats` and `v_avaliacao_comparativo` views exist, and three new especiais are calibrated (Defensor, Estraga-Prazeres, Termômetro). See the Base de comparação section below. Voz Dissonante was cut from this pass, pending Fase 5.
 - **Fase 4 is closed**: the `compatibilidade` table is populated under the promoted tag `versao_formula = 'v2'` (91 rows, 75 with a `pct`, 16 `NULL` for zero filmes em comum). Validated first under `'v2-teste'`, then re-run as-is under `'v2'` — no formula changes between the two, `recalcular_compatibilidade()` just upserts every `(a,b)` in place (no history to preserve, compatibilidade is estado). See the Compatibilidade section below. Not wired into `index.html`.
-- **Next up: Fase 5** — UI das conquistas (the `conquistas` table has had no screen reading from it since Fase 2). Compatibilidade's own UI is Fase 6, still after that.
+- **Fase 5 (UI das conquistas) is in progress, split into etapas A through F, each its own commit.** **Etapa A (camada de leitura) is closed and live in `main`** — `index.html` reads trilha progress from `conquistas` instead of recalculating client-side, `TRILHAS_DEF`/`trilhaLadder()` are the single degrau catalog (see Conquistas section), especiais moved to the new 7-item set, `Tempo na Tela` is in hours not days, and `loadComparativoParaUsuario()` fetches Fase 3's comparativo data on demand per profile instead of ~356KB upfront. **Etapa A.1 (replay incremental) is also closed** — `recalcular_conquistas()` plus triggers on `avaliacoes`/`filmes` keep `conquistas` current going forward (see Conquistas section); this didn't exist before this session, and without it every tier crossed after the `v1` backfill would have silently never lit up. **Next up: Etapa B** — replace the horizontal degrau strip with the card grid (rarity colors, progress ring, "X/Y têm"). Etapas C–F (modal, date phrasing, new blocks, voice-by-viewer) are still ahead, per the external Fase 5 prompt. Compatibilidade's own UI is Fase 6, after that — see its pre-decision notes (trigger vs. on-join vs. manual refresh, and the low-`n_comum` "not enough data yet" state) in the Compatibilidade section.
 
 ## Commands
 
