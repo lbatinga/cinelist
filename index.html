@@ -3228,6 +3228,21 @@ function raridadeColor(i, baseLen){
   return '#6fd0ee';
 }
 
+// Fase 5 Etapa F — voz por perfil: a tela de conquistas é vista tanto pelo dono do perfil
+// quanto por outros membros, e a cópia com pronome ("Seus X", "faltam N") muda dependendo de
+// quem está olhando. Uma função só decide isso (compara com CU, o usuário logado); cada
+// chamada monta a frase certa no ponto de uso — "Seus X" vira "Os X de Nome" e "faltam N"
+// vira "faltam N para Nome" são estruturas gramaticais diferentes, não dá pra ter um
+// substituto único genérico. Usa apelido, senão nome; corta pro primeiro nome só se for
+// longo (>12 caracteres) — não trunca um apelido curto sem necessidade.
+function vozPerfil(uid){
+  const isOwn = uid === CU;
+  const p = getProfile(uid);
+  let nome = p.apelido || USERS[uid]?.nome || '';
+  if(nome.length > 12) nome = nome.split(' ')[0];
+  return { isOwn, nome };
+}
+
 // Fase 5 Etapa D — frase de data pronta por (contexto, precisão), nunca montada por
 // concatenação. Concatenar um prefixo fixo ("desde " + data) quebra pra precisão
 // indeterminada, que não tem data pra encaixar ali ("desde data não registrada" não faz
@@ -3270,12 +3285,16 @@ function abrirDegrauModal(slug, uid){
   const winStart = Math.max(0, idx - 4);
   const winEnd = Math.min(t.levels.length - 1, idx + 2);
   const hiddenBefore = winStart;
+  const voz = vozPerfil(uid);
 
   const rowsHTML = t.levels.slice(winStart, winEnd + 1).map(lvl => {
     const isNext = lvl === nextLevel;
     let rightLabel;
     if(lvl.done) rightLabel = fraseDataConquista(lvl, 'modal');
-    else if(isNext) rightLabel = `faltam ${Math.max(0, lvl.threshold - t.current)}`;
+    else if(isNext){
+      const falta = Math.max(0, lvl.threshold - t.current);
+      rightLabel = voz.isOwn ? `faltam ${falta}` : `faltam ${falta} para ${esc(voz.nome)}`;
+    }
     else rightLabel = 'bloqueado';
 
     return `
@@ -3370,10 +3389,12 @@ function renderConquistasHTML(uid){
 
   // Fase 5 Etapa E — bloco 1: os 3 selos que menos gente da tropa tem, não aparece se a
   // pessoa não tiver nenhum selo ainda.
+  const voz = vozPerfil(uid);
   const maisRaros = achievedFlat.slice().sort((a, b) => a.count - b.count).slice(0, 3);
+  const maisRarosTitulo = voz.isOwn ? 'Seus mais raros' : `Os mais raros de ${esc(voz.nome)}`;
   const maisRarosHTML = maisRaros.length ? `
     <div style="margin-bottom:14px">
-      <div style="font-size:11px;font-weight:700;color:var(--muted);margin-bottom:8px;text-transform:uppercase;letter-spacing:0.5px">💎 Seus mais raros</div>
+      <div style="font-size:11px;font-weight:700;color:var(--muted);margin-bottom:8px;text-transform:uppercase;letter-spacing:0.5px">💎 ${maisRarosTitulo}</div>
       <div style="display:flex;gap:10px;overflow-x:auto;padding-bottom:4px;scrollbar-width:thin;-webkit-overflow-scrolling:touch">
         ${maisRaros.map(r => `
           <div style="flex-shrink:0;width:112px;background:var(--surface2);border:1px solid ${r.color}55;border-radius:10px;padding:12px 10px;text-align:center">
