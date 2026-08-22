@@ -3773,13 +3773,19 @@ function userDetailHTML(uid, opts){
               : `<div style="width:42px;height:42px;border-radius:50%;background:${a.color};color:#000;font-weight:900;font-size:14px;display:flex;align-items:center;justify-content:center;border:2px solid ${col}">${ini(a.nome)}</div>`;
             const isViewer = CU === a.uid;
 
-            let pctHTML, subHTML;
+            let pctHTML, subHTML, barraHTML = '';
             if(a.estado === 'normal'){
               pctHTML = `<div style="font-size:20px;font-weight:900;color:${col};line-height:1;margin-bottom:6px">${a.compat.pct}%</div>`;
               subHTML = `<div style="font-size:10px;color:var(--muted2);margin-top:2px">${a.compat.n_comum} filme${a.compat.n_comum===1?'':'s'}</div>`;
             } else if(a.estado === 'baixo'){
-              pctHTML = `<div style="font-size:20px;font-weight:900;color:${col};line-height:1;margin-bottom:6px;opacity:.6">${a.compat.pct}%</div>`;
+              // Nada de % aqui — com n_comum baixo, mais da metade do número (o freio K=15 da
+              // fórmula) é a média do grupo, não a pessoa. Mostra o progresso até o número
+              // existir de verdade, não um percentual que fala mais da tropa que do par.
+              pctHTML = `<div style="font-size:14px;font-weight:700;color:${col};line-height:1;margin-bottom:6px">${a.compat.n_comum}/15</div>`;
               subHTML = `<div style="font-size:9.5px;color:var(--muted2);margin-top:2px;font-style:italic">ainda conhecendo o gosto de ${esc(a.apelido)}</div>`;
+              barraHTML = `<div style="background:var(--surface3);border-radius:3px;height:3px;overflow:hidden;margin-top:6px">
+                <div style="height:100%;width:${Math.min(100,(a.compat.n_comum/15)*100)}%;background:var(--muted2);border-radius:3px"></div>
+              </div>`;
             } else {
               pctHTML = `<div style="font-size:14px;font-weight:700;color:var(--muted2);line-height:1;margin-bottom:6px">—</div>`;
               subHTML = `<div style="font-size:9.5px;color:var(--muted2);margin-top:2px;font-style:italic">ainda não dá pra comparar</div>`;
@@ -3790,6 +3796,7 @@ function userDetailHTML(uid, opts){
               <div style="display:flex;justify-content:center;margin-bottom:6px">${avHTML}</div>
               <div style="font-size:11px;font-weight:700;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(a.apelido)}</div>
               ${subHTML}
+              ${barraHTML}
             </div>`;
           }).join('')}
         </div>
@@ -4310,7 +4317,10 @@ function rankAfinidadesHTML(){
         pctHTML = `<div style="font-size:22px;font-weight:900;color:${col}">${compat.pct}%</div>`;
         subHTML = `${compat.n_comum} filmes em comum${data ? ' · ⏱ '+fmtTempo(data.minutos) : ''}`;
       } else if(estado === 'baixo'){
-        pctHTML = `<div style="font-size:22px;font-weight:900;color:${col};opacity:.6">${compat.pct}%</div>`;
+        // Nada de % aqui — com n_comum baixo, mais da metade do número (o freio K=15 da
+        // fórmula) é a média do grupo, não a pessoa. Mostra o progresso até o número existir
+        // de verdade, não um percentual que fala mais da tropa que do par.
+        pctHTML = `<div style="font-size:16px;font-weight:700;color:${col}">${compat.n_comum}/15</div>`;
         subHTML = `ainda conhecendo o gosto de ${esc(nomeB)}`;
       } else {
         pctHTML = `<div style="font-size:16px;font-weight:700;color:${col}">—</div>`;
@@ -4332,6 +4342,10 @@ function rankAfinidadesHTML(){
       if(estado === 'normal'){
         html += `<div style="background:var(--surface2);border-radius:4px;height:5px;overflow:hidden;margin-top:10px">
           <div style="height:100%;width:${compat.pct}%;background:linear-gradient(90deg,${col},${col}88);border-radius:4px"></div>
+        </div>`;
+      } else if(estado === 'baixo'){
+        html += `<div style="background:var(--surface2);border-radius:4px;height:4px;overflow:hidden;margin-top:10px">
+          <div style="height:100%;width:${Math.min(100,(compat.n_comum/15)*100)}%;background:var(--muted2);border-radius:4px"></div>
         </div>`;
       }
 
