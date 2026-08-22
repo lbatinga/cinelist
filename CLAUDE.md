@@ -12,7 +12,7 @@ Backend is Supabase (Postgres + Auth), project ref `iznikddtdwfvkkwqtwxg` (i.e. 
 
 Conquistas (achievement trilhas) and Afinidades (compatibility v2) shipped across six phases, all closed and live in `main` — schema, backfill/replay, and UI. See the Conquistas, Base de comparação and Compatibilidade sections below for how each system actually works today.
 
-Fase 7 (fechamento/higiene, sem feature nova) está em andamento. Feito até agora: `get_advisors(type='performance')` não achou índice de FK faltando — só RLS. Corrigido na migração `fase7_rls_perf_e_escopo_perfis` (2026-08-22): `auth.uid()`/`auth.jwt()` embrulhados em `(select ...)` em 8 policies que reavaliavam a função por linha; `perfis.perfil_write` — uma única policy `FOR ALL TO public` cuja escrita já era barrada hoje só pela condição (`auth.uid()` é sempre `NULL` pra quem só tem a anon key, sem claim `sub`; confirmado simulando `set role anon` numa transação com rollback — 0 linhas afetadas), nunca pelo escopo de role — virou três policies dedicadas (`perfil_insert`/`perfil_update`/`perfil_delete`), cada uma `TO authenticated`, fechando o escopo por role além da condição, mesmo padrão de escopo-largo-demais descrito na seção Segurança. Falta: consolidar a lista de pendências conhecidas num só lugar deste arquivo.
+Fase 7 (fechamento/higiene, sem feature nova) está em andamento. Feito até agora: `get_advisors(type='performance')` não achou índice de FK faltando — só RLS. Corrigido na migração `fase7_rls_perf_e_escopo_perfis` (2026-08-22): `auth.uid()`/`auth.jwt()` embrulhados em `(select ...)` em 8 policies que reavaliavam a função por linha; `perfis.perfil_write` — uma única policy `FOR ALL TO public` cuja escrita já era barrada hoje só pela condição (`auth.uid()` é sempre `NULL` pra quem só tem a anon key, sem claim `sub`; confirmado simulando `set role anon` numa transação com rollback — 0 linhas afetadas), nunca pelo escopo de role — virou três policies dedicadas (`perfil_insert`/`perfil_update`/`perfil_delete`), cada uma `TO authenticated`, fechando o escopo por role além da condição, mesmo padrão de escopo-largo-demais descrito na seção Segurança. Também reescreveu este arquivo pro estado final das Fases 1–6 e consolidou as pendências conhecidas numa seção só (ver Pendências conhecidas abaixo). Fase 7 fechada.
 
 ## Commands
 
@@ -178,6 +178,16 @@ Push (FCM) is wired through a separate Google Apps Script deployment (`apps_scri
 ### External APIs used client-side
 
 TMDB (movie metadata/posters, catalog search-and-add autocomplete), plus IMDb/Rotten Tomatoes ratings and "where to watch" lookups shown on the film detail panel. All API keys are embedded directly in `index.html` (anon/public-scoped keys — there is no server, so there's nowhere else for them to live); this is intentional, not an oversight.
+
+## Pendências conhecidas
+
+Sem resolver — cada uma é uma linha, o detalhe (quando existe) está na seção referenciada.
+
+- Feed de Atividades derruba 409 registros de "não quero assistir" (evento real que nunca aparece); deveria ordenar por `created_at`, excluindo o lote da migração AppSheet (ver a linha de `avaliacoes` no schema acima).
+- Voz Dissonante cortado do set de especiais — ver Base de comparação para o critério testado e a ideia de revisitar com o `peso` de variância.
+- Pico isolado de outubro/2024 no gráfico "Top 10 meses" de atividade mensal — não confirmado se é real ou resíduo de parsing de data.
+- `auth_leaked_password_protection` desabilitado no Supabase Auth — ver Segurança.
+- Detalhe da compatibilidade usa diferença bruta de nota, placar usa desvio pessoal (v2) — inconsistência conhecida e aceita, ver Compatibilidade.
 
 ## Working conventions established in this repo
 
