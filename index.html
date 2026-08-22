@@ -722,7 +722,9 @@ var RAW = {
   conquistas: {},      // Fase 5: usuario_id -> [{trilha,tier,selo,data,precisao,valor_no_momento}]
   comparativo: {},     // Fase 5: usuario_id -> [{filme_id,nota,media_tropa_sem_ele,n_outros}] (v_avaliacao_comparativo)
   filme_stats: {},     // Fase 5: filme_id -> {n_avaliacoes,media_tropa,peso} (v_filme_stats)
-  conquistasLoadFailed: false // Fase 5: true se loadConquistasEFilmeStatsFromSupabase() falhou — UI deve avisar, não só logar
+  conquistasLoadFailed: false, // Fase 5: true se loadConquistasEFilmeStatsFromSupabase() falhou — UI deve avisar, não só logar
+  compatibilidade: {}, // Fase 6: "a|b" (a<b) -> {n_comum,pct} (tabela compatibilidade)
+  compatibilidadeLoadFailed: false
 };
 
 // ═══════════════════════════════════════════
@@ -808,6 +810,60 @@ async function loadConquistasEFilmeStatsFromSupabase() {
     RAW.conquistasLoadFailed = true;
     return false;
   }
+}
+
+// Fase 6 — carrega a tabela compatibilidade inteira no arranque. É pequena (~120 linhas,
+// um par por dupla de membros in_ranking) e é estado (nunca notifica/mostra delta, ver
+// CLAUDE.md), então não precisa do padrão "sob demanda por perfil" usado pra comparativo.
+async function loadCompatibilidadeFromSupabase() {
+  try {
+    const { data, error } = await supa
+      .from('compatibilidade')
+      .select('a,b,n_comum,pct');
+    if (error) throw error;
+
+    const newCompat = {};
+    (data || []).forEach(row => {
+      newCompat[row.a + '|' + row.b] = { n_comum: row.n_comum, pct: row.pct };
+    });
+    RAW.compatibilidade = newCompat;
+    RAW.compatibilidadeLoadFailed = false;
+    console.log(`✅ ${(data||[]).length} pares de compatibilidade carregados`);
+    return true;
+  } catch(e) {
+    console.warn('⚠️ Erro ao carregar compatibilidade:', e);
+    RAW.compatibilidadeLoadFailed = true;
+    return false;
+  }
+}
+
+// a<b sempre na tabela (ver CLAUDE.md) — normaliza a ordem dos dois uids antes de consultar
+// RAW.compatibilidade, senão metade das buscas erra o par por procurar na ordem trocada.
+function getCompat(u1, u2){
+  const key = u1 < u2 ? u1+'|'+u2 : u2+'|'+u1;
+  return RAW.compatibilidade[key];
+}
+
+// Fase 6 — três estados de confiabilidade, usados em toda tela que mostra compatibilidade:
+// 'sem_dado' (n_comum=0, pct null — não há filme em comum, não há o que comparar),
+// 'baixo' (1-14 — número existe mas o freio K=15 da fórmula ainda domina sobre o sinal real,
+// ver CLAUDE.md), 'normal' (>=15 — sinal real pesa mais que a média do grupo). 'baixo' nunca
+// vira NULL nem some da tela — só não compete com os pares confiáveis.
+function compatEstado(compat){
+  if(!compat || compat.pct == null) return 'sem_dado';
+  if(compat.n_comum < 15) return 'baixo';
+  return 'normal';
+}
+
+// Faixas recalibradas pro range real do v2 (46-83 entre os pares confiáveis hoje, mediana 65,
+// quartis 59/71 — consultado direto na tabela). As faixas antigas de calcAfinGlobal (80/60/40)
+// eram calibradas pro range da fórmula antiga (59-97) e deixariam quase todo par amarelo aqui.
+function compatColor(pct){
+  if(pct == null) return 'var(--muted2)';
+  if(pct >= 72) return '#46d369';
+  if(pct >= 65) return '#f5c518';
+  if(pct >= 59) return '#e67e22';
+  return '#e05555';
 }
 
 // Carrega a base comparativa (Fase 3) de UM usuário sob demanda, só quando o perfil dele
@@ -921,6 +977,9 @@ async function loadFilmsFromSupabase() {
 
     document.getElementById('loaderMsg').textContent = 'Carregando conquistas...';
     await loadConquistasEFilmeStatsFromSupabase();
+
+    document.getElementById('loaderMsg').textContent = 'Carregando compatibilidade...';
+    await loadCompatibilidadeFromSupabase();
 
     // Calcula estatísticas dinâmicas
     document.getElementById('loaderMsg').textContent = 'Calculando estatísticas...';
@@ -2873,29 +2932,6 @@ function renderRankTab(){
   else if(rankTab==='genero') el.innerHTML = rankGeneroHTML();
 }
 
-// ── AFINIDADE GLOBAL (reutilizável) ──
-// Calcula compatibilidade entre dois usuários baseado em filmes em comum
-function calcAfinGlobal(uidA, uidB){
-  const shared = FILMES.filter(f => {
-    const a = f.avaliacoes?.[uidA], b = f.avaliacoes?.[uidB];
-    return a?.nota != null && b?.nota != null;
-  });
-  if(shared.length < 3) return { score: null, shared: shared.length };
-
-  const diffs = shared.map(f => Math.abs(f.avaliacoes[uidA].nota - f.avaliacoes[uidB].nota));
-  const avgDiff = diffs.reduce((s,d)=>s+d,0) / diffs.length;
-  const score = Math.round(Math.max(0, 100 - avgDiff * 20));
-  return { score, shared: shared.length };
-}
-
-function afinColor(score){
-  if(score == null) return 'var(--muted2)';
-  if(score >= 80) return '#46d369';
-  if(score >= 60) return '#f5c518';
-  if(score >= 40) return '#e67e22';
-  return '#e05555';
-}
-
 // ── CONQUISTAS / BADGES (Fase 5) ──
 // Fonte única dos degraus nomeados de cada trilha — usada tanto pelo cálculo ao vivo
 // abaixo quanto por qualquer replay/backfill futuro. Ver CLAUDE.md "Catálogo canônico
@@ -3689,26 +3725,39 @@ function userDetailHTML(uid, opts){
       </div>`;
     })()}
 
-    <!-- COMPATIBILIDADE COM A TROPA -->
+    <!-- COMPATIBILIDADE COM A TROPA (Fase 6 — lê de compatibilidade, não recalcula) -->
     ${(() => {
-      const outros = Object.keys(USERS).filter(u => u !== uid && u !== 'USER-001' && USERS[u]);
+      if(RAW.compatibilidadeLoadFailed){
+        return `<div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:14px;margin-bottom:20px;text-align:center;font-size:11px;color:var(--muted)">⚠️ Não foi possível carregar a compatibilidade agora.</div>`;
+      }
+      const outros = Object.keys(USERS).filter(u => u !== uid && u !== 'USER-001' && STATS[u]?.in_ranking);
       const afins = outros.map(outro => {
         const p = getProfile(outro);
+        const compat = getCompat(uid, outro);
         return {
           uid: outro,
           nome: USERS[outro]?.nome || '?',
           apelido: p.apelido || USERS[outro]?.nome || '?',
           color: p.color || aC(outro),
           photo: p.photo,
-          ...calcAfinGlobal(uid, outro)
+          compat,
+          estado: compatEstado(compat)
         };
-      }).filter(a => a.score != null).sort((a,b) => b.score - a.score);
+      });
 
       if(afins.length === 0) return '';
 
-      const viewerName = CU && CU !== uid ? (USERS[CU]?.nome || '') : '';
-      const isOwnProfile = CU === uid;
-      const titulo = isOwnProfile ? '🎯 Sua compatibilidade com a tropa' : `🎯 Compatibilidade de ${esc(nome)} com a tropa`;
+      // Normal primeiro (por pct desc), depois baixo, depois sem_dado por último — nunca
+      // escondidos, só fora de competir com os pares confiáveis (ver CLAUDE.md).
+      const TIER_ORDEM = { normal: 0, baixo: 1, sem_dado: 2 };
+      afins.sort((a,b) => {
+        if(TIER_ORDEM[a.estado] !== TIER_ORDEM[b.estado]) return TIER_ORDEM[a.estado] - TIER_ORDEM[b.estado];
+        if(a.estado === 'sem_dado') return a.nome.localeCompare(b.nome);
+        return b.compat.pct - a.compat.pct;
+      });
+
+      const voz = vozPerfil(uid);
+      const titulo = voz.isOwn ? '🎯 Sua compatibilidade com a tropa' : `🎯 Compatibilidade de ${esc(voz.nome)} com a tropa`;
 
       return `
       <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:14px;margin-bottom:20px">
@@ -3718,16 +3767,29 @@ function userDetailHTML(uid, opts){
         </div>
         <div style="display:flex;gap:10px;overflow-x:auto;padding-bottom:4px;scrollbar-width:thin;-webkit-overflow-scrolling:touch">
           ${afins.map(a => {
-            const col = afinColor(a.score);
+            const col = a.estado === 'normal' ? compatColor(a.compat.pct) : 'var(--muted2)';
             const avHTML = a.photo
               ? `<img src="${esc(a.photo)}" style="width:42px;height:42px;border-radius:50%;object-fit:cover;border:2px solid ${col}">`
               : `<div style="width:42px;height:42px;border-radius:50%;background:${a.color};color:#000;font-weight:900;font-size:14px;display:flex;align-items:center;justify-content:center;border:2px solid ${col}">${ini(a.nome)}</div>`;
             const isViewer = CU === a.uid;
-            return `<div onclick="openUserDetail('${a.uid}')" style="flex-shrink:0;width:110px;background:var(--surface2);border:1px solid ${isViewer?col:'var(--border)'};border-radius:10px;padding:11px 8px;text-align:center;cursor:pointer;transition:transform .15s,border-color .15s" onmouseover="this.style.transform='translateY(-2px)'" onmouseout="this.style.transform='none'">
-              <div style="font-size:20px;font-weight:900;color:${col};line-height:1;margin-bottom:6px">${a.score}%</div>
+
+            let pctHTML, subHTML;
+            if(a.estado === 'normal'){
+              pctHTML = `<div style="font-size:20px;font-weight:900;color:${col};line-height:1;margin-bottom:6px">${a.compat.pct}%</div>`;
+              subHTML = `<div style="font-size:10px;color:var(--muted2);margin-top:2px">${a.compat.n_comum} filme${a.compat.n_comum===1?'':'s'}</div>`;
+            } else if(a.estado === 'baixo'){
+              pctHTML = `<div style="font-size:20px;font-weight:900;color:${col};line-height:1;margin-bottom:6px;opacity:.6">${a.compat.pct}%</div>`;
+              subHTML = `<div style="font-size:9.5px;color:var(--muted2);margin-top:2px;font-style:italic">ainda conhecendo o gosto de ${esc(a.apelido)}</div>`;
+            } else {
+              pctHTML = `<div style="font-size:14px;font-weight:700;color:var(--muted2);line-height:1;margin-bottom:6px">—</div>`;
+              subHTML = `<div style="font-size:9.5px;color:var(--muted2);margin-top:2px;font-style:italic">ainda não dá pra comparar</div>`;
+            }
+
+            return `<div onclick="openUserDetail('${a.uid}')" style="flex-shrink:0;width:110px;background:var(--surface2);border:1px solid ${isViewer?col:'var(--border)'};border-radius:10px;padding:11px 8px;text-align:center;cursor:pointer;transition:transform .15s,border-color .15s;opacity:${a.estado==='sem_dado'?'0.6':'1'}" onmouseover="this.style.transform='translateY(-2px)'" onmouseout="this.style.transform='none'">
+              ${pctHTML}
               <div style="display:flex;justify-content:center;margin-bottom:6px">${avHTML}</div>
               <div style="font-size:11px;font-weight:700;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(a.apelido)}</div>
-              <div style="font-size:10px;color:var(--muted2);margin-top:2px">${a.shared} filme${a.shared===1?'':'s'}</div>
+              ${subHTML}
             </div>`;
           }).join('')}
         </div>
@@ -4068,6 +4130,18 @@ function rankGeneroHTML(){
 // ESTATÍSTICAS
 // AFINIDADES
 function rankAfinidadesHTML(){
+  // Se o load falhar, RAW.compatibilidade fica {} e todo par viraria "ainda não dá pra
+  // comparar" — disfarçando erro de rede como "sem dado" (mesmo cuidado de conquistas).
+  if(RAW.compatibilidadeLoadFailed){
+    return `
+      <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:20px;margin-bottom:20px;text-align:center">
+        <div style="font-size:24px;margin-bottom:8px">⚠️</div>
+        <div style="font-size:13px;font-weight:700;margin-bottom:4px">Não foi possível carregar a compatibilidade agora</div>
+        <div style="font-size:11px;color:var(--muted)">Puxe pra atualizar ou tente de novo em instantes.</div>
+      </div>
+    `;
+  }
+
   const members = Object.entries(STATS)
     .filter(([uid, s]) => s.in_ranking)
     .map(([uid, s]) => ({ uid, nome: s.nome }));
@@ -4089,9 +4163,16 @@ function rankAfinidadesHTML(){
     });
     if(shared.length < 3) return null;
 
-    const diffs = shared.map(f => Math.abs(f.avaliacoes[uidA].nota - f.avaliacoes[uidB].nota));
-    const avgDiff = diffs.reduce((s,d)=>s+d,0) / diffs.length;
-    const score = Math.round(Math.max(0, 100 - avgDiff * 20));
+    // Fase 6 — "o que a pessoa (B) ama e você (A) não viu": B deu 8+, A nunca avaliou (nem
+    // recusou explicitamente com "não quero assistir" — recomendar algo já recusado não ajuda).
+    // Roda sobre FILMES inteiro, não sobre shared, já que o ponto é justamente o que NÃO é
+    // compartilhado. Máx. 3, maior nota de B primeiro.
+    const naoVistos = FILMES.filter(f => {
+      const avB = f.avaliacoes[uidB];
+      if(avB?.nota == null || avB.nota < 8) return false;
+      const avA = f.avaliacoes[uidA];
+      return (!avA || avA.nota == null) && avA?.vai !== 'Não';
+    }).sort((a,b) => b.avaliacoes[uidB].nota - a.avaliacoes[uidB].nota).slice(0,3);
 
     const ambosNota9 = shared.filter(f => f.avaliacoes[uidA].nota >= 9 && f.avaliacoes[uidB].nota >= 9)
       .sort((a,b) => ((b.avaliacoes[uidA].nota+b.avaliacoes[uidB].nota)/2) - ((a.avaliacoes[uidA].nota+a.avaliacoes[uidB].nota)/2))
@@ -4162,197 +4243,229 @@ function rankAfinidadesHTML(){
       : null;
 
     return {
-      score, shared: shared.length, avgDiff: Math.round(avgDiff*10)/10,
-      ambosAmaram, ambosNota9, maiorGap, exclusivos, minutos,
+      shared: shared.length,
+      ambosAmaram, ambosNota9, maiorGap, exclusivos, naoVistos, minutos,
       mediaA: Math.round(mediaA*10)/10, mediaB: Math.round(mediaB*10)/10,
       evolucao, genreScores, genreConflito, anoMedio
     };
   }
 
   const focusUid = CU && STATS[CU]?.in_ranking ? CU : members[0]?.uid;
-  const myPairsWithData = members
-    .filter(m => m.uid !== focusUid)
-    .map(m => ({ m, data: calcAfin(focusUid, m.uid) }));
-  const myPairs = myPairsWithData.filter(x => x.data).sort((a,b) => b.data.score - a.data.score);
-  const myPairsNoData = myPairsWithData.filter(x => !x.data);
 
+  // Fase 6 — lê pct/n_comum de RAW.compatibilidade em vez de recalcular no navegador. O
+  // detalhe abaixo (quais filmes, gênero, evolução) continua calculado ao vivo em cima de
+  // FILMES — a tabela compatibilidade só guarda o agregado, nunca "quais filmes" — então
+  // não dá pra vir de lá de qualquer forma. Pendência conhecida e aceita: o detalhe usa
+  // diferença bruta de nota internamente, o placar usa desvio pessoal (v2) — duas
+  // matemáticas diferentes convivendo de propósito, não descuido (ver CLAUDE.md).
+  const TIER_ORDEM = { normal: 0, baixo: 1, sem_dado: 2 };
+  const myPairs = members
+    .filter(m => m.uid !== focusUid)
+    .map(m => {
+      const compat = getCompat(focusUid, m.uid);
+      return { m, compat, estado: compatEstado(compat), data: calcAfin(focusUid, m.uid) };
+    })
+    .sort((x,y) => {
+      if(TIER_ORDEM[x.estado] !== TIER_ORDEM[y.estado]) return TIER_ORDEM[x.estado] - TIER_ORDEM[y.estado];
+      if(x.estado === 'sem_dado') return displayName(x.m.uid).localeCompare(displayName(y.m.uid));
+      return y.compat.pct - x.compat.pct;
+    });
+
+  // Duplas mais compatíveis do grupo — só entre pares 'normal' (n_comum>=15). Coroar uma
+  // dupla com um pct que o próprio corte diz não ser confiável ainda seria pior que não
+  // mostrar nada.
   const allPairs = [];
   for(let i=0; i<members.length; i++)
     for(let j=i+1; j<members.length; j++){
-      const data = calcAfin(members[i].uid, members[j].uid);
-      if(data) allPairs.push({ a: members[i], b: members[j], data });
+      const compat = getCompat(members[i].uid, members[j].uid);
+      if(compatEstado(compat) === 'normal') allPairs.push({ a: members[i], b: members[j], compat });
     }
-  allPairs.sort((a,b) => b.data.score - a.data.score);
+  allPairs.sort((a,b) => b.compat.pct - a.compat.pct);
 
+  // Cor do detalhe (gênero, evolução) fica com as faixas antigas de propósito — o detalhe
+  // continua na matemática antiga (ver nota acima), recalibrar só a cor sem recalibrar o
+  // número por trás criaria uma inconsistência pior que a que já existe.
   function scoreColor(s){ return s>=80?'#46d369':s>=60?'#f5c518':s>=40?'#e67e22':'#e05555'; }
-  function scoreEmoji(s){ return s>=80?'💚':s>=60?'💛':s>=40?'🧡':'❤️'; }
   function pill(text, bg, border, color, id){
     const ev = id ? `onclick="openFilme('${id}')" ` : '';
     return `<span ${ev}style="background:${bg};border:1px solid ${border};color:${color};font-size:11px;padding:3px 8px;border-radius:20px;white-space:nowrap;display:inline-block;cursor:${id?'pointer':'default'}">${text}</span>`;
   }
   function trunc(s,n){ return s.length>n?s.slice(0,n-1)+'…':s; }
 
-  const focusNome = focusUid ? displayName(focusUid) : '';
+  const voz = vozPerfil(focusUid);
+  const tituloAfin = voz.isOwn ? 'Sua afinidade com o grupo' : `Afinidade de ${esc(voz.nome)} com o grupo`;
   let cardIdx = 0;
   let html = `<div style="margin-bottom:24px">`;
-  html += `<div style="font-size:15px;font-weight:800;color:#e5e5e5;margin-bottom:14px">🤝 Afinidade de ${esc(focusNome)} com o grupo</div>`;
+  html += `<div style="font-size:15px;font-weight:800;color:#e5e5e5;margin-bottom:14px">🤝 ${tituloAfin}</div>`;
 
-  if(myPairs.length === 0 && myPairsNoData.length === 0){
-    html += `<div style="color:var(--muted);font-size:13px;padding:20px 0">Poucos filmes em comum para calcular.</div>`;
+  if(myPairs.length === 0){
+    html += `<div style="color:var(--muted);font-size:13px;padding:20px 0">Nenhum outro membro no ranking ainda.</div>`;
   } else {
-    myPairs.forEach(({m, data}) => {
-      const col = scoreColor(data.score);
-      const nomeA = focusNome, nomeB = displayName(m.uid);
-      const cid = 'afin_detail_' + (cardIdx++);
+    myPairs.forEach(({m, compat, estado, data}) => {
+      const nomeA = displayName(focusUid), nomeB = displayName(m.uid);
+      const col = estado === 'normal' ? compatColor(compat.pct) : 'var(--muted2)';
 
-      html += `<div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:14px 16px;margin-bottom:10px;width:100%;box-sizing:border-box">`;
+      let pctHTML, subHTML;
+      if(estado === 'normal'){
+        pctHTML = `<div style="font-size:22px;font-weight:900;color:${col}">${compat.pct}%</div>`;
+        subHTML = `${compat.n_comum} filmes em comum${data ? ' · ⏱ '+fmtTempo(data.minutos) : ''}`;
+      } else if(estado === 'baixo'){
+        pctHTML = `<div style="font-size:22px;font-weight:900;color:${col};opacity:.6">${compat.pct}%</div>`;
+        subHTML = `ainda conhecendo o gosto de ${esc(nomeB)}`;
+      } else {
+        pctHTML = `<div style="font-size:16px;font-weight:700;color:${col}">—</div>`;
+        subHTML = `ainda não dá pra comparar`;
+      }
+
+      html += `<div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:14px 16px;margin-bottom:10px;width:100%;box-sizing:border-box;opacity:${estado==='sem_dado'?'0.65':'1'}">`;
 
       // === CARD COMPACTO (sempre visível) ===
       html += `<div style="display:flex;align-items:center;gap:12px">
         ${avatarHTML(m.uid,{size:40,fontSize:14})}
         <div style="flex:1;min-width:0">
           <div style="font-weight:700;font-size:14px">${esc(nomeB)}</div>
-          <div style="font-size:11px;color:var(--muted)">${data.shared} filmes em comum · ⏱ ${fmtTempo(data.minutos)}</div>
+          <div style="font-size:11px;color:var(--muted);font-style:${estado==='normal'?'normal':'italic'}">${subHTML}</div>
         </div>
-        <div style="text-align:right;flex-shrink:0">
-          <div style="font-size:22px;font-weight:900;color:${col}">${data.score}%</div>
-          <div style="font-size:11px;color:var(--muted)">${scoreEmoji(data.score)} afinidade</div>
-        </div>
-      </div>
-      <div style="background:var(--surface2);border-radius:4px;height:5px;overflow:hidden;margin-top:10px">
-        <div style="height:100%;width:${data.score}%;background:linear-gradient(90deg,${col},${col}88);border-radius:4px"></div>
+        <div style="text-align:right;flex-shrink:0">${pctHTML}</div>
       </div>`;
 
-      // === BOTÃO VER DETALHES ===
-      html += `<div style="text-align:center;margin-top:8px">
-        <span onclick="const d=document.getElementById('${cid}');const b=this;if(d.style.display==='none'){d.style.display='block';b.textContent='▲ Ocultar detalhes';}else{d.style.display='none';b.textContent='▼ Ver detalhes';}" style="font-size:11px;color:var(--muted);cursor:pointer;font-weight:600">▼ Ver detalhes</span>
-      </div>`;
-
-      // === DETALHES (ocultos por padrão) ===
-      html += `<div id="${cid}" style="display:none;margin-top:10px;padding-top:10px;border-top:1px solid var(--border)">`;
-
-      // Stats pills
-      const maisGenNome = data.mediaA >= data.mediaB ? nomeA : nomeB;
-      const maisGenMedia = Math.max(data.mediaA, data.mediaB);
-      const maisCritNome = data.mediaA < data.mediaB ? nomeA : nomeB;
-      const maisCritMedia = Math.min(data.mediaA, data.mediaB);
-
-      html += `<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px">`;
-      if(data.anoMedio) html += `<div style="background:var(--surface2);border-radius:8px;padding:6px 10px;font-size:11px;text-align:center"><div style="font-weight:800;color:#a0c4ff">~${data.anoMedio}</div><div style="color:var(--muted)">ano médio</div></div>`;
-      html += `<div style="background:var(--surface2);border-radius:8px;padding:6px 10px;font-size:11px;text-align:center"><div style="font-weight:800;color:#46d369">${maisGenMedia}</div><div style="color:var(--muted)">${trunc(maisGenNome,8)} generoso</div></div>`;
-      html += `<div style="background:var(--surface2);border-radius:8px;padding:6px 10px;font-size:11px;text-align:center"><div style="font-weight:800;color:#f5c518">${maisCritMedia}</div><div style="color:var(--muted)">${trunc(maisCritNome,8)} crítico</div></div>`;
-      html += `</div>`;
-
-      if(data.ambosNota9.length){
-        html += `<div style="font-size:11px;color:#f5c518;font-weight:700;margin-bottom:5px">🌟 Nota máxima em comum (≥9)</div>
-        <div style="display:flex;gap:5px;flex-wrap:wrap;margin-bottom:10px">
-          ${data.ambosNota9.map(f=>pill(trunc(f.nome,22),'rgba(245,197,24,.1)','rgba(245,197,24,.3)','#f5c518',f.id)).join('')}
-        </div>`;
-      } else if(data.ambosAmaram.length){
-        html += `<div style="font-size:11px;color:#46d369;font-weight:700;margin-bottom:5px">✅ Ambos amaram (≥8)</div>
-        <div style="display:flex;gap:5px;flex-wrap:wrap;margin-bottom:10px">
-          ${data.ambosAmaram.map(f=>pill(trunc(f.nome,22),'rgba(70,211,105,.12)','rgba(70,211,105,.3)','#46d369',f.id)).join('')}
+      if(estado === 'normal'){
+        html += `<div style="background:var(--surface2);border-radius:4px;height:5px;overflow:hidden;margin-top:10px">
+          <div style="height:100%;width:${compat.pct}%;background:linear-gradient(90deg,${col},${col}88);border-radius:4px"></div>
         </div>`;
       }
 
-      if(data.maiorGap){
-        const f=data.maiorGap.f, nA=f.avaliacoes[focusUid]?.nota, nB=f.avaliacoes[m.uid]?.nota;
-        const quemAmou=nA>nB?nomeA:nomeB, quemOdiou=nA>nB?nomeB:nomeA;
-        html += `<div style="font-size:11px;color:#e05555;font-weight:700;margin-bottom:5px">💀 Maior divergência</div>
-        <div style="margin-bottom:10px">
-          ${pill(`${trunc(f.nome,20)} — ${trunc(quemAmou,8)}: ${fmt(Math.max(nA,nB))} vs ${trunc(quemOdiou,8)}: ${fmt(Math.min(nA,nB))}`,'rgba(224,85,85,.1)','rgba(224,85,85,.3)','#e05555',f.id)}
+      // === BOTÃO VER DETALHES (só quando há filme em comum de fato pra detalhar) ===
+      if(data){
+        const cid = 'afin_detail_' + (cardIdx++);
+        html += `<div style="text-align:center;margin-top:8px">
+          <span onclick="const d=document.getElementById('${cid}');const b=this;if(d.style.display==='none'){d.style.display='block';b.textContent='▲ Ocultar detalhes';}else{d.style.display='none';b.textContent='▼ Ver detalhes';}" style="font-size:11px;color:var(--muted);cursor:pointer;font-weight:600">▼ Ver detalhes</span>
         </div>`;
-      }
 
-      if(data.exclusivos.length){
-        html += `<div style="font-size:11px;color:#ce93d8;font-weight:700;margin-bottom:5px">🔁 Só vocês dois assistiram</div>
-        <div style="display:flex;gap:5px;flex-wrap:wrap;margin-bottom:10px">
-          ${data.exclusivos.map(f=>pill(trunc(f.nome,22),'rgba(206,147,216,.1)','rgba(206,147,216,.3)','#ce93d8',f.id)).join('')}
-        </div>`;
-      }
+        // === DETALHES (ocultos por padrão) ===
+        html += `<div id="${cid}" style="display:none;margin-top:10px;padding-top:10px;border-top:1px solid var(--border)">`;
 
-      if(data.genreConflito){
-        const gc=data.genreConflito;
-        const amaNome=gc.avgA>gc.avgB?nomeA:nomeB, ama=Math.max(gc.avgA,gc.avgB).toFixed(1);
-        const evitaNome=gc.avgA>gc.avgB?nomeB:nomeA, evita=Math.min(gc.avgA,gc.avgB).toFixed(1);
-        html += `<div style="font-size:11px;color:#e67e22;font-weight:700;margin-bottom:4px">🎭 Gênero divisor: ${esc(gc.g)}</div>
-        <div style="font-size:11px;color:var(--muted);margin-bottom:10px">${trunc(amaNome,10)} ama (${ama}) · ${trunc(evitaNome,10)} evita (${evita})</div>`;
-      }
+        // Stats pills
+        const maisGenNome = data.mediaA >= data.mediaB ? nomeA : nomeB;
+        const maisGenMedia = Math.max(data.mediaA, data.mediaB);
+        const maisCritNome = data.mediaA < data.mediaB ? nomeA : nomeB;
+        const maisCritMedia = Math.min(data.mediaA, data.mediaB);
 
-      if(data.genreScores.length){
-        html += `<div style="font-size:11px;color:#80deea;font-weight:700;margin-bottom:6px">🎯 Afinidade por gênero</div>
-        <div style="display:flex;flex-direction:column;gap:4px;margin-bottom:10px">`;
-        data.genreScores.forEach(gs => {
-          const gc=scoreColor(gs.score);
-          html += `<div style="display:flex;align-items:center;gap:8px">
-            <div style="font-size:11px;color:var(--muted);width:90px;flex-shrink:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(gs.g)}</div>
-            <div style="flex:1;background:var(--surface2);border-radius:3px;height:5px;overflow:hidden">
-              <div style="height:100%;width:${gs.score}%;background:${gc};border-radius:3px"></div>
-            </div>
-            <div style="font-size:11px;font-weight:700;color:${gc};width:32px;text-align:right;flex-shrink:0">${gs.score}%</div>
-          </div>`;
-        });
+        html += `<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px">`;
+        if(data.anoMedio) html += `<div style="background:var(--surface2);border-radius:8px;padding:6px 10px;font-size:11px;text-align:center"><div style="font-weight:800;color:#a0c4ff">~${data.anoMedio}</div><div style="color:var(--muted)">ano médio</div></div>`;
+        html += `<div style="background:var(--surface2);border-radius:8px;padding:6px 10px;font-size:11px;text-align:center"><div style="font-weight:800;color:#46d369">${maisGenMedia}</div><div style="color:var(--muted)">${trunc(maisGenNome,8)} generoso</div></div>`;
+        html += `<div style="background:var(--surface2);border-radius:8px;padding:6px 10px;font-size:11px;text-align:center"><div style="font-weight:800;color:#f5c518">${maisCritMedia}</div><div style="color:var(--muted)">${trunc(maisCritNome,8)} crítico</div></div>`;
         html += `</div>`;
-      }
 
-      if(data.evolucao.length >= 2){
-        html += `<div style="font-size:11px;color:#b0bec5;font-weight:700;margin-bottom:6px">📈 Evolução da afinidade</div>
-        <div style="display:flex;gap:6px;flex-wrap:wrap">`;
-        data.evolucao.forEach(ev => {
-          const ec=scoreColor(ev.score);
-          html += `<div style="background:var(--surface2);border-radius:8px;padding:5px 8px;text-align:center;min-width:52px">
-            <div style="font-size:12px;font-weight:800;color:${ec}">${ev.score}%</div>
-            <div style="font-size:10px;color:var(--muted)">${ev.ano}</div>
-            <div style="font-size:9px;color:var(--muted2)">${ev.count} filmes</div>
+        if(data.ambosNota9.length){
+          html += `<div style="font-size:11px;color:#f5c518;font-weight:700;margin-bottom:5px">🌟 Nota máxima em comum (≥9)</div>
+          <div style="display:flex;gap:5px;flex-wrap:wrap;margin-bottom:10px">
+            ${data.ambosNota9.map(f=>pill(trunc(f.nome,22),'rgba(245,197,24,.1)','rgba(245,197,24,.3)','#f5c518',f.id)).join('')}
           </div>`;
-        });
-        html += `</div>`;
+        } else if(data.ambosAmaram.length){
+          html += `<div style="font-size:11px;color:#46d369;font-weight:700;margin-bottom:5px">✅ Ambos amaram (≥8)</div>
+          <div style="display:flex;gap:5px;flex-wrap:wrap;margin-bottom:10px">
+            ${data.ambosAmaram.map(f=>pill(trunc(f.nome,22),'rgba(70,211,105,.12)','rgba(70,211,105,.3)','#46d369',f.id)).join('')}
+          </div>`;
+        }
+
+        if(data.naoVistos.length){
+          html += `<div style="font-size:11px;color:#4a90e2;font-weight:700;margin-bottom:5px">🎬 ${esc(trunc(nomeB,14))} amou e você não viu</div>
+          <div style="display:flex;gap:5px;flex-wrap:wrap;margin-bottom:10px">
+            ${data.naoVistos.map(f=>pill(trunc(f.nome,22),'rgba(74,144,226,.1)','rgba(74,144,226,.3)','#4a90e2',f.id)).join('')}
+          </div>`;
+        }
+
+        if(data.maiorGap){
+          const f=data.maiorGap.f, nA=f.avaliacoes[focusUid]?.nota, nB=f.avaliacoes[m.uid]?.nota;
+          const quemAmou=nA>nB?nomeA:nomeB, quemOdiou=nA>nB?nomeB:nomeA;
+          html += `<div style="font-size:11px;color:#e05555;font-weight:700;margin-bottom:5px">💀 Maior divergência</div>
+          <div style="margin-bottom:10px">
+            ${pill(`${trunc(f.nome,20)} — ${trunc(quemAmou,8)}: ${fmt(Math.max(nA,nB))} vs ${trunc(quemOdiou,8)}: ${fmt(Math.min(nA,nB))}`,'rgba(224,85,85,.1)','rgba(224,85,85,.3)','#e05555',f.id)}
+          </div>`;
+        }
+
+        if(data.exclusivos.length){
+          html += `<div style="font-size:11px;color:#ce93d8;font-weight:700;margin-bottom:5px">🔁 Só vocês dois assistiram</div>
+          <div style="display:flex;gap:5px;flex-wrap:wrap;margin-bottom:10px">
+            ${data.exclusivos.map(f=>pill(trunc(f.nome,22),'rgba(206,147,216,.1)','rgba(206,147,216,.3)','#ce93d8',f.id)).join('')}
+          </div>`;
+        }
+
+        // Blocos abaixo dão um PERCENTUAL agregado de afinidade (gênero, evolução) — só fazem
+        // sentido em pares 'normal'. Num par 'baixo' isso contradiria, na mesma tela, o que o
+        // cabeçalho acabou de dizer ("ainda conhecendo o gosto de X"): um fato pontual sobre
+        // filmes específicos (nota máxima, maior divergência...) é verdadeiro com 4 filmes;
+        // um percentual agregado não é. Os blocos factuais acima ficam pra qualquer estado.
+        if(estado === 'normal' && data.genreConflito){
+          const gc=data.genreConflito;
+          const amaNome=gc.avgA>gc.avgB?nomeA:nomeB, ama=Math.max(gc.avgA,gc.avgB).toFixed(1);
+          const evitaNome=gc.avgA>gc.avgB?nomeB:nomeA, evita=Math.min(gc.avgA,gc.avgB).toFixed(1);
+          html += `<div style="font-size:11px;color:#e67e22;font-weight:700;margin-bottom:4px">🎭 Gênero divisor: ${esc(gc.g)}</div>
+          <div style="font-size:11px;color:var(--muted);margin-bottom:10px">${trunc(amaNome,10)} ama (${ama}) · ${trunc(evitaNome,10)} evita (${evita})</div>`;
+        }
+
+        if(estado === 'normal' && data.genreScores.length){
+          html += `<div style="font-size:11px;color:#80deea;font-weight:700;margin-bottom:6px">🎯 Afinidade por gênero</div>
+          <div style="display:flex;flex-direction:column;gap:4px;margin-bottom:10px">`;
+          data.genreScores.forEach(gs => {
+            const gc=scoreColor(gs.score);
+            html += `<div style="display:flex;align-items:center;gap:8px">
+              <div style="font-size:11px;color:var(--muted);width:90px;flex-shrink:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(gs.g)}</div>
+              <div style="flex:1;background:var(--surface2);border-radius:3px;height:5px;overflow:hidden">
+                <div style="height:100%;width:${gs.score}%;background:${gc};border-radius:3px"></div>
+              </div>
+              <div style="font-size:11px;font-weight:700;color:${gc};width:32px;text-align:right;flex-shrink:0">${gs.score}%</div>
+            </div>`;
+          });
+          html += `</div>`;
+        }
+
+        if(estado === 'normal' && data.evolucao.length >= 2){
+          html += `<div style="font-size:11px;color:#b0bec5;font-weight:700;margin-bottom:6px">📈 Evolução da afinidade</div>
+          <div style="display:flex;gap:6px;flex-wrap:wrap">`;
+          data.evolucao.forEach(ev => {
+            const ec=scoreColor(ev.score);
+            html += `<div style="background:var(--surface2);border-radius:8px;padding:5px 8px;text-align:center;min-width:52px">
+              <div style="font-size:12px;font-weight:800;color:${ec}">${ev.score}%</div>
+              <div style="font-size:10px;color:var(--muted)">${ev.ano}</div>
+              <div style="font-size:9px;color:var(--muted2)">${ev.count} filmes</div>
+            </div>`;
+          });
+          html += `</div>`;
+        }
+
+        html += `</div>`; // fecha detalhes
       }
 
-      html += `</div>`; // fecha detalhes
       html += `</div>`; // fecha card
     });
-
-    // Membros sem dados suficientes (ex: Victoria)
-    if(myPairsNoData.length){
-      myPairsNoData.forEach(({m}) => {
-        const memberQuant = STATS[m.uid]?.quant || 0;
-        html += `<div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:14px 16px;margin-bottom:10px;width:100%;box-sizing:border-box;opacity:0.7">
-          <div style="display:flex;align-items:center;gap:12px">
-            ${avatarHTML(m.uid,{size:40,fontSize:14})}
-            <div style="flex:1;min-width:0">
-              <div style="font-weight:700;font-size:14px">${esc(displayName(m.uid))}</div>
-              <div style="font-size:11px;color:var(--muted)">${memberQuant === 0 ? 'Ainda sem avaliações' : 'Poucos filmes em comum (mín. 3)'}</div>
-            </div>
-            <div style="text-align:right;flex-shrink:0">
-              <div style="font-size:16px;font-weight:700;color:var(--muted2)">—</div>
-            </div>
-          </div>
-        </div>`;
-      });
-    }
   }
 
   html += `<div style="font-size:15px;font-weight:800;color:#e5e5e5;margin:24px 0 14px">🏅 Duplas mais compatíveis do grupo</div>`;
-  allPairs.slice(0,5).forEach(({a,b,data},i) => {
-    const col=scoreColor(data.score);
-    const medals=['🥇','🥈','🥉','4.','5.'];
-    html += `<div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:12px 16px;margin-bottom:8px;display:flex;align-items:center;gap:12px;width:100%;box-sizing:border-box">
-      <div style="font-size:18px;width:28px;text-align:center;flex-shrink:0">${medals[i]}</div>
-      <div style="flex:1;min-width:0">
-        <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px">
-          ${avatarHTML(a.uid,{size:28,radius:'6px',fontSize:10})}
-          <div style="font-size:11px;color:var(--muted)">+</div>
-          ${avatarHTML(b.uid,{size:28,radius:'6px',fontSize:10})}
+  if(allPairs.length === 0){
+    html += `<div style="color:var(--muted);font-size:13px;padding:0 0 20px">Ainda sem pares confiáveis o bastante (mín. 15 filmes em comum).</div>`;
+  } else {
+    allPairs.slice(0,5).forEach(({a,b,compat},i) => {
+      const col = compatColor(compat.pct);
+      const medals=['🥇','🥈','🥉','4.','5.'];
+      html += `<div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:12px 16px;margin-bottom:8px;display:flex;align-items:center;gap:12px;width:100%;box-sizing:border-box">
+        <div style="font-size:18px;width:28px;text-align:center;flex-shrink:0">${medals[i]}</div>
+        <div style="flex:1;min-width:0">
+          <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px">
+            ${avatarHTML(a.uid,{size:28,radius:'6px',fontSize:10})}
+            <div style="font-size:11px;color:var(--muted)">+</div>
+            ${avatarHTML(b.uid,{size:28,radius:'6px',fontSize:10})}
+          </div>
+          <div style="font-size:13px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(displayName(a.uid))} & ${esc(displayName(b.uid))}</div>
+          <div style="font-size:10px;color:var(--muted);margin-top:1px">${compat.n_comum} filmes em comum</div>
         </div>
-        <div style="font-size:13px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(displayName(a.uid))} & ${esc(displayName(b.uid))}</div>
-        <div style="font-size:10px;color:var(--muted);margin-top:1px">${data.shared} filmes · ${fmtTempo(data.minutos)}</div>
-      </div>
-      <div style="text-align:right;flex-shrink:0">
-        <div style="font-size:20px;font-weight:900;color:${col}">${data.score}%</div>
-      </div>
-    </div>`;
-  });
+        <div style="text-align:right;flex-shrink:0">
+          <div style="font-size:20px;font-weight:900;color:${col}">${compat.pct}%</div>
+        </div>
+      </div>`;
+    });
+  }
 
   html += `</div>`;
   return html;
