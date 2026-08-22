@@ -3228,11 +3228,31 @@ function raridadeColor(i, baseLen){
   return '#6fd0ee';
 }
 
+// Fase 5 Etapa D — frase de data pronta por (contexto, precisão), nunca montada por
+// concatenação. Concatenar um prefixo fixo ("desde " + data) quebra pra precisão
+// indeterminada, que não tem data pra encaixar ali ("desde data não registrada" não faz
+// sentido) — então cada combinação tem a frase INTEIRA escrita aqui. NUNCA diz "antes de
+// 2025" nem chuta ano: há avaliações datadas desde 2023, então as 65 linhas indeterminadas
+// (ver Conquistas no CLAUDE.md) só perderam o registro, não são necessariamente antigas.
+// contexto: 'carta' (mês/ano) | 'modal' (dia completo) | 'timeline' (dia completo, Etapa E).
+const MESES_ABREV = ['jan','fev','mar','abr','mai','jun','jul','ago','set','out','nov','dez'];
+function fraseDataConquista(lvl, contexto){
+  if(!lvl || lvl.precisao === 'indeterminada' || !lvl.data){
+    if(contexto === 'modal') return 'conquistado antes do registro de datas';
+    if(contexto === 'timeline') return 'sem data';
+    return 'data não registrada';
+  }
+  const d = new Date(lvl.data + 'T00:00:00');
+  const mes = MESES_ABREV[d.getMonth()];
+  const ano = d.getFullYear();
+  if(contexto === 'modal') return `conquistado em ${d.getDate()} ${mes} ${ano}`;
+  if(contexto === 'timeline') return `${d.getDate()} ${mes} ${ano}`;
+  return `desde ${mes} ${ano}`;
+}
+
 // Modal de detalhe da trilha (Fase 5 Etapa C). Janela deslizante ao redor do degrau atual
 // (4 antes, 2 depois) — não a trilha toda: uma trilha sem teto chega a 12 degraus (named +
 // sintéticos, ver trilhaLadder) e mostrar tudo de uma vez vira scroll infinito.
-// Frases de data são a Etapa D — por enquanto reusa a mesma lógica já usada na carta
-// ("data não registrada" pra indeterminada/sem data, senão data formatada pt-BR).
 function abrirDegrauModal(slug, uid){
   const data = getAchievementData(uid);
   if(!data) return;
@@ -3251,14 +3271,10 @@ function abrirDegrauModal(slug, uid){
   const winEnd = Math.min(t.levels.length - 1, idx + 2);
   const hiddenBefore = winStart;
 
-  const formatarData = lvl => (lvl.precisao === 'indeterminada' || !lvl.data)
-    ? 'data não registrada'
-    : new Date(lvl.data + 'T00:00:00').toLocaleDateString('pt-BR');
-
   const rowsHTML = t.levels.slice(winStart, winEnd + 1).map(lvl => {
     const isNext = lvl === nextLevel;
     let rightLabel;
-    if(lvl.done) rightLabel = formatarData(lvl);
+    if(lvl.done) rightLabel = fraseDataConquista(lvl, 'modal');
     else if(isNext) rightLabel = `faltam ${Math.max(0, lvl.threshold - t.current)}`;
     else rightLabel = 'bloqueado';
 
@@ -3354,14 +3370,7 @@ function renderConquistasHTML(uid){
     const color = raridadeColor(i, totalNamed);
     const cornerLabel = displayLevel.synthetic ? '★' : `${doneNamed}/${totalNamed}`;
 
-    let dataLinha;
-    if(achieved){
-      dataLinha = (displayLevel.precisao === 'indeterminada' || !displayLevel.data)
-        ? 'data não registrada'
-        : new Date(displayLevel.data + 'T00:00:00').toLocaleDateString('pt-BR');
-    } else {
-      dataLinha = 'ainda não alcançado';
-    }
+    const dataLinha = achieved ? fraseDataConquista(displayLevel, 'carta') : 'ainda não alcançado';
 
     const valorMeta = nextLevel
       ? `${t.current} / ${nextLevel.threshold} ${esc(t.unit)}`
