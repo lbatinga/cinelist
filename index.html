@@ -3005,6 +3005,73 @@ async function computeRecommendations(uid){
     .sort((a,b) => b.count - a.count);
 }
 
+// ── DO CINELIST, PRA VOCÊ (Bloco A — filmes do próprio catálogo ainda não avaliados,
+// ranqueados por quem é compatível com você ter gostado) ──
+// Zero chamada externa: RAW.compatibilidade, FILMES e STATS já estão na memória do
+// cliente desde o arranque. Não usa cache/localStorage — é barato o bastante pra
+// recalcular a cada abertura da aba, sem o dance de validade que o Bloco B precisa.
+function computeCineListParaVoce(uid){
+  const pendentes = new Set(STATS[uid]?.pendentes || []);
+  const out = [];
+  FILMES.forEach(f => {
+    if(!pendentes.has(f.id)) return;
+    const raterUids = Object.keys(f.avaliacoes).filter(u => u!==uid && f.avaliacoes[u]?.nota != null);
+    if(!raterUids.length) return;
+
+    // Média ponderada por pct — quem não tem par de compatibilidade (pct null/ausente)
+    // não contribui peso nenhum, nunca vira um neutro 50. Sem piso de quantidade: até
+    // 1 pessoa compatível puxa o filme pra cima, mas o numAvaliaram mostrado no card
+    // deixa claro que é 1 pessoa só, não 8 — mesmo princípio do n_comum na compatibilidade.
+    let somaPeso = 0, somaPonderada = 0;
+    const pesados = [];
+    raterUids.forEach(u => {
+      const c = getCompat(uid, u);
+      if(!c || c.pct == null) return;
+      somaPeso += c.pct;
+      somaPonderada += c.pct * f.avaliacoes[u].nota;
+      pesados.push({ uid: u, pct: c.pct, nota: f.avaliacoes[u].nota });
+    });
+    if(!somaPeso) return; // ninguém que avaliou tem compatibilidade conhecida com uid
+
+    pesados.sort((a,b) => b.pct - a.pct);
+    out.push({ filme: f, score: somaPonderada/somaPeso, numAvaliaram: raterUids.length, top: pesados.slice(0,3) });
+  });
+  out.sort((a,b) => b.score - a.score);
+  return out;
+}
+
+function cineListRecCardHTML(r){
+  const f = r.filme;
+  const topStr = r.top.map(t => `${esc(displayName(t.uid))} (${t.pct}%) deu ${fmt(t.nota)}`).join(' · ');
+  return `
+    <div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;overflow:hidden;display:flex;flex-direction:column">
+      ${f.poster
+        ? `<img src="${esc(f.poster)}" alt="" loading="lazy" style="width:100%;aspect-ratio:2/3;object-fit:cover;display:block;background:var(--surface2)" onerror="this.style.display='none'">`
+        : `<div style="width:100%;aspect-ratio:2/3;background:var(--surface2);display:flex;align-items:center;justify-content:center;font-size:36px;color:var(--muted)">🎬</div>`}
+      <div style="padding:10px 12px 12px;display:flex;flex-direction:column;gap:5px;flex:1">
+        <div style="font-weight:700;font-size:13px;color:#fff;line-height:1.3">${esc(f.nome)}${f.ano?` <span style="color:var(--muted);font-weight:400">(${esc(f.ano)})</span>`:''}</div>
+        <div style="font-size:10px;font-weight:700;padding:3px 8px;border-radius:12px;background:rgba(70,211,105,.15);color:var(--green);width:fit-content">★ ${fmt(r.score)} previsto pra você</div>
+        <div style="font-size:10px;color:var(--muted2)">${r.numAvaliaram} pessoa${r.numAvaliaram!==1?'s':''} da tropa avaliou${r.numAvaliaram!==1?'ram':''}</div>
+        ${topStr?`<div style="font-size:11px;color:var(--muted)">${topStr}</div>`:''}
+      </div>
+    </div>
+  `;
+}
+
+function cineListParaVoceHTML(uid){
+  const header = `<div style="font-size:15px;font-weight:800;color:#fff;margin-bottom:12px">🎬 Do CineList, pra você</div>`;
+  if(RAW.compatibilidadeLoadFailed){
+    return header + `<div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:14px;margin-bottom:24px;text-align:center;font-size:11px;color:var(--muted)">⚠️ Não foi possível carregar a compatibilidade agora.</div>`;
+  }
+  const list = computeCineListParaVoce(uid);
+  if(!list.length){
+    return header + `<div class="empty-block" style="margin-bottom:24px"><div class="empty-icon">🎬</div><div>Sem sugestões do catálogo por enquanto — avalie mais filmes ou espere a tropa avaliar os que faltam.</div></div>`;
+  }
+  return header + `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:16px;margin-bottom:28px">
+    ${list.map(cineListRecCardHTML).join('')}
+  </div>`;
+}
+
 function recsCacheKey(uid){ return 'cinelist_recs_'+uid; }
 
 function shouldRecalcRecs(uid, cache){
@@ -3031,34 +3098,42 @@ function renderParaVoce(){
     el.innerHTML = '<div class="empty-block"><div class="empty-icon">🎯</div><div>Faça login para ver recomendações personalizadas.</div></div>';
     return;
   }
+  // Bloco A é síncrono e barato — sempre recalculado na hora, sem cache. Bloco B (TMDB)
+  // mora num wrap próprio pra poder atualizar sozinho quando o cálculo assíncrono
+  // terminar, sem re-renderizar o Bloco A (ver CLAUDE.md, seção Rendering).
+  el.innerHTML = cineListParaVoceHTML(CU) + '<div id="paraVoceForaWrap"></div>';
   const cache = readRecsCache(CU);
   if(cache && !shouldRecalcRecs(CU, cache)){
-    el.innerHTML = paraVoceHTML(cache.results, cache.calculatedAt);
+    document.getElementById('paraVoceForaWrap').innerHTML = paraVoceHTML(cache.results, cache.calculatedAt);
     return;
   }
   runParaVoceCalc();
 }
 
 async function runParaVoceCalc(){
-  const el = document.getElementById('descTabContent');
-  el.innerHTML = `
-    <div style="text-align:center;padding:60px 20px;color:var(--muted)">
-      <div style="font-size:32px;margin-bottom:12px">🎯</div>
-      <div>Calculando recomendações...</div>
-    </div>
-  `;
+  const wrapInicial = document.getElementById('paraVoceForaWrap');
+  if(wrapInicial){
+    wrapInicial.innerHTML = `
+      <div style="text-align:center;padding:60px 20px;color:var(--muted)">
+        <div style="font-size:32px;margin-bottom:12px">🎯</div>
+        <div>Calculando recomendações de fora do CineList...</div>
+      </div>
+    `;
+  }
   const uid = CU;
   try{
     const results = await computeRecommendations(uid);
     const cache = writeRecsCache(uid, results);
     // Usuário pode ter trocado de aba/usuário enquanto o cálculo rodava
     if(CU===uid && CV==='descobertas' && window.descTab==='pra_voce'){
-      document.getElementById('descTabContent').innerHTML = paraVoceHTML(cache.results, cache.calculatedAt);
+      const wrap = document.getElementById('paraVoceForaWrap');
+      if(wrap) wrap.innerHTML = paraVoceHTML(cache.results, cache.calculatedAt);
     }
   }catch(e){
     console.error('Erro ao calcular recomendações:', e);
     if(CU===uid && CV==='descobertas' && window.descTab==='pra_voce'){
-      document.getElementById('descTabContent').innerHTML = '<div class="empty-block"><div class="empty-icon">⚠️</div><div>Não foi possível calcular as recomendações agora. Tente novamente mais tarde.</div></div>';
+      const wrap = document.getElementById('paraVoceForaWrap');
+      if(wrap) wrap.innerHTML = '<div class="empty-block"><div class="empty-icon">⚠️</div><div>Não foi possível calcular as recomendações agora. Tente novamente mais tarde.</div></div>';
     }
   }
 }
