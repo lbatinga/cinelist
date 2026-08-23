@@ -206,6 +206,7 @@ Ordem de prioridade combinada (2026-08-23) pro que vem depois do fix de OMDB aci
 10. Voz Dissonante com peso de variância — retomar a ideia cortada em Base de comparação: discordar especificamente nos filmes que racharam a tropa (peso alto de `v_filme_stats`), não distância bruta da média num grupo que raramente racha.
 11. Trilha Cult (filmes antigos) — o catálogo só tem 12 filmes anteriores a 1990, então hoje ela mediria "quem viu aqueles 12", não uma trilha de verdade. Fazer depois da Oscar (item 8), que naturalmente traz clássicos pro acervo. Limiares acima do recorde atual (10) pra não nascer trivial. Pedido do Pedro.
 12. Remodelar os menus — sem problema definido ainda; precisa virar "quero fazer X e demoro Y cliques" antes de virar tarefa. Depende do item 6 (roteamento) estar pronto primeiro.
+13. (baixa prioridade) `fetchAndCacheOmdb` não grava de volta o `imdb_id` que descobre via TMDB pra filme novo ainda sem a coluna `filmes.imdb_id` preenchida — funciona (acha e usa o `imdb_id` na hora), só paga uma chamada TMDB a mais toda vez que abre esse filme até alguém rodar um backfill de novo. Persistir exigiria mexer no RPC `cache_omdb_rating` (novo parâmetro) — migração só por esse ganho marginal, decidido não fazer agora (2026-08-23).
 
 ## Working conventions established in this repo
 
