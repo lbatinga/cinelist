@@ -904,7 +904,7 @@ async function loadFilmsFromSupabase() {
     while(true) {
       const { data: filmes, error } = await Promise.race([
         supa.from('filmes')
-          .select('id,nome,ano,duracao_str,duracao_min,poster,sinopse,categorias,classificacao,inserido_por,data_cadastro,data_ts,tmdb_id,omdb_imdb_rating,omdb_rt_rating,omdb_awards,omdb_atualizado_em')
+          .select('id,nome,ano,duracao_str,duracao_min,poster,sinopse,categorias,classificacao,inserido_por,data_cadastro,data_ts,tmdb_id,imdb_id,omdb_imdb_rating,omdb_rt_rating,omdb_awards,omdb_atualizado_em')
           .range(from, from + batchSize - 1)
           .order('data_ts', { ascending: false }),
         new Promise((_, rej) => setTimeout(() => rej(new Error('Timeout filmes')), 15000))
@@ -2639,21 +2639,39 @@ async function omdbFetchOnce(titulo, ano){
   }
 }
 
-// Busca de fato no OMDB e persiste (memória + banco) só em sucesso ou "não encontrado" — só
-// depois de tentar os dois títulos. Tenta primeiro o original_title (via tmdb_id — 840/841
-// filmes já têm, sem precisar buscar por nome no TMDB) porque a OMDB é base americana indexada
-// por título original/inglês e a maioria do catálogo é filme estrangeiro; o nome PT-BR entra
-// só como reserva. Pra filme brasileiro (original_title já é o nome) não perde nada. A ordem
-// inversa (nome PT-BR primeiro) foi o bug original: filme estrangeiro com nome traduzido virava
-// "Movie not found!" gravado como fato.
+async function omdbFetchByImdbId(imdbId){
+  try {
+    const r = await fetch('https://www.omdbapi.com/?i='+encodeURIComponent(imdbId)+'&apikey='+OMDB_KEY);
+    return await r.json();
+  } catch(e) {
+    return null;
+  }
+}
+
+// Busca de fato no OMDB e persiste (memória + banco) só em sucesso ou "não encontrado". Prefere
+// SEMPRE buscar por imdb_id (i=tt...) quando dá — é exato, não depende de título nem ano batendo
+// com a base da OMDB. Schindler é o caso que provou por que título+ano não é seguro: com y=1993
+// (ano do catálogo) a OMDB casava um documentário de mesmo ano ("The Making of Schindler's List")
+// e devolvia Response:"True" pro filme ERRADO, sem checagem nenhuma de título — não era um "não
+// encontrado" perceptível, era nota nula gravada como se fosse fato. imdb_id elimina essa classe
+// inteira de erro. filmes.imdb_id (coluna, backfill de 850/851) já cobre quase todo o catálogo;
+// quando falta ali (filme novo ainda não recadastrado), a própria resposta do /movie/{tmdb_id} do
+// TMDB — que já buscamos aqui pra achar o original_title — já inclui imdb_id nativamente, sem
+// chamada extra. Só cai no fallback por título (original_title primeiro, PT-BR reserva — a ordem
+// inversa foi o bug anterior a este) quando NENHUMA das duas fontes tem imdb_id — hoje só o único
+// filme do catálogo sem tmdb_id. Nesse caso não há imdb_id de referência pra validar o resultado
+// contra ele; se um dia isso for um problema real de novo, o próximo passo é revisar esse fallback.
 async function fetchAndCacheOmdb(filmId, nome, ano){
   const nomeD = decodeURIComponent(nome);
   let titulo1 = nomeD, titulo2 = null;
 
-  const tmdbId = FM[filmId]?.tmdb_id;
-  if(tmdbId){
+  const f = FM[filmId];
+  let imdbId = f?.imdb_id || null;
+  const tmdbId = f?.tmdb_id;
+  if(!imdbId && tmdbId){
     try {
       const tmdbD = await fetch('https://api.themoviedb.org/3/movie/'+tmdbId+'?api_key='+TMDB_KEY+'&language=pt-BR').then(r=>r.json());
+      if(tmdbD?.imdb_id) imdbId = tmdbD.imdb_id;
       if(tmdbD?.original_title){
         titulo1 = tmdbD.original_title;
         if(tmdbD.original_title !== nomeD) titulo2 = nomeD;
@@ -2661,10 +2679,15 @@ async function fetchAndCacheOmdb(filmId, nome, ano){
     } catch(e) { /* TMDB falhou — segue só com o nome PT-BR */ }
   }
 
-  let d = await omdbFetchOnce(titulo1, ano);
-  if(d?.Error === 'Movie not found!' && titulo2){
-    const d2 = await omdbFetchOnce(titulo2, ano);
-    if(d2) d = d2;
+  let d;
+  if(imdbId){
+    d = await omdbFetchByImdbId(imdbId);
+  } else {
+    d = await omdbFetchOnce(titulo1, ano);
+    if(d?.Error === 'Movie not found!' && titulo2){
+      const d2 = await omdbFetchOnce(titulo2, ano);
+      if(d2) d = d2;
+    }
   }
 
   if(d?.Response === 'True'){ _omdbCache[filmId] = d; persistOmdbCache(filmId, d); return d; }
