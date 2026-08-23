@@ -2978,30 +2978,20 @@ async function computeRecommendations(uid){
 
   const localByTmdbId = new Map();
   FILMES.forEach(f => { if(f.tmdb_id) localByTmdbId.set(f.tmdb_id, f); });
-  const naoQuerIds = new Set(STATS[uid]?.nao_quer || []);
 
   return [...countMap.values()]
-    .filter(({movie}) => {
-      const local = localByTmdbId.get(movie.id);
-      if(!local) return true;
-      if(local.avaliacoes[uid]?.nota != null) return false; // já avaliou
-      if(naoQuerIds.has(local.id)) return false; // não quero assistir
-      return true;
-    })
-    .map(({movie, count}) => {
-      const local = localByTmdbId.get(movie.id);
-      return {
-        tmdbId: movie.id,
-        titulo: movie.title || '',
-        ano: movie.release_date ? movie.release_date.slice(0,4) : '',
-        poster: movie.poster_path ? 'https://image.tmdb.org/t/p/w342'+movie.poster_path : '',
-        sinopse: movie.overview || '',
-        count,
-        noCatalogo: !!local,
-        catalogoMedia: local ? local.media : null,
-        catalogoNumAv: local ? local.num_avaliacoes : 0
-      };
-    })
+    // Todo filme do catálogo (avaliado ou não) fica de fora daqui — o Bloco A
+    // ("Do CineList, pra você") é dono desse território agora; o mesmo filme
+    // aparecendo nos dois blocos seria confuso.
+    .filter(({movie}) => !localByTmdbId.get(movie.id))
+    .map(({movie, count}) => ({
+      tmdbId: movie.id,
+      titulo: movie.title || '',
+      ano: movie.release_date ? movie.release_date.slice(0,4) : '',
+      poster: movie.poster_path ? 'https://image.tmdb.org/t/p/w342'+movie.poster_path : '',
+      sinopse: movie.overview || '',
+      count
+    }))
     .sort((a,b) => b.count - a.count);
 }
 
@@ -3156,7 +3146,7 @@ function paraVoceHTML(list, calculatedAt){
     return header + '<div class="empty-block"><div class="empty-icon">🎯</div><div>Sem recomendações no momento. Avalie mais filmes para melhorar as sugestões.</div></div>';
   }
   return header + `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:16px">
-    ${list.map(recCardHTML).join('')}
+    ${list.slice(0,20).map(recCardHTML).join('')}
   </div>`;
 }
 
@@ -3169,7 +3159,6 @@ function recCardHTML(r){
         : `<div style="width:100%;aspect-ratio:2/3;background:var(--surface2);display:flex;align-items:center;justify-content:center;font-size:36px;color:var(--muted)">🎬</div>`}
       <div style="padding:10px 12px 12px;display:flex;flex-direction:column;gap:5px;flex:1">
         <div style="font-weight:700;font-size:13px;color:#fff;line-height:1.3">${esc(r.titulo)}${r.ano?` <span style="color:var(--muted);font-weight:400">(${r.ano})</span>`:''}</div>
-        ${r.noCatalogo?`<div style="font-size:10px;font-weight:700;padding:3px 8px;border-radius:12px;background:rgba(70,211,105,.15);color:var(--green);width:fit-content">✓ Já no CineList${r.catalogoMedia?` · ★ ${fmt(r.catalogoMedia)} (${r.catalogoNumAv})`:''}</div>`:''}
         <div style="font-size:10px;color:var(--muted2)">Recomendado por ${r.count} filme${r.count!==1?'s':''} que você amou</div>
         ${syn?`<div style="font-size:11.5px;color:var(--muted);line-height:1.4">${esc(syn)}</div>`:''}
       </div>
