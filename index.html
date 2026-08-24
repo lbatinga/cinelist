@@ -2327,28 +2327,27 @@ function onAddNomeInput(){
   },800);
 }
 
-async function saveFilme(){
-  const nome=document.getElementById('addNome').value.trim();
-  if(!nome){showToast('⚠️ Digite o nome do filme!');return;}
+// Remove um tmdbId específico do cache do Bloco B, se estiver lá — sem invalidar o resto
+// da lista nem mexer em versaoFormula/ratedCount (não é um recálculo, é uma correção
+// pontual). Sem isso, um filme que acabou de entrar no catálogo continuaria aparecendo
+// como "recomendado de fora" no cache velho até o próximo recálculo real de verdade
+// (10+ avaliações novas, 30 dias, ou versão de fórmula nova — ver shouldRecalcRecs).
+function removerDoCacheParaVoce(tmdbId){
+  if(!CU || !tmdbId) return;
+  const cache = readRecsCache(CU);
+  if(!cache || !Array.isArray(cache.results)) return;
+  const tamanhoAntes = cache.results.length;
+  cache.results = cache.results.filter(r => r.tmdbId !== tmdbId);
+  if(cache.results.length === tamanhoAntes) return; // não estava lá, nada pra gravar
+  try{ localStorage.setItem(recsCacheKey(CU), JSON.stringify(cache)); }catch(e){}
+}
 
-  // Precisa ter um resultado TMDB selecionado
-  let td = tmdbResult;
-  if(!td && tmdbCandidates.length && tmdbCandidates[tmdbSelectedIdx]){
-    try{ td = await enrichTMDBResult(tmdbCandidates[tmdbSelectedIdx]); }catch(e){}
-  }
-  if(!td){
-    // Última tentativa — busca fresca
-    try{
-      const candidates = await searchTMDB(nome,'');
-      if(candidates.length) td = await enrichTMDBResult(candidates[0]);
-    }catch(e){}
-  }
-  if(!td){
-    showToast('⚠️ Filme não encontrado no TMDB. Verifique o nome digitado.');
-    return;
-  }
-
-  const nomeFinal = td.titulo || nome;
+// Núcleo de "adicionar filme ao catálogo" compartilhado por saveFilme() (modal de busca
+// por nome) e adicionarDoBlocoB() (card que já tem tmdb_id em mãos, pula a busca) — um
+// só lugar pra duplicata/insert/estado local/patch de cache, em vez de duas cópias que
+// podem divergir depois. `td` é o formato que enrichTMDBResult() devolve.
+async function inserirFilmeDoTmdb(td){
+  const nomeFinal = td.titulo;
   const anoInt = parseInt(td.ano) || null;
   const durMin = td.duracao_min || 0;
   const durStr = td.duracao_str || (durMin ? `${Math.floor(durMin/60)}h ${durMin%60}min` : '');
@@ -2359,13 +2358,7 @@ async function saveFilme(){
     f.nome.trim().toLowerCase() === nomeFinal.toLowerCase() &&
     (String(f.ano||'') === anoStr || !anoStr)
   );
-  if(duplicado){
-    showToast('⚠️ Esse filme já consta no catálogo.');
-    return;
-  }
-
-  const btn=document.getElementById('saveFilmeBtn');
-  if(btn){btn.textContent='Salvando...';btn.disabled=true;}
+  if(duplicado) throw Object.assign(new Error('Filme já consta no catálogo'), {code:'DUPLICADO'});
 
   // Generate UUID for id
   const newId = 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
@@ -2386,43 +2379,102 @@ async function saveFilme(){
     tmdb_id: td.tmdbId||null,
     data_cadastro: (()=>{ const n=new Date(); return `${String(n.getDate()).padStart(2,'0')}/${String(n.getMonth()+1).padStart(2,'0')}/${n.getFullYear()}`; })()
   };
-  
-  try{
-    const {data,error}=await supa.from('filmes').insert([filme]).select().single();
-    if(error)throw error;
-    
-    // Add to local data
-    const f={...filme, id:data.id||newId, avaliacoes:{}, media:null, num_avaliacoes:0, is_recent:true, data_ts:new Date().toISOString()};
-    FILMES.unshift(f);
-    FILMES_MAP[data.id||newId]=f;
-    RAW.filmes.unshift(f);
-    RECENT_IDS = getRecentIds();
-    RAW.recent_ids = RECENT_IDS;
 
-    // Filme novo é pendente pra quem ainda não avaliou (o próprio CU incluso)
-    if(CU && STATS[CU]){
-      if(!STATS[CU].pendentes) STATS[CU].pendentes=[];
-      STATS[CU].pendentes.push(f.id);
-    }
+  const {data,error}=await supa.from('filmes').insert([filme]).select().single();
+  if(error)throw error;
+
+  // Add to local data
+  const f={...filme, id:data.id||newId, avaliacoes:{}, media:null, num_avaliacoes:0, is_recent:true, data_ts:new Date().toISOString()};
+  FILMES.unshift(f);
+  FILMES_MAP[f.id]=f;
+  RAW.filmes.unshift(f);
+  RECENT_IDS = getRecentIds();
+  RAW.recent_ids = RECENT_IDS;
+
+  // Filme novo é pendente pra quem ainda não avaliou (o próprio CU incluso)
+  if(CU && STATS[CU]){
+    if(!STATS[CU].pendentes) STATS[CU].pendentes=[];
+    STATS[CU].pendentes.push(f.id);
+  }
+
+  if(td.tmdbId) removerDoCacheParaVoce(td.tmdbId);
+
+  return f;
+}
+
+async function saveFilme(){
+  const nome=document.getElementById('addNome').value.trim();
+  if(!nome){showToast('⚠️ Digite o nome do filme!');return;}
+
+  // Precisa ter um resultado TMDB selecionado
+  let td = tmdbResult;
+  if(!td && tmdbCandidates.length && tmdbCandidates[tmdbSelectedIdx]){
+    try{ td = await enrichTMDBResult(tmdbCandidates[tmdbSelectedIdx]); }catch(e){}
+  }
+  if(!td){
+    // Última tentativa — busca fresca
+    try{
+      const candidates = await searchTMDB(nome,'');
+      if(candidates.length) td = await enrichTMDBResult(candidates[0]);
+    }catch(e){}
+  }
+  if(!td){
+    showToast('⚠️ Filme não encontrado no TMDB. Verifique o nome digitado.');
+    return;
+  }
+  if(!td.titulo) td.titulo = nome;
+
+  const btn=document.getElementById('saveFilmeBtn');
+  if(btn){btn.textContent='Salvando...';btn.disabled=true;}
+
+  try{
+    const f = await inserirFilmeDoTmdb(td);
 
     closeModal('addModal');
     render();
-    showToast(`✅ "${nomeFinal}" adicionado! Avalie agora 👇`);
+    showToast(`✅ "${f.nome}" adicionado! Avalie agora 👇`);
     // Disparar notificação push para todos
     const nomeUsuario = USERS[CU]?.nome || 'Alguém';
-    enviarNotifFilme(nomeFinal, nomeUsuario);
+    enviarNotifFilme(f.nome, nomeUsuario);
     // Abrir modal de avaliação automaticamente
-    setTimeout(() => openRate(data.id || newId), 300);
+    setTimeout(() => openRate(f.id), 300);
   }catch(e){
     console.error('Erro ao salvar filme:', e);
     const msgTxt = String(e?.message||'').toLowerCase();
-    if(e?.code === '23505' || msgTxt.includes('duplicate key') || msgTxt.includes('unique constraint')){
+    if(e?.code === 'DUPLICADO' || e?.code === '23505' || msgTxt.includes('duplicate key') || msgTxt.includes('unique constraint')){
       showToast('⚠️ Esse filme já consta no catálogo.');
     } else {
       showToast('❌ Não foi possível salvar o filme. Tente novamente.');
     }
   }finally{
     if(btn){btn.textContent='Salvar';btn.disabled=false;}
+  }
+}
+
+// Adiciona ao catálogo direto do card do Bloco B — pula busca por nome (tmdb_id já
+// conhecido) e encadeia "avalie agora" igual ao fluxo do modal.
+async function adicionarDoBlocoB(tmdbId){
+  if(!CU){ showToast('⚠️ Selecione seu perfil primeiro!'); return; }
+  const btn = document.getElementById('addBtn_'+tmdbId);
+  if(btn){ btn.textContent='Adicionando...'; btn.disabled=true; }
+  try{
+    const td = await enrichTMDBResult({tmdbId});
+    const f = await inserirFilmeDoTmdb(td);
+    render();
+    showToast(`✅ "${f.nome}" adicionado! Avalie agora 👇`);
+    // Sem enviarNotifFilme aqui de propósito: adicionar direto do card é um clique sobre uma
+    // sugestão, não um fluxo deliberado de busca (o modal continua notificando). Se cada clique
+    // aqui disparasse push pra todo mundo, essa ação — bem mais frequente que o modal — vira
+    // fonte de spam; reativar depois é barato, desfazer o hábito de ignorar notificação não é.
+    setTimeout(() => openRate(f.id), 300);
+  }catch(e){
+    console.error('Erro ao adicionar filme do Bloco B:', e);
+    if(e?.code === 'DUPLICADO' || e?.code === '23505'){
+      showToast('⚠️ Esse filme já consta no catálogo.');
+    } else {
+      showToast('❌ Não foi possível adicionar. Tente novamente.');
+    }
+    if(btn){ btn.textContent='➕ Adicionar'; btn.disabled=false; }
   }
 }
 
@@ -3252,6 +3304,7 @@ function recCardHTML(r){
         <div style="font-size:10px;font-weight:700;padding:3px 8px;border-radius:12px;background:rgba(70,211,105,.15);color:var(--green);width:fit-content">${fmt(r.notaFinal)} · nota do TMDB ajustada</div>
         <div style="font-size:10px;color:var(--muted2)">${r.numAvaliaram.toLocaleString('pt-BR')} pessoa${r.numAvaliaram!==1?'s':''} avaliaram (TMDB)</div>
         ${syn?`<div style="font-size:11.5px;color:var(--muted);line-height:1.4">${esc(syn)}</div>`:''}
+        <button id="addBtn_${r.tmdbId}" onclick="adicionarDoBlocoB(${r.tmdbId})" style="font-size:10px;font-family:inherit;font-weight:700;padding:4px 10px;border-radius:12px;border:1px solid var(--border);width:fit-content;margin-top:2px;background:var(--surface2);color:var(--muted);cursor:pointer">➕ Adicionar</button>
       </div>
     </div>
   `;
