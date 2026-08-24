@@ -2451,6 +2451,57 @@ async function saveFilme(){
   }
 }
 
+// Confirmação de dois toques no botão "➕ Adicionar" do Bloco B — sem modal, sem confirm()
+// nativo, só o próprio botão mudando de estado. Estado fica FORA do HTML (variável global,
+// não atributo/classe no elemento) de propósito: o card inteiro é reconstruído a cada
+// render() (string template, não DOM persistente), então qualquer coisa guardada só no
+// elemento se perderia numa reconstrução por motivo nenhum a ver com este botão. Só um
+// card pode estar armado por vez — armar outro desarma o anterior, e o timeout de ~3s é
+// sempre limpo (no 2º toque, ao armar outro, ou ao disparar sozinho) pra nunca sobrar um
+// setTimeout órfão tentando mexer num botão que já não existe mais.
+var blocoBArmado = null; // { tmdbId, timeoutId } | null
+
+function estiloBotaoAdicionar(tmdbId){
+  const armado = blocoBArmado?.tmdbId === tmdbId;
+  return {
+    texto: armado ? 'Confirmar?' : '➕ Adicionar',
+    background: armado ? 'var(--yellow)' : 'var(--surface2)',
+    cor: armado ? '#000' : 'var(--muted)'
+  };
+}
+
+function atualizarBotaoAdicionar(tmdbId){
+  const btn = document.getElementById('addBtn_'+tmdbId);
+  if(!btn) return; // card já não está mais na tela — nada a fazer, sem erro
+  const s = estiloBotaoAdicionar(tmdbId);
+  btn.textContent = s.texto;
+  btn.style.background = s.background;
+  btn.style.color = s.cor;
+}
+
+function tocarAdicionarBlocoB(tmdbId){
+  if(blocoBArmado?.tmdbId === tmdbId){
+    // 2º toque no mesmo botão — confirma de verdade
+    clearTimeout(blocoBArmado.timeoutId);
+    blocoBArmado = null;
+    adicionarDoBlocoB(tmdbId);
+    return;
+  }
+  // Só um card armado por vez — desarma o anterior (se houver) antes de armar este
+  if(blocoBArmado){
+    clearTimeout(blocoBArmado.timeoutId);
+    const tmdbIdAnterior = blocoBArmado.tmdbId;
+    blocoBArmado = null;
+    atualizarBotaoAdicionar(tmdbIdAnterior);
+  }
+  const timeoutId = setTimeout(() => {
+    blocoBArmado = null;
+    atualizarBotaoAdicionar(tmdbId);
+  }, 3000);
+  blocoBArmado = { tmdbId, timeoutId };
+  atualizarBotaoAdicionar(tmdbId);
+}
+
 // Adiciona ao catálogo direto do card do Bloco B — pula busca por nome (tmdb_id já
 // conhecido) e encadeia "avalie agora" igual ao fluxo do modal.
 async function adicionarDoBlocoB(tmdbId){
@@ -3294,6 +3345,7 @@ function paraVoceHTML(list, calculatedAt){
 
 function recCardHTML(r){
   const syn = r.sinopse ? (r.sinopse.length>140 ? r.sinopse.slice(0,140)+'…' : r.sinopse) : '';
+  const btnAdd = estiloBotaoAdicionar(r.tmdbId);
   return `
     <div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;overflow:hidden;display:flex;flex-direction:column">
       ${r.poster
@@ -3304,7 +3356,7 @@ function recCardHTML(r){
         <div style="font-size:10px;font-weight:700;padding:3px 8px;border-radius:12px;background:rgba(70,211,105,.15);color:var(--green);width:fit-content">${fmt(r.notaFinal)} · nota do TMDB ajustada</div>
         <div style="font-size:10px;color:var(--muted2)">${r.numAvaliaram.toLocaleString('pt-BR')} pessoa${r.numAvaliaram!==1?'s':''} avaliaram (TMDB)</div>
         ${syn?`<div style="font-size:11.5px;color:var(--muted);line-height:1.4">${esc(syn)}</div>`:''}
-        <button id="addBtn_${r.tmdbId}" onclick="adicionarDoBlocoB(${r.tmdbId})" style="font-size:10px;font-family:inherit;font-weight:700;padding:4px 10px;border-radius:12px;border:1px solid var(--border);width:fit-content;margin-top:2px;background:var(--surface2);color:var(--muted);cursor:pointer">➕ Adicionar</button>
+        <button id="addBtn_${r.tmdbId}" onclick="tocarAdicionarBlocoB(${r.tmdbId})" style="font-size:10px;font-family:inherit;font-weight:700;padding:4px 10px;border-radius:12px;border:1px solid var(--border);width:fit-content;margin-top:2px;background:${btnAdd.background};color:${btnAdd.cor};cursor:pointer">${btnAdd.texto}</button>
       </div>
     </div>
   `;
