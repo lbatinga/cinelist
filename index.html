@@ -3185,7 +3185,7 @@ function paraVoceHTML(list, calculatedAt){
     return header + '<div class="empty-block"><div class="empty-icon">🎯</div><div>Sem recomendações no momento. Avalie mais filmes para melhorar as sugestões.</div></div>';
   }
   return header + `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:16px">
-    ${list.slice(0,20).map(recCardHTML).join('')}
+    ${list.slice(0,30).map(recCardHTML).join('')}
   </div>`;
 }
 
