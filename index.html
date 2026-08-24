@@ -3109,7 +3109,10 @@ function cineListRecCardHTML(r){
         <div style="font-size:10px;font-weight:700;padding:3px 8px;border-radius:12px;background:rgba(70,211,105,.15);color:var(--green);width:fit-content">${fmt(r.notaFinal)} · nota da tropa ajustada</div>
         <div style="font-size:10px;color:var(--muted2)">${r.numAvaliaram} pessoa${r.numAvaliaram!==1?'s':''} da tropa avaliou${r.numAvaliaram!==1?'ram':''}</div>
         ${topStr?`<div style="font-size:11px;color:var(--muted)">${topStr}</div>`:''}
-        <button ${jaQuerVer?'disabled':`onclick="marcarQueroVer('${f.id}')"`} style="font-size:10px;font-family:inherit;font-weight:700;padding:4px 10px;border-radius:12px;border:1px solid var(--border);width:fit-content;margin-top:2px;background:${jaQuerVer?'rgba(70,211,105,.15)':'var(--surface2)'};color:${jaQuerVer?'var(--green)':'var(--muted)'};cursor:${jaQuerVer?'default':'pointer'}">${jaQuerVer?'✓ Quero ver':'🔖 Quero ver'}</button>
+        <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:2px">
+          <button onclick="openRate('${f.id}')" style="font-size:10px;font-family:inherit;font-weight:700;padding:4px 10px;border-radius:12px;border:1px solid var(--border);width:fit-content;background:var(--surface2);color:var(--muted);cursor:pointer">⭐ Avaliar</button>
+          <button ${jaQuerVer?'disabled':`onclick="marcarQueroVer('${f.id}')"`} style="font-size:10px;font-family:inherit;font-weight:700;padding:4px 10px;border-radius:12px;border:1px solid var(--border);width:fit-content;background:${jaQuerVer?'rgba(70,211,105,.15)':'var(--surface2)'};color:${jaQuerVer?'var(--green)':'var(--muted)'};cursor:${jaQuerVer?'default':'pointer'}">${jaQuerVer?'✓ Quero ver':'🔖 Quero ver'}</button>
+        </div>
       </div>
     </div>
   `;
@@ -3177,6 +3180,16 @@ function renderParaVoce(){
 }
 
 async function runParaVoceCalc(){
+  const uid = CU;
+  // Mesmo padrão do RAW._comparativoEmCarregamento (loadComparativoParaUsuario) — impede uma
+  // 2ª chamada disparar em cima da 1ª ainda em voo. Sem isso, avaliar um filme do Bloco A
+  // enquanto o Bloco B ainda calcula aciona render() de novo, que vê o cache ainda vazio e
+  // dispara outro runParaVoceCalc(): até 20 chamadas TMDB duplicadas, e a que terminar por
+  // último sobrescreve o cache com resultado de um estado que já pode não ser o atual.
+  if(!RAW._paraVoceForaEmCalculo) RAW._paraVoceForaEmCalculo = new Set();
+  if(RAW._paraVoceForaEmCalculo.has(uid)) return;
+  RAW._paraVoceForaEmCalculo.add(uid);
+
   const wrapInicial = document.getElementById('paraVoceForaWrap');
   if(wrapInicial){
     wrapInicial.innerHTML = `
@@ -3186,7 +3199,6 @@ async function runParaVoceCalc(){
       </div>
     `;
   }
-  const uid = CU;
   try{
     const results = await computeRecommendations(uid);
     const cache = writeRecsCache(uid, results);
@@ -3201,6 +3213,8 @@ async function runParaVoceCalc(){
       const wrap = document.getElementById('paraVoceForaWrap');
       if(wrap) wrap.innerHTML = '<div class="empty-block"><div class="empty-icon">⚠️</div><div>Não foi possível calcular as recomendações agora. Tente novamente mais tarde.</div></div>';
     }
+  }finally{
+    RAW._paraVoceForaEmCalculo.delete(uid);
   }
 }
 
@@ -5527,23 +5541,6 @@ function applyUserToUI(){
     av.textContent = ini(name);
   }
 }
-
-// SAVE RATING TO SUPABASE
-async function saveRatingToSupabase(filmeId, nota, vai, data, comentario){
-  const uid = CU;
-  const { error } = await supa.from('avaliacoes').upsert({
-    filme_id: filmeId,
-    usuario_id: uid,
-    nota: nota,
-    vai_assistir: vai,
-    data_avaliacao: data,
-    comentario: comentario
-  },{onConflict:'filme_id,usuario_id'});
-  return !error;
-}
-
-// Override saveRating to also persist to Supabase
-const _origSaveRating = typeof saveRating !== 'undefined' ? saveRating : null;
 
 // Replace logout option in user dropdown
 
