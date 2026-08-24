@@ -1777,19 +1777,23 @@ function applyPendSort(list){
 }
 function setPendSort(val){ pendSortKey=val; renderPendentes(); }
 
-// Quem rola a lista de #viewPendentes muda por breakpoint — desktop: .detail-list tem
-// overflow-y próprio; mobile: .detail-list vira height:auto e quem rola é a página inteira,
-// #appScroll (confirmado por grep no CSS: só esses dois têm overflow-y:auto/scroll no
-// caminho entre a lista e o body). Por seletor fixo, não por índice numa cadeia de
-// ancestrais — pareamento por índice quebra se um dos dois virar/deixar de ser scrollável
-// entre a captura (antes do render) e a restauração (depois, lista uma linha menor), porque
-// aí os índices desalinham e o scrollTop de um container vai parar no outro.
-const PEND_SCROLL_SELECTORS = ['#viewPendentes .detail-list', '#appScroll'];
-function capturePendScroll(){
-  return PEND_SCROLL_SELECTORS.map(sel => document.querySelector(sel)?.scrollTop ?? null);
+// Helper genérico — qualquer ação que chama render() (ele reconstrói a view ativa inteira via
+// innerHTML) precisa capturar o scroll antes e restaurar depois, senão o container zera. Quem
+// rola muda por tela/breakpoint: #viewPendentes .detail-list tem overflow-y próprio no desktop
+// (mobile: vira height:auto e quem rola é a página inteira); #appScroll é o container genérico
+// que rola em todo o resto do app. Por seletor fixo, não por índice numa cadeia de ancestrais —
+// pareamento por índice quebra se um dos dois virar/deixar de ser scrollável entre a captura
+// (antes do render) e a restauração (depois, lista uma linha menor), porque aí os índices
+// desalinham e o scrollTop de um container vai parar no outro. Um seletor que não existe na tela
+// atual (ex. .detail-list fora de Pendentes) captura null e é ignorado na restauração — por isso
+// o mesmo par serve pra quem só usa #appScroll (saveRating, marcarQueroVer, adicionarDoBlocoB)
+// sem precisar de uma segunda cópia.
+const SCROLL_SELECTORS = ['#viewPendentes .detail-list', '#appScroll'];
+function captureScroll(){
+  return SCROLL_SELECTORS.map(sel => document.querySelector(sel)?.scrollTop ?? null);
 }
-function restorePendScroll(saved){
-  PEND_SCROLL_SELECTORS.forEach((sel, i) => {
+function restoreScroll(saved){
+  SCROLL_SELECTORS.forEach((sel, i) => {
     if(saved[i] == null) return;
     const el = document.querySelector(sel);
     if(!el) return;
@@ -2057,11 +2061,11 @@ async function saveRating(){
     // renderPendentes() reconstrói a tabela de pendentes inteira (render() chama ela abaixo,
     // se CV==='pendentes') — o container que rola nasce de novo com scrollTop=0. Captura antes
     // e restaura depois pra quem tem muitos pendentes não perder o lugar a cada avaliação.
-    const pendScroll = capturePendScroll();
+    const savedScroll = captureScroll();
 
     render();
 
-    restorePendScroll(pendScroll);
+    restoreScroll(savedScroll);
 
     // Re-renderiza o painel de detalhes na view ativa + mobile modal (se aberto)
     try {
@@ -2511,12 +2515,21 @@ async function adicionarDoBlocoB(tmdbId){
   try{
     const td = await enrichTMDBResult({tmdbId});
     const f = await inserirFilmeDoTmdb(td);
+
+    // render() reconstrói #viewDescobertas inteiro (innerHTML), o que zera o scroll de
+    // #appScroll — captureScroll()/restoreScroll() (ver definição acima) evitam o pulo.
+    const savedScroll = captureScroll();
     render();
+    restoreScroll(savedScroll);
+
     showToast(`✅ "${f.nome}" adicionado! Avalie agora 👇`);
-    // Sem enviarNotifFilme aqui de propósito: adicionar direto do card é um clique sobre uma
-    // sugestão, não um fluxo deliberado de busca (o modal continua notificando). Se cada clique
-    // aqui disparasse push pra todo mundo, essa ação — bem mais frequente que o modal — vira
-    // fonte de spam; reativar depois é barato, desfazer o hábito de ignorar notificação não é.
+    // Disparar notificação push para todos — mesmo comportamento do modal normal
+    // (saveFilme()). Reativado em 2026-08-24: adicionar pelo card ficou sem notificar por
+    // ~1 dia sob o argumento de que viraria spam (era hipotético, não se confirmou) e o
+    // filme ficava invisível pra tropa até alguém tropeçar nele por conta própria. Ver
+    // CLAUDE.md, seção Recomendações, pro histórico completo da decisão.
+    const nomeUsuario = USERS[CU]?.nome || 'Alguém';
+    enviarNotifFilme(f.nome, nomeUsuario);
     setTimeout(() => openRate(f.id), 300);
   }catch(e){
     console.error('Erro ao adicionar filme do Bloco B:', e);
@@ -3182,16 +3195,11 @@ async function marcarQueroVer(filmeId){
     if(error) throw error;
     f.avaliacoes[CU] = { nota: null, vai: 'Sim', comentario: null, data: null };
 
-    // render() reconstrói #viewDescobertas inteiro (innerHTML) — mesmo padrão de
-    // captura/restauração de #appScroll que saveRating() já usa (linha ~2060), pro
-    // scroll não se perder no meio da reconstrução síncrona.
-    const appScrollEl = document.getElementById('appScroll');
-    const savedScroll = appScrollEl?.scrollTop ?? null;
+    // render() reconstrói #viewDescobertas inteiro (innerHTML), o que zera o scroll de
+    // #appScroll — captureScroll()/restoreScroll() (ver definição acima) evitam o pulo.
+    const savedScroll = captureScroll();
     render();
-    if(savedScroll != null){
-      void appScrollEl.offsetHeight;
-      appScrollEl.scrollTop = savedScroll;
-    }
+    restoreScroll(savedScroll);
   }catch(e){
     console.error('Erro ao marcar quero ver:', e);
     showToast('❌ Não foi possível marcar. Tente novamente.');
