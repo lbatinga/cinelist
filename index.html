@@ -2850,36 +2850,110 @@ async function fetchOmdbBasic(filmId, nome, ano){
   return await fetchAndCacheOmdb(filmId, nome, ano);
 }
 
+// ── CACHE TMDB (Mais Info) ──
+// Mesmo raciocínio de _omdbCache/omdbEhFresco, mais simples: sem "não encontrado" (busca por
+// tmdb_id já conhecido, sem heurística de nome pra errar o alvo) e sem distinguir dado-vazio de
+// falha (falha de infraestrutura nunca é persistida — ver fetchAndCacheTmdbInfo). NUNCA lido no
+// carregamento inicial do catálogo (loadFilmsFromSupabase) — leitura sob demanda mesmo, um select
+// de 1 linha por filme na 1ª vez que "Mais Info" abre nele numa sessão, guardado depois aqui pro
+// resto da sessão. Ver CLAUDE.md, pendência 1, pra motivação completa (600-800KB evitados no
+// arranque de todo mundo, pra dado que a maioria das sessões nunca abre).
+const _tmdbInfoCache = {};
+
+function tmdbInfoEhFresco(atualizadoEm, ano){
+  if(!atualizadoEm) return false;
+  const anoNum = /^\d{4}$/.test(ano||'') ? parseInt(ano,10) : null;
+  const recente = anoNum !== null && anoNum >= new Date().getFullYear() - 1;
+  const ttlMs = (recente ? 7 : 90) * 24 * 60 * 60 * 1000;
+  return (Date.now() - new Date(atualizadoEm).getTime()) < ttlMs;
+}
+
+// Extrai só o que "Mais Info" usa de /movie/{id} e /movie/{id}/credits — nunca o payload bruto
+// (dezenas de campos que a tela não lê). País fica com o nome original do TMDB, não traduzido
+// pt-BR aqui: a tradução (countryMap, em openMaisInfo) é apresentação — um ajuste futuro no
+// dicionário beneficia cache já gravado, sem precisar invalidar nada.
+function buildTmdbInfoPayload(tmdbD, tmdbC){
+  const directors = [...new Set((tmdbC?.crew||[]).filter(c=>c.job==='Director').map(c=>c.name))];
+  const writers = [...new Set((tmdbC?.crew||[]).filter(c=>['Writer','Screenplay','Story'].includes(c.job)).map(c=>c.name))].slice(0,2);
+  const cast = (tmdbC?.cast||[]).slice(0,6).map(a=>({name:a.name, profile_path:a.profile_path||null}));
+  return {
+    countries: (tmdbD?.production_countries||[]).map(p=>p.name),
+    budget: tmdbD?.budget || null,
+    revenue: tmdbD?.revenue || null,
+    directors,
+    writers,
+    cast
+  };
+}
+
+// Fire-and-forget — nunca .catch() no builder do supa.rpc() (ver CLAUDE.md, seção Rendering,
+// sobre o TypeError síncrono que isso já escondeu uma escrita real uma vez).
+function persistTmdbInfo(filmId, payload){
+  supa.rpc('cache_tmdb_info', { p_filme_id: filmId, p_cache: payload })
+    .then(({error}) => { if(error) console.warn('cache_tmdb_info falhou:', filmId, error); });
+}
+
+async function fetchAndCacheTmdbInfo(filmId, tmdbId){
+  try{
+    const [tmdbD, tmdbC] = await Promise.all([
+      fetch('https://api.themoviedb.org/3/movie/'+tmdbId+'?api_key='+TMDB_KEY+'&language=pt-BR').then(r=>r.json()),
+      fetch('https://api.themoviedb.org/3/movie/'+tmdbId+'/credits?api_key='+TMDB_KEY+'&language=pt-BR').then(r=>r.json())
+    ]);
+    const payload = buildTmdbInfoPayload(tmdbD, tmdbC);
+    _tmdbInfoCache[filmId] = payload;
+    persistTmdbInfo(filmId, payload);
+    return payload;
+  }catch(e){
+    return null; // rede, TMDB fora do ar etc — não persiste em lugar nenhum, próxima abertura tenta de novo
+  }
+}
+
+// resolveTmdbId é lazy (função, não valor) de propósito: pros 840/841 filmes com tmdb_id em
+// FM ela nunca bate rede, mas pro único sem (busca por nome) só queremos pagar essa chamada
+// quando o cache (memória ou banco) realmente não resolve sozinho — nunca numa abertura com
+// cache quente. Passar o tmdbId já resolvido faria a "saga completa" rebuscar por nome toda
+// vez que "Mais Info" abrisse nela, mesmo com cache válido — justamente o que o cache existe
+// pra evitar.
+async function getTmdbInfo(filmId, ano, resolveTmdbId){
+  if(_tmdbInfoCache[filmId] !== undefined) return _tmdbInfoCache[filmId];
+
+  const { data, error } = await supa.from('filmes')
+    .select('tmdb_cache,tmdb_atualizado_em')
+    .eq('id', filmId)
+    .single();
+
+  if(!error && data?.tmdb_cache){
+    _tmdbInfoCache[filmId] = data.tmdb_cache;
+    // Segundo plano, fire-and-forget — nunca chama render() nem atualiza "Mais Info" se
+    // estiver aberto pro mesmo filme (fica pra próxima abertura), mesmo raciocínio de
+    // refreshOmdbInBackground logo acima.
+    if(!tmdbInfoEhFresco(data.tmdb_atualizado_em, ano)){
+      resolveTmdbId().then(tmdbId => { if(tmdbId) fetchAndCacheTmdbInfo(filmId, tmdbId); });
+    }
+    return data.tmdb_cache;
+  }
+
+  const tmdbId = await resolveTmdbId();
+  return tmdbId ? await fetchAndCacheTmdbInfo(filmId, tmdbId) : null;
+}
+
 // ── MAIS INFO ──
 async function openMaisInfo(id, nome, ano){
   document.getElementById('maisInfoBody').innerHTML = '<div style="text-align:center;padding:30px;color:#888"><div style="font-size:28px;margin-bottom:8px">⏳</div>Carregando...</div>';
   openBSheet('maisInfo');
   try {
-    const tmdbId = FM[id]?.tmdb_id;
-    let tmdbD = null, tmdbC = null;
-
-    // Com tmdb_id em mãos (840/841 filmes hoje — só a entrada "saga completa" não tem),
-    // pula a busca por nome e vai direto no filme certo: uma chamada TMDB a menos no
-    // caminho comum, e direção/roteiro (abaixo) param de depender de a busca por nome
-    // PT-BR acertar — antes, se a busca falhasse, tmdbMovie ficava undefined e a seção
-    // inteira de direção/roteiro sumia, mesmo o filme existindo no TMDB.
     const omdbPromise = fetchOmdbBasic(id, nome, ano);
-    if(tmdbId){
-      [tmdbD, tmdbC] = await Promise.all([
-        fetch('https://api.themoviedb.org/3/movie/'+tmdbId+'?api_key='+TMDB_KEY+'&language=pt-BR').then(r=>r.json()),
-        fetch('https://api.themoviedb.org/3/movie/'+tmdbId+'/credits?api_key='+TMDB_KEY+'&language=pt-BR').then(r=>r.json())
-      ]);
-    } else {
-      // Sem tmdb_id — caminho antigo, busca por nome (só a "saga completa" cai aqui hoje).
+
+    // Lazy — só executa se getTmdbInfo() precisar mesmo (cache miss ou refresh de cache velho).
+    // Com tmdb_id em mãos (840/841 filmes hoje — só a "saga completa" não tem) nem bate rede.
+    const resolveTmdbId = async () => {
+      const known = FM[id]?.tmdb_id;
+      if(known) return known;
       const tmdbRes = await fetch('https://api.themoviedb.org/3/search/movie?api_key='+TMDB_KEY+'&language=pt-BR&query='+nome+'&year='+ano).then(r=>r.json());
-      const tmdbMovie = tmdbRes.results?.[0];
-      if(tmdbMovie){
-        [tmdbD, tmdbC] = await Promise.all([
-          fetch('https://api.themoviedb.org/3/movie/'+tmdbMovie.id+'?api_key='+TMDB_KEY+'&language=pt-BR').then(r=>r.json()),
-          fetch('https://api.themoviedb.org/3/movie/'+tmdbMovie.id+'/credits?api_key='+TMDB_KEY+'&language=pt-BR').then(r=>r.json())
-        ]);
-      }
-    }
+      return tmdbRes.results?.[0]?.id || null;
+    };
+    const info = await getTmdbInfo(id, ano, resolveTmdbId);
+
     // fetchOmdbBasic() já tentou original_title (primeiro) e nome PT-BR (reserva)
     // internamente — não precisa repetir aqui.
     const omdb = await omdbPromise;
@@ -2896,21 +2970,17 @@ async function openMaisInfo(id, nome, ano){
       if(oscarNoms) parts.push('<span style="color:#aaa;font-weight:600">🎬 '+oscarNoms+' indicaç'+(oscarNoms==='1'?'ão':'ões')+'</span>');
       html += '<div class="bsheet-section"><div class="bsheet-section-title">🏆 Oscar</div><div style="font-size:14px;display:flex;gap:16px;flex-wrap:wrap">'+parts.join('')+'</div></div>';
     }
-    // Direção/roteiro vêm do TMDB (créditos, que já é buscado abaixo pro elenco), não da OMDB —
-    // assim independem de a OMDB ter achado o filme ou estourado cota, e sobrevivem intactos
-    // quando "Mais Info" é servido do cache do banco (que não guarda Director/Writer, só
-    // nota/Rotten/prêmios).
-    const tmdbDirectors = [...new Set((tmdbC?.crew||[]).filter(c=>c.job==='Director').map(c=>c.name))];
-    const dir = tmdbDirectors.length ? tmdbDirectors.join(', ') : null;
-    const tmdbWriters = [...new Set((tmdbC?.crew||[]).filter(c=>['Writer','Screenplay','Story'].includes(c.job)).map(c=>c.name))];
-    const wri = tmdbWriters.length ? tmdbWriters.slice(0,2).join(', ') : null;
+    // Direção/roteiro vêm do cache do TMDB (getTmdbInfo), não da OMDB — assim independem de a
+    // OMDB ter achado o filme ou estourado cota.
+    const dir = info?.directors?.length ? info.directors.join(', ') : null;
+    const wri = info?.writers?.length ? info.writers.join(', ') : null;
     if(dir||wri) html += '<div class="bsheet-section"><div class="bsheet-section-title">🎬 Direção e Roteiro</div>'+(dir?'<div style="margin-bottom:6px"><span style="color:#888;font-size:11px">Diretor</span><br><span style="font-size:14px;font-weight:600">'+esc(dir)+'</span></div>':'')+(wri?'<div><span style="color:#888;font-size:11px">Roteiro</span><br><span style="font-size:13px">'+esc(wri)+'</span></div>':'')+'</div>';
-    const cast = tmdbC?.cast?.slice(0,6)||[];
+    const cast = info?.cast||[];
     if(cast.length) html += '<div class="bsheet-section"><div class="bsheet-section-title">🎭 Elenco Principal</div><div style="display:flex;gap:10px;overflow-x:auto;padding-bottom:4px">'+cast.map(a=>'<div style="text-align:center;min-width:60px"><div style="width:52px;height:52px;border-radius:50%;overflow:hidden;margin:0 auto 4px;background:#2a2a2a">'+(a.profile_path?'<img src="https://image.tmdb.org/t/p/w200'+a.profile_path+'" style="width:100%;height:100%;object-fit:cover">':'<div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;font-size:18px">👤</div>')+'</div><div style="font-size:9px;font-weight:600;line-height:1.2">'+esc(a.name.split(' ').slice(0,2).join(' '))+'</div></div>').join('')+'</div></div>';
     const countryMap = {'United States of America':'Estados Unidos','United Kingdom':'Reino Unido','France':'França','Germany':'Alemanha','Italy':'Itália','Spain':'Espanha','Japan':'Japão','South Korea':'Coreia do Sul','China':'China','Brazil':'Brasil','Australia':'Austrália','Canada':'Canadá','India':'Índia','Mexico':'México','Argentina':'Argentina','New Zealand':'Nova Zelândia','Ireland':'Irlanda','Sweden':'Suécia','Denmark':'Dinamarca','Norway':'Noruega','Russia':'Rússia','South Africa':'África do Sul'};
-    const countries = tmdbD?.production_countries?.map(p=>countryMap[p.name]||p.name)||[];
+    const countries = (info?.countries||[]).map(p=>countryMap[p]||p);
     if(countries.length) html += '<div class="bsheet-section"><div class="bsheet-section-title">🌍 País de Produção</div><div style="font-size:13px">'+esc(countries.join(', '))+'</div></div>';
-    const bud = tmdbD?.budget, rev = tmdbD?.revenue;
+    const bud = info?.budget, rev = info?.revenue;
     const fm = n => n>=1e6?'US$ '+(n/1e6).toFixed(1)+'M':n>=1e3?'US$ '+(n/1e3).toFixed(0)+'K':'US$ '+n;
     if(bud>0||rev>0) html += '<div class="bsheet-section"><div class="bsheet-section-title">💰 Financeiro</div><div style="display:flex;gap:16px">'+(bud>0?'<div><span style="color:#888;font-size:11px">Orçamento</span><br><span style="font-size:14px;font-weight:700">'+fm(bud)+'</span></div>':'')+(rev>0?'<div><span style="color:#888;font-size:11px">Bilheteria</span><br><span style="font-size:14px;font-weight:700;color:#46d369">'+fm(rev)+'</span></div>':'')+'</div></div>';
     if(!html) html = '<div style="text-align:center;padding:20px;color:#888">Informações não disponíveis</div>';
