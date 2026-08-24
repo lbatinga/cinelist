@@ -2968,31 +2968,53 @@ async function computeRecommendations(uid){
 
   const recLists = await runBatched(validBases, 5, x => fetchTmdbRecommendations(x.tmdbId));
 
-  const countMap = new Map(); // tmdbId -> {count, movie}
-  recLists.forEach(list => {
-    list.forEach(m => {
-      if(!countMap.has(m.id)) countMap.set(m.id, {count:0, movie:m});
-      countMap.get(m.id).count++;
-    });
-  });
+  const byId = new Map(); // tmdbId -> movie (dedupe; um filme pode vir de várias das 20 listas)
+  recLists.forEach(list => list.forEach(m => { if(!byId.has(m.id)) byId.set(m.id, m); }));
 
   const localByTmdbId = new Map();
   FILMES.forEach(f => { if(f.tmdb_id) localByTmdbId.set(f.tmdb_id, f); });
 
-  return [...countMap.values()]
-    // Todo filme do catálogo (avaliado ou não) fica de fora daqui — o Bloco A
-    // ("Do CineList, pra você") é dono desse território agora; o mesmo filme
-    // aparecendo nos dois blocos seria confuso.
-    .filter(({movie}) => !localByTmdbId.get(movie.id))
-    .map(({movie, count}) => ({
-      tmdbId: movie.id,
-      titulo: movie.title || '',
-      ano: movie.release_date ? movie.release_date.slice(0,4) : '',
-      poster: movie.poster_path ? 'https://image.tmdb.org/t/p/w342'+movie.poster_path : '',
-      sinopse: movie.overview || '',
-      count
-    }))
-    .sort((a,b) => b.count - a.count);
+  // Todo filme do catálogo (avaliado ou não) fica de fora daqui — o Bloco A
+  // ("Do CineList, pra você") é dono desse território agora; o mesmo filme
+  // aparecendo nos dois blocos seria confuso. "Sem nota nenhuma" (vote_count=0)
+  // também é descartado — nada pra ajustar.
+  const elegiveis = [...byId.values()]
+    .filter(m => !localByTmdbId.get(m.id))
+    .filter(m => m.vote_count && m.vote_average != null);
+  if(!elegiveis.length) return [];
+
+  // Freio de amostra, k=3 — mesmo princípio do Bloco A e da fórmula de compatibilidade
+  // (r_ajustado), só que a referência aqui é a média de vote_average DOS PRÓPRIOS
+  // candidatos da lista, calculada na hora — nunca a média da tropa (escala diferente:
+  // nota da tropa é 0-10 subjetivo, vote_average é público geral do TMDB) e nunca um
+  // número fixo no código (constante mágica ninguém entende depois).
+  const mediaPool = elegiveis.reduce((a,m) => a+m.vote_average, 0) / elegiveis.length;
+
+  return elegiveis.map(m => {
+    const n = m.vote_count;
+    return {
+      tmdbId: m.id,
+      titulo: m.title || '',
+      ano: m.release_date ? m.release_date.slice(0,4) : '',
+      poster: m.poster_path ? 'https://image.tmdb.org/t/p/w342'+m.poster_path : '',
+      sinopse: m.overview || '',
+      numAvaliaram: n,
+      notaFinal: (n/(n+3))*m.vote_average + (3/(n+3))*mediaPool
+    };
+  }).sort((a,b) => b.notaFinal - a.notaFinal);
+}
+
+// Média de toda nota já dada por qualquer um da tropa, em qualquer filme — a referência
+// neutra do freio de amostra do Bloco A (ver computeCineListParaVoce). Calculada na hora,
+// não guardada: some/varia junto com FILMES sem precisar de invalidação própria.
+function mediaGeralTropa(){
+  let soma = 0, n = 0;
+  FILMES.forEach(f => {
+    Object.entries(f.avaliacoes).forEach(([uid, av]) => {
+      if(av.nota != null && STATS[uid]?.in_ranking){ soma += av.nota; n++; }
+    });
+  });
+  return n ? soma/n : 0;
 }
 
 // ── DO CINELIST, PRA VOCÊ (Bloco A — filmes do próprio catálogo ainda não avaliados,
@@ -3002,16 +3024,15 @@ async function computeRecommendations(uid){
 // recalcular a cada abertura da aba, sem o dance de validade que o Bloco B precisa.
 function computeCineListParaVoce(uid){
   const pendentes = new Set(STATS[uid]?.pendentes || []);
+  const mediaTropa = mediaGeralTropa();
   const out = [];
   FILMES.forEach(f => {
     if(!pendentes.has(f.id)) return;
     const raterUids = Object.keys(f.avaliacoes).filter(u => u!==uid && f.avaliacoes[u]?.nota != null);
-    if(!raterUids.length) return;
+    if(!raterUids.length) return; // descarta quem não tem nota nenhuma
 
-    // Média ponderada por pct — quem não tem par de compatibilidade (pct null/ausente)
-    // não contribui peso nenhum, nunca vira um neutro 50. Sem piso de quantidade: até
-    // 1 pessoa compatível puxa o filme pra cima, mas o numAvaliaram mostrado no card
-    // deixa claro que é 1 pessoa só, não 8 — mesmo princípio do n_comum na compatibilidade.
+    // Nota base: média ponderada por pct — quem não tem par de compatibilidade
+    // (pct null/ausente) não contribui peso nenhum, nunca vira um neutro 50.
     let somaPeso = 0, somaPonderada = 0;
     const pesados = [];
     raterUids.forEach(u => {
@@ -3022,12 +3043,21 @@ function computeCineListParaVoce(uid){
       pesados.push({ uid: u, pct: c.pct, nota: f.avaliacoes[u].nota });
     });
     if(!somaPeso) return; // ninguém que avaliou tem compatibilidade conhecida com uid
-
     pesados.sort((a,b) => b.pct - a.pct);
-    out.push({ filme: f, score: somaPonderada/somaPeso, numAvaliaram: raterUids.length, top: pesados.slice(0,3) });
+
+    // Freio de amostra, k=3: puxa pra média geral da tropa na proporção inversa de n —
+    // 1 nota isolada (por mais compatível que seja quem deu) não vira #1 sozinha, mas
+    // ainda pesa mais que a média assim que 2-3 pessoas concordam. k=3 (não 5) porque o
+    // catálogo tem muito lançamento recente com poucas notas por natureza, e k=5 puniria
+    // esses demais.
+    const n = pesados.length;
+    const notaBase = somaPonderada/somaPeso;
+    const notaFinal = (n/(n+3))*notaBase + (3/(n+3))*mediaTropa;
+
+    out.push({ filme: f, notaFinal, numAvaliaram: n, top: pesados.slice(0,3) });
   });
-  out.sort((a,b) => b.score - a.score);
-  return out;
+  out.sort((a,b) => b.notaFinal - a.notaFinal);
+  return out.slice(0,20);
 }
 
 function cineListRecCardHTML(r){
@@ -3040,7 +3070,7 @@ function cineListRecCardHTML(r){
         : `<div style="width:100%;aspect-ratio:2/3;background:var(--surface2);display:flex;align-items:center;justify-content:center;font-size:36px;color:var(--muted)">🎬</div>`}
       <div style="padding:10px 12px 12px;display:flex;flex-direction:column;gap:5px;flex:1">
         <div style="font-weight:700;font-size:13px;color:#fff;line-height:1.3">${esc(f.nome)}${f.ano?` <span style="color:var(--muted);font-weight:400">(${esc(f.ano)})</span>`:''}</div>
-        <div style="font-size:10px;font-weight:700;padding:3px 8px;border-radius:12px;background:rgba(70,211,105,.15);color:var(--green);width:fit-content">★ ${fmt(r.score)} previsto pra você</div>
+        <div style="font-size:10px;font-weight:700;padding:3px 8px;border-radius:12px;background:rgba(70,211,105,.15);color:var(--green);width:fit-content">${fmt(r.notaFinal)} · nota da tropa ajustada</div>
         <div style="font-size:10px;color:var(--muted2)">${r.numAvaliaram} pessoa${r.numAvaliaram!==1?'s':''} da tropa avaliou${r.numAvaliaram!==1?'ram':''}</div>
         ${topStr?`<div style="font-size:11px;color:var(--muted)">${topStr}</div>`:''}
       </div>
@@ -3064,10 +3094,19 @@ function cineListParaVoceHTML(uid){
 
 function recsCacheKey(uid){ return 'cinelist_recs_'+uid; }
 
+// Sobe a cada mudança na fórmula do Bloco B (mesmo princípio do versao_formula da
+// tabela compatibilidade) — sem isso, um cache calculado com lógica antiga serve pra
+// sempre, porque shouldRecalcRecs só olhava quantidade de avaliações novas.
+const PARA_VOCE_VERSAO_FORMULA = 'v2-freio-k3';
+
 function shouldRecalcRecs(uid, cache){
   if(!cache) return true;
+  if(cache.versaoFormula !== PARA_VOCE_VERSAO_FORMULA) return true;
   const currentRatedCount = FILMES.filter(f => f.avaliacoes[uid] && f.avaliacoes[uid].nota != null).length;
-  return (currentRatedCount - (cache.ratedCount||0)) >= 10;
+  if((currentRatedCount - (cache.ratedCount||0)) >= 10) return true;
+  const trintaDiasMs = 30*24*60*60*1000;
+  if(!cache.calculatedAt || (Date.now() - new Date(cache.calculatedAt).getTime()) >= trintaDiasMs) return true;
+  return false;
 }
 
 function readRecsCache(uid){
@@ -3077,7 +3116,7 @@ function readRecsCache(uid){
 
 function writeRecsCache(uid, results){
   const ratedCount = FILMES.filter(f => f.avaliacoes[uid] && f.avaliacoes[uid].nota != null).length;
-  const cache = { ratedCount, results, calculatedAt: new Date().toISOString() };
+  const cache = { ratedCount, results, calculatedAt: new Date().toISOString(), versaoFormula: PARA_VOCE_VERSAO_FORMULA };
   try{ localStorage.setItem(recsCacheKey(uid), JSON.stringify(cache)); }catch(e){}
   return cache;
 }
@@ -3159,7 +3198,8 @@ function recCardHTML(r){
         : `<div style="width:100%;aspect-ratio:2/3;background:var(--surface2);display:flex;align-items:center;justify-content:center;font-size:36px;color:var(--muted)">🎬</div>`}
       <div style="padding:10px 12px 12px;display:flex;flex-direction:column;gap:5px;flex:1">
         <div style="font-weight:700;font-size:13px;color:#fff;line-height:1.3">${esc(r.titulo)}${r.ano?` <span style="color:var(--muted);font-weight:400">(${r.ano})</span>`:''}</div>
-        <div style="font-size:10px;color:var(--muted2)">Recomendado por ${r.count} filme${r.count!==1?'s':''} que você amou</div>
+        <div style="font-size:10px;font-weight:700;padding:3px 8px;border-radius:12px;background:rgba(70,211,105,.15);color:var(--green);width:fit-content">${fmt(r.notaFinal)} · nota do TMDB ajustada</div>
+        <div style="font-size:10px;color:var(--muted2)">${r.numAvaliaram.toLocaleString('pt-BR')} pessoa${r.numAvaliaram!==1?'s':''} avaliaram (TMDB)</div>
         ${syn?`<div style="font-size:11.5px;color:var(--muted);line-height:1.4">${esc(syn)}</div>`:''}
       </div>
     </div>
