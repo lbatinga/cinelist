@@ -3020,10 +3020,18 @@ function renderDescobertas(){
     </div>
   `;
   renderDescTab();
-  scrollActiveTab();
 }
 
-function setDescTab(tab){ window.descTab=tab; renderDescobertas(); }
+// scrollActiveTab() mora aqui, não em renderDescobertas() — ela é chamada por qualquer
+// render() genérico enquanto CV==='descobertas' (avaliar, marcar quero ver, adicionar
+// filme...), não só numa troca de aba de verdade. Um scrollIntoView incondicional ali
+// desfazia captureScroll()/restoreScroll() de quem chamou render() por outro motivo: com
+// a tira de abas fora da viewport (usuário rolado fundo na lista), o scrollIntoView
+// (pensado só pra centralizar o chip horizontalmente) rolava #appScroll verticalmente de
+// volta pra perto do topo, ~40ms depois da restauração já ter rodado — bug real visto em
+// adicionarDoBlocoB() (2026-08-24): funcionava perto do topo (Bloco A) e pulava fundo na
+// lista (Bloco B).
+function setDescTab(tab){ window.descTab=tab; renderDescobertas(); scrollActiveTab(); }
 
 function renderDescTab(){
   const tab = window.descTab || 'stats';
@@ -6017,16 +6025,35 @@ function showToast(msg){
 function haptic(pattern=[10]){if(navigator.vibrate)navigator.vibrate(pattern);}
 
 // ── CHANGE PASSWORD ──
+// Os dois <input type="password"> só existem no DOM enquanto o modal está aberto — injetados
+// aqui, removidos em closePwModal() (mesmo padrão de authBox.innerHTML='' em hideAuthScreen()).
+// Sem isso, o heurístico "sem formulário" do Chromium (o app não tem nenhum <form>) varre o
+// documento inteiro atrás de um campo de senha pra parear com o texto mais recente digitado em
+// QUALQUER outro campo da página — foi assim que digitar uma nota em #notaInput dessa disparou
+// um "Salvar sua senha?" com usuário "8.3" (2026-08-24). #loginSenha/#signupSenha já tinham essa
+// proteção (hideAuthScreen(), por outro motivo); #pwNova/#pwConfirm eram os únicos type=password
+// que sobravam permanentes no HTML estático.
 function openChangePassword(){
-  document.getElementById('pwNova').value = '';
-  document.getElementById('pwConfirm').value = '';
+  document.getElementById('pwFields').innerHTML = `
+    <div class="pm-field">
+      <label class="pm-label">Nova Senha</label>
+      <input class="pm-input" id="pwNova" type="password" placeholder="Mínimo 6 caracteres">
+    </div>
+    <div class="pm-field">
+      <label class="pm-label">Confirmar Nova Senha</label>
+      <input class="pm-input" id="pwConfirm" type="password" placeholder="Repita a senha">
+    </div>
+  `;
   document.getElementById('pwError').style.display = 'none';
   document.getElementById('pwSuccess').style.display = 'none';
   document.getElementById('pwModal').classList.add('open');
   history.pushState({modal:'pwModal'},'','');
 }
 
-function closePwModal(){ document.getElementById('pwModal').classList.remove('open'); }
+function closePwModal(){
+  document.getElementById('pwModal').classList.remove('open');
+  document.getElementById('pwFields').innerHTML = '';
+}
 
 async function savePassword(){
   const nova = document.getElementById('pwNova').value;
@@ -7442,14 +7469,7 @@ function closePosterLightbox(){
     <div class="pm-body">
       <div id="pwError" style="display:none;background:rgba(229,9,20,.15);border:1px solid #e50914;color:#ff6b6b;padding:10px 14px;border-radius:8px;font-size:13px;margin-bottom:12px"></div>
       <div id="pwSuccess" style="display:none;background:rgba(70,211,105,.1);border:1px solid #46d369;color:#46d369;padding:10px 14px;border-radius:8px;font-size:13px;margin-bottom:12px"></div>
-      <div class="pm-field">
-        <label class="pm-label">Nova Senha</label>
-        <input class="pm-input" id="pwNova" type="password" placeholder="Mínimo 6 caracteres">
-      </div>
-      <div class="pm-field">
-        <label class="pm-label">Confirmar Nova Senha</label>
-        <input class="pm-input" id="pwConfirm" type="password" placeholder="Repita a senha">
-      </div>
+      <div id="pwFields"></div>
     </div>
     <div class="pm-footer">
       <button class="pm-cancel" onclick="closePwModal()">Cancelar</button>
