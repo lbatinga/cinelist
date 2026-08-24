@@ -3060,9 +3060,45 @@ function computeCineListParaVoce(uid){
   return out.slice(0,20);
 }
 
+// "Quero ver" sem abrir o modal de avaliação — mesmo padrão do mudarDeOpiniao() (upsert/
+// delete direto + atualização local + render()), só que marcando em vez de desmarcando.
+// Não mexe em STATS[CU].pendentes: o filme já está lá (nota ainda é null) e continua.
+async function marcarQueroVer(filmeId){
+  if(!CU){ showToast('⚠️ Selecione seu perfil!'); return; }
+  const f = FM[filmeId];
+  if(!f){ showToast('⚠️ Filme não encontrado'); return; }
+  try{
+    // data_avaliacao/comentario ficam de fora do upsert — string vazia ali tem significado
+    // histórico específico ("veio da migração AppSheet, data perdida", ver CLAUDE.md); gravar
+    // esse mesmo valor num registro novo poluiria qualquer auditoria futura. Coluna aceita
+    // null (nullable), então omitir os dois campos deixa o Postgres gravar NULL de verdade.
+    const {error} = await supa.from('avaliacoes').upsert(
+      { filme_id: filmeId, usuario_id: CU, nota: null, vai_assistir: 'Sim' },
+      { onConflict: 'filme_id,usuario_id' }
+    );
+    if(error) throw error;
+    f.avaliacoes[CU] = { nota: null, vai: 'Sim', comentario: null, data: null };
+
+    // render() reconstrói #viewDescobertas inteiro (innerHTML) — mesmo padrão de
+    // captura/restauração de #appScroll que saveRating() já usa (linha ~2060), pro
+    // scroll não se perder no meio da reconstrução síncrona.
+    const appScrollEl = document.getElementById('appScroll');
+    const savedScroll = appScrollEl?.scrollTop ?? null;
+    render();
+    if(savedScroll != null){
+      void appScrollEl.offsetHeight;
+      appScrollEl.scrollTop = savedScroll;
+    }
+  }catch(e){
+    console.error('Erro ao marcar quero ver:', e);
+    showToast('❌ Não foi possível marcar. Tente novamente.');
+  }
+}
+
 function cineListRecCardHTML(r){
   const f = r.filme;
   const topStr = r.top.map(t => `${esc(displayName(t.uid))} (${t.pct}%) deu ${fmt(t.nota)}`).join(' · ');
+  const jaQuerVer = f.avaliacoes[CU]?.vai === 'Sim';
   return `
     <div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;overflow:hidden;display:flex;flex-direction:column">
       ${f.poster
@@ -3073,6 +3109,7 @@ function cineListRecCardHTML(r){
         <div style="font-size:10px;font-weight:700;padding:3px 8px;border-radius:12px;background:rgba(70,211,105,.15);color:var(--green);width:fit-content">${fmt(r.notaFinal)} · nota da tropa ajustada</div>
         <div style="font-size:10px;color:var(--muted2)">${r.numAvaliaram} pessoa${r.numAvaliaram!==1?'s':''} da tropa avaliou${r.numAvaliaram!==1?'ram':''}</div>
         ${topStr?`<div style="font-size:11px;color:var(--muted)">${topStr}</div>`:''}
+        <button ${jaQuerVer?'disabled':`onclick="marcarQueroVer('${f.id}')"`} style="font-size:10px;font-family:inherit;font-weight:700;padding:4px 10px;border-radius:12px;border:1px solid var(--border);width:fit-content;margin-top:2px;background:${jaQuerVer?'rgba(70,211,105,.15)':'var(--surface2)'};color:${jaQuerVer?'var(--green)':'var(--muted)'};cursor:${jaQuerVer?'default':'pointer'}">${jaQuerVer?'✓ Quero ver':'🔖 Quero ver'}</button>
       </div>
     </div>
   `;
