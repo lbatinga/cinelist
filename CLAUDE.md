@@ -177,14 +177,26 @@ A `média_de_referência` **nunca é a mesma nos dois blocos, e nunca é um núm
 
 ### Segurança: SECURITY DEFINER e RPC pública
 
-**Regra**: toda função `SECURITY DEFINER` nasce exposta via RPC. A anon key é pública — embutida em `index.html`, servida estática pelo GitHub Pages, visível a qualquer um que abra o site — então por padrão Postgres/PostgREST deixam `EXECUTE` liberado pra `public` (que inclui `anon` e `authenticated`) em toda função nova. Numa função comum isso é inofensivo porque a RLS da tabela ainda barra a escrita; numa `SECURITY DEFINER` (que existe justamente pra *contornar* a RLS de uma tabela sem policy de escrita, como `conquistas` e `compatibilidade`) isso reabre exatamente o buraco que a função foi criada pra evitar de outro jeito. **Revogar `EXECUTE` de `public`/`anon`/`authenticated` é parte de criar a função, não um passo de segurança separado pra lembrar depois** — toda `create function ... security definer` vem na mesma migração com:
+**Regra**: toda função `SECURITY DEFINER` nasce exposta via RPC. A anon key é pública — embutida em `index.html`, servida estática pelo GitHub Pages, visível a qualquer um que abra o site — então por padrão Postgres/PostgREST deixam `EXECUTE` liberado pra `public` (que inclui `anon` e `authenticated`) em toda função nova. Numa função comum isso é inofensivo porque a RLS da tabela ainda barra a escrita; numa `SECURITY DEFINER` (que existe justamente pra *contornar* a RLS de uma tabela sem policy de escrita, como `conquistas` e `compatibilidade`) isso reabre exatamente o buraco que a função foi criada pra evitar de outro jeito. **Fechar o `EXECUTE` é parte de criar a função, não um passo de segurança separado pra lembrar depois** — mas o fechamento certo depende de quem legitimamente precisa chamar:
+
+- **Só gatilho/cron chama, nunca o cliente** (ex. `recalcular_compatibilidade()`, `_trg_recalcular_compatibilidade()`) — revoga de todo mundo:
 ```sql
 revoke execute on function public.<nome>(<args>) from public, anon, authenticated;
 alter function public.<nome>(<args>) set search_path = public, pg_temp;
 ```
-(`search_path` fixo pelo mesmo motivo — nasce junto, não é corrigido depois num scan de advisories.)
+- **O cliente logado chama via `supa.rpc()`** (ex. `cache_omdb_rating()`, `cache_tmdb_info()`) — revoga de todo mundo do mesmo jeito, mas concede de volta só pra `authenticated` (nunca `anon`, que nunca tem sessão real; o app inteiro exige login pra fazer qualquer coisa):
+```sql
+revoke execute on function public.<nome>(<args>) from public, anon, authenticated;
+grant execute on function public.<nome>(<args>) to authenticated;
+alter function public.<nome>(<args>) set search_path = public, pg_temp;
+```
+Nesse segundo caso a barreira de escopo não é "quem pode chamar" (é o próprio cliente logado, de propósito) — é o que o corpo da função tem permissão de fazer: `cache_tmdb_info()`, por exemplo, só escreve `tmdb_cache`/`tmdb_atualizado_em` do filme recebido, nunca lê nem escreve mais nada.
 
-Aplicado a `recalcular_compatibilidade()` e à sua wrapper de gatilho `_trg_recalcular_compatibilidade()`: ambas `SECURITY DEFINER`, `search_path` fixo, `EXECUTE` revogado de `public`/`anon`/`authenticated` (só `postgres`/`service_role`) — confirmado por leitura direta de `pg_proc`. `get_advisors(type='security')` rodado depois de criar os gatilhos de conquistas e compatibilidade: nada além do `auth_leaked_password_protection` já conhecido (ver Pendência abaixo).
+(`search_path` fixo pelo mesmo motivo nos dois casos — nasce junto, não é corrigido depois num scan de advisories.)
+
+**Sem essa distinção escrita, o risco é real**: alguém lendo só a regra geral (revogar de `authenticated` também) pode "consertar" o grant de `cache_omdb_rating`/`cache_tmdb_info()` achando que está fechando uma brecha, e quebrar a escrita de cache pro app inteiro — motivo de registrar isso agora (2026-08-24), depois de a distinção ficar implícita por tempo demais.
+
+Aplicado ao primeiro caso em `recalcular_compatibilidade()` e à sua wrapper de gatilho `_trg_recalcular_compatibilidade()`: ambas `SECURITY DEFINER`, `search_path` fixo, `EXECUTE` revogado de `public`/`anon`/`authenticated` (só `postgres`/`service_role`) — confirmado por leitura direta de `pg_proc`. `get_advisors(type='security')` rodado depois de criar os gatilhos de conquistas e compatibilidade: nada além do `auth_leaked_password_protection` já conhecido (ver Pendência abaixo). Aplicado ao segundo caso em `cache_omdb_rating()` e `cache_tmdb_info()`: `EXECUTE` confirmado (leitura de `information_schema.routine_privileges` + `has_function_privilege('anon', ..., 'EXECUTE')` retornando `false`) só pra `postgres`/`service_role`/`authenticated` — sem `anon`, sem `public` solto. `get_advisors(type='security')` depois da migração de `cache_tmdb_info()` (2026-08-24) só sinaliza o padrão esperado (`authenticated_security_definer_function_executable`, mesmo aviso que `cache_omdb_rating()` já carregava, intencional pros dois) mais o `auth_leaked_password_protection` já conhecido — nada novo.
 
 Views (`v_avaliacao_comparativo`, `v_filme_stats`) usam `security_invoker=true` — sem isso, uma view roda com o privilégio de quem criou, não de quem consulta, o padrão antigo do Postgres pra views sem essa opção declarada. Seguro porque `avaliacoes`/`filmes` já abrem `SELECT` pra `public`; `usuarios` abre só pra `authenticated`, o mesmo papel que qualquer sessão logada real já usa. Validado com sessão `authenticated` real no app (celular, logado) depois da migração — Estatísticas, Afinidades e Conquistas, as três telas que dependem dessas views, carregaram normalmente.
 
