@@ -696,6 +696,10 @@ tr.selected td{background:rgba(229,9,20,.05)}
 </div>
 
 <script>
+// Capturado antes de qualquer outra linha rodar, pra sobreviver à tela de login (que pode
+// levar segundos ou minutos até o usuário digitar a senha) e a qualquer replaceState que o
+// boot faça depois. Só usado pelo boot pra restaurar view/sub-aba/filme — ver onLogin().
+const _bootHash = location.hash;
 var currentSession = null, supaUser = null, supaProfile = null;
 var FILMES_MAP = {};
 var FILMES = [];
@@ -1396,12 +1400,11 @@ document.getElementById('appScroll').addEventListener('scroll',function(){
   document.getElementById('topbar').classList.toggle('scrolled',this.scrollTop>10);
 });
 
-// ── ROTEAMENTO POR HASH (#/view ou #/view/subaba) ──
+// ── ROTEAMENTO POR HASH (#/view, #/view/subaba ou #/filme/<id>) ──
 // Views e sub-abas válidas — fonte única do parse/serialize, pra não desalinhar das
-// strings usadas nos onclick de aba (setRankTab/setDescTab mais abaixo). Esta parte só
-// cobre troca de view/sub-aba em navegação já dentro do app — restaurar a rota no boot
-// (refresh) e o deep-link de filme dependem do boot esperar loadFilmsFromSupabase() e
-// ficam pra um commit separado (ver CLAUDE.md, pendência de roteamento).
+// strings usadas nos onclick de aba (setRankTab/setDescTab mais abaixo). A restauração da
+// rota no boot (refresh) e o deep-link de filme moram em onLogin() e no .then() de
+// loadFilmsFromSupabase() — ver ali pra por que precisam esperar o fetch.
 const HASH_VIEWS = ['home','filmes','pendentes','avaliacoes','recentes','ranking','descobertas'];
 const HASH_SUBTABS = { ranking: ['geral','ano','genero','filmes'], descobertas: ['stats','afinidades','atividades','pra_voce'] };
 
@@ -1420,10 +1423,14 @@ function routeUrl(view, subtab){
   return sub ? `#/${view}/${sub}` : `#/${view}`;
 }
 
-// Só interpreta o formato #/view[/subaba] — qualquer outro hash (ex. o
-// #access_token=...&type=recovery que o Supabase escreve no redirect de recuperação de
-// senha, já que o client roda com detectSessionInUrl:true) não é nosso e fica intocado.
+// Só interpreta o formato #/view[/subaba] (ou #/filme/<id>, tratado à parte por ter um
+// alfabeto de id diferente — mistura maiúscula/minúscula e hífen, tanto UUID quanto o
+// formato antigo FILME-0211) — qualquer outro hash (ex. o #access_token=...&type=recovery
+// que o Supabase escreve no redirect de recuperação de senha, já que o client roda com
+// detectSessionInUrl:true) não é nosso e fica intocado.
 function parseHash(hash){
+  const fm = /^#\/filme\/([A-Za-z0-9-]+)$/.exec(hash || '');
+  if(fm) return { view: 'filme', filmeId: fm[1] };
   const m = /^#\/([a-z]+)(?:\/([a-z_]+))?$/.exec(hash || '');
   if(!m) return null;
   const [, view, sub] = m;
@@ -1786,8 +1793,13 @@ function filmDetailHTML(id){
 }
 
 // ── FILM MODAL (for home/ranking click) ──
-function openFilme(id){
-  navigate('filmes');
+// _skipHistory repassa pro navigate('filmes', ...) — só o boot do deep-link de filme usa
+// true (o hash #/filme/<id> é aplicado por quem chama, depois; empurrar +uma entrada de
+// 'filmes' no meio faria o botão voltar precisar de dois toques pra sair do app em vez de
+// um). Todo outro chamador existente continua sem passar o 2º argumento, comportamento
+// inalterado.
+function openFilme(id, _skipHistory){
+  navigate('filmes', _skipHistory);
   setTimeout(()=>{
     // find the row and click it
     const rows = document.querySelectorAll('#viewFilmes tbody tr');
@@ -5489,7 +5501,25 @@ async function onLogin(session){
       return;
     }
     if(!USERS[CU]) USERS[CU] = { nome: usuario.nome };
-    history.replaceState({view:'home'}, '', window.location.pathname);
+
+    // Restaura a rota do hash com que a página carregou (refresh, ou link direto) — _bootHash
+    // foi capturado no topo do script, antes de qualquer coisa tocar na URL, porque este
+    // replaceState roda em TODO boot com sessão já persistida (não só login interativo) e
+    // sempre rodou incondicionalmente antes de hoje, apagando qualquer hash. #/filme/<id> fica
+    // de fora da correção aqui — FM ainda não existe (só populado dentro de
+    // loadFilmsFromSupabase() abaixo), então não tem o que abrir ainda; a URL só vira #/filme/
+    // quando o filme realmente abrir, no .then() logo abaixo. Fazer os dois passos agora criaria
+    // uma entrada de histórico a mais no meio do caminho.
+    const _parsedBoot = parseHash(_bootHash);
+    const bootFilmeId = _parsedBoot?.view === 'filme' ? _parsedBoot.filmeId : null;
+    const bootRoute = (_parsedBoot && _parsedBoot.view !== 'filme') ? _parsedBoot : null;
+    if(bootRoute && bootRoute.sub){
+      if(bootRoute.view === 'ranking') rankTab = bootRoute.sub;
+      else if(bootRoute.view === 'descobertas') window.descTab = bootRoute.sub;
+    }
+    if(bootRoute) history.replaceState({view:bootRoute.view}, '', routeUrl(bootRoute.view, bootRoute.sub));
+    else history.replaceState({view:'home'}, '', window.location.pathname);
+
     hideAuthScreen();
     window.CU_EMAIL = email;
     window.dispatchEvent(new Event('cinelist:login'));
@@ -5498,13 +5528,28 @@ async function onLogin(session){
     loadProfiles();
     applyUserToUI();
     buildUD();
-    renderHome();
+    renderHome(); // sempre home no primeiro paint — ranking/descobertas/filme dependem de
+                  // dados que só o fetch abaixo traz; trocam de tela assim que ele resolver.
 
     // Carrega dados frescos em background
     loadFilmsFromSupabase().then(() => {
       try {
         buildUD();
-        render(); // re-renderiza a view atual (seja home, filmes, pendentes, etc.)
+        // CV==='home' nos dois ramos: se a pessoa já saiu navegando por conta própria
+        // enquanto os dados carregavam, não puxa ela de volta pra rota do hash/link — nem
+        // pro filme, nem pra view. Filme inválido/apagado (FM[bootFilmeId] ausente) cai
+        // direto no render() comum, sem erro visível.
+        if(bootFilmeId && FM[bootFilmeId] && CV==='home'){
+          openFilme(bootFilmeId, true); // true: não empurra +1 entrada de 'filmes' —
+                                        // o replaceState abaixo já corrige o hash na mesma
+                                        // entrada, senão o botão voltar de quem veio de um
+                                        // link precisaria de dois toques pra sair do app.
+          history.replaceState({view:'filmes', filmeId:bootFilmeId}, '', '#/filme/'+bootFilmeId);
+        } else if(bootRoute && bootRoute.view!=='home' && CV==='home'){
+          navigate(bootRoute.view, true);
+        } else {
+          render(); // re-renderiza a view atual (seja home, filmes, pendentes, etc.)
+        }
         checkBirthdays();
       } catch(e) {
         console.error('Render error:', e);
