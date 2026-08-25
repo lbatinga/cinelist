@@ -1396,6 +1396,42 @@ document.getElementById('appScroll').addEventListener('scroll',function(){
   document.getElementById('topbar').classList.toggle('scrolled',this.scrollTop>10);
 });
 
+// ── ROTEAMENTO POR HASH (#/view ou #/view/subaba) ──
+// Views e sub-abas válidas — fonte única do parse/serialize, pra não desalinhar das
+// strings usadas nos onclick de aba (setRankTab/setDescTab mais abaixo). Esta parte só
+// cobre troca de view/sub-aba em navegação já dentro do app — restaurar a rota no boot
+// (refresh) e o deep-link de filme dependem do boot esperar loadFilmsFromSupabase() e
+// ficam pra um commit separado (ver CLAUDE.md, pendência de roteamento).
+const HASH_VIEWS = ['home','filmes','pendentes','avaliacoes','recentes','ranking','descobertas'];
+const HASH_SUBTABS = { ranking: ['geral','ano','genero','filmes'], descobertas: ['stats','afinidades','atividades','pra_voce'] };
+
+function currentSubtab(view){
+  if(view==='ranking') return rankTab;
+  if(view==='descobertas') return window.descTab || 'stats';
+  return null;
+}
+
+// URL alvo pro pushState/replaceState de uma view (+ sub-aba opcional). 'home' limpa o
+// hash de vez (pathname puro) — um '' vazio no pushState não limpa nada, só reaproveita
+// a URL atual (é por isso que, sem hash nenhum, todo pushState do app usava '' até agora).
+function routeUrl(view, subtab){
+  if(view==='home') return window.location.pathname;
+  const sub = subtab || currentSubtab(view);
+  return sub ? `#/${view}/${sub}` : `#/${view}`;
+}
+
+// Só interpreta o formato #/view[/subaba] — qualquer outro hash (ex. o
+// #access_token=...&type=recovery que o Supabase escreve no redirect de recuperação de
+// senha, já que o client roda com detectSessionInUrl:true) não é nosso e fica intocado.
+function parseHash(hash){
+  const m = /^#\/([a-z]+)(?:\/([a-z_]+))?$/.exec(hash || '');
+  if(!m) return null;
+  const [, view, sub] = m;
+  if(!HASH_VIEWS.includes(view)) return null;
+  if(sub && !(HASH_SUBTABS[view]||[]).includes(sub)) return null;
+  return { view, sub: sub || null };
+}
+
 // NAV
 function navigate(view, _skipHistory){
   CV=view; AGenre=null;
@@ -1412,7 +1448,7 @@ function navigate(view, _skipHistory){
   const vn='view'+view.charAt(0).toUpperCase()+view.slice(1);
   document.getElementById(vn).classList.add('active');
   document.getElementById('appScroll').scrollTop=0;
-  if(!_skipHistory) history.pushState({view:view},'','');
+  if(!_skipHistory) history.pushState({view:view},'', routeUrl(view));
   render();
 }
 
@@ -2627,8 +2663,15 @@ window.addEventListener('popstate', e => {
   // Bsheet genérico (overlays antigos)
   if(e.state && e.state.bsheet){ closeBSheet(e.state.bsheet); return; }
 
-  // Navegação entre views (home, filmes, pendentes, etc.)
+  // Navegação entre views (home, filmes, pendentes, etc.) — o navegador já atualizou
+  // location.hash pra entrada de destino antes de disparar este evento, então a sub-aba
+  // (se houver) já está lá pra ler antes de trocar de view.
   if(e.state && e.state.view){
+    const parsed = parseHash(location.hash);
+    if(parsed && parsed.view === e.state.view && parsed.sub){
+      if(parsed.view === 'ranking') rankTab = parsed.sub;
+      else if(parsed.view === 'descobertas') window.descTab = parsed.sub;
+    }
     navigate(e.state.view, true); // true = não re-empurra o histórico
     return;
   }
@@ -3101,7 +3144,7 @@ function renderDescobertas(){
 // volta pra perto do topo, ~40ms depois da restauração já ter rodado — bug real visto em
 // adicionarDoBlocoB() (2026-08-24): funcionava perto do topo (Bloco A) e pulava fundo na
 // lista (Bloco B).
-function setDescTab(tab){ window.descTab=tab; renderDescobertas(); scrollActiveTab(); }
+function setDescTab(tab){ window.descTab=tab; renderDescobertas(); scrollActiveTab(); history.replaceState({view:'descobertas'},'', routeUrl('descobertas', tab)); }
 
 function renderDescTab(){
   const tab = window.descTab || 'stats';
@@ -3467,7 +3510,7 @@ function renderRanking(){
   renderRankTab();
 }
 
-function setRankTab(tab){ rankTab=tab; rankDetailUid=null; renderRanking(); }
+function setRankTab(tab){ rankTab=tab; rankDetailUid=null; renderRanking(); history.replaceState({view:'ranking'},'', routeUrl('ranking', tab)); }
 
 // Perfil aberto (rankDetailUid) tem prioridade sobre a aba — é o que faz renderRankTab()
 // sobreviver a um render() genérico disparado por um carregamento em segundo plano (ex.
