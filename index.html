@@ -4756,61 +4756,9 @@ function rankAfinidadesHTML(){
     ).slice(0,3);
 
     const minutos = shared.reduce((s,f) => s+(f.duracao_min||0), 0);
-    const mediaA = shared.reduce((s,f)=>s+f.avaliacoes[uidA].nota,0)/shared.length;
-    const mediaB = shared.reduce((s,f)=>s+f.avaliacoes[uidB].nota,0)/shared.length;
-
-    const anos = ['2023','2024','2025','2026'];
-    const evolucao = anos.map(ano => {
-      const filmsAno = shared.filter(f => {
-        const avA = f.avaliacoes[uidA], avB = f.avaliacoes[uidB];
-        return (avA?.data?.split('/')?.[2]===ano) || (avB?.data?.split('/')?.[2]===ano);
-      });
-      if(filmsAno.length < 2) return null;
-      const diffsAno = filmsAno.map(f => Math.abs(f.avaliacoes[uidA].nota - f.avaliacoes[uidB].nota));
-      const scoreAno = Math.round(Math.max(0, 100 - (diffsAno.reduce((s,d)=>s+d,0)/diffsAno.length)*20));
-      return { ano, score: scoreAno, count: filmsAno.length };
-    }).filter(Boolean);
-
-    const genreMap = {};
-    shared.forEach(f => {
-      (f.categorias||[]).forEach(g => {
-        if(!genreMap[g]) genreMap[g] = { diffsG: [], count: 0 };
-        genreMap[g].diffsG.push(Math.abs(f.avaliacoes[uidA].nota - f.avaliacoes[uidB].nota));
-        genreMap[g].count++;
-      });
-    });
-    const genreScores = Object.entries(genreMap)
-      .filter(([,v]) => v.count >= 3)
-      .map(([g,v]) => ({
-        g, count: v.count,
-        score: Math.round(Math.max(0, 100 - (v.diffsG.reduce((s,d)=>s+d,0)/v.diffsG.length)*20))
-      }))
-      .sort((a,b) => b.count - a.count)
-      .slice(0,5);
-
-    const stA = STATS[uidA], stB = STATS[uidB];
-    let genreConflito = null;
-    if(stA?.genre_avg && stB?.genre_avg){
-      const allG = [...new Set([...Object.keys(stA.genre_avg), ...Object.keys(stB.genre_avg)])];
-      let maxC = 0;
-      allG.forEach(g => {
-        const avgA = stA.genre_avg[g], avgB = stB.genre_avg[g];
-        if(avgA && avgB){ const d=Math.abs(avgA-avgB); if(d>maxC){ maxC=d; genreConflito={g,avgA,avgB,uidA,uidB}; }}
-      });
-    }
-
-    const anosValidos = shared
-      .map(f => parseInt(f.ano))
-      .filter(a => !isNaN(a) && a > 1900 && a <= new Date().getFullYear()+2);
-    const anoMedio = anosValidos.length > 0
-      ? Math.round(anosValidos.reduce((s,a)=>s+a,0) / anosValidos.length)
-      : null;
 
     return {
-      shared: shared.length,
-      ambosAmaram, ambosNota9, maiorGap, exclusivos, naoVistos, minutos,
-      mediaA: Math.round(mediaA*10)/10, mediaB: Math.round(mediaB*10)/10,
-      evolucao, genreScores, genreConflito, anoMedio
+      ambosAmaram, ambosNota9, maiorGap, exclusivos, naoVistos, minutos
     };
   }
 
@@ -4846,10 +4794,6 @@ function rankAfinidadesHTML(){
     }
   allPairs.sort((a,b) => b.compat.pct - a.compat.pct);
 
-  // Cor do detalhe (gênero, evolução) fica com as faixas antigas de propósito — o detalhe
-  // continua na matemática antiga (ver nota acima), recalibrar só a cor sem recalibrar o
-  // número por trás criaria uma inconsistência pior que a que já existe.
-  function scoreColor(s){ return s>=80?'#46d369':s>=60?'#f5c518':s>=40?'#e67e22':'#e05555'; }
   function pill(text, bg, border, color, id){
     const ev = id ? `onclick="openFilme('${id}')" ` : '';
     return `<span ${ev}style="background:${bg};border:1px solid ${border};color:${color};font-size:11px;padding:3px 8px;border-radius:20px;white-space:nowrap;display:inline-block;cursor:${id?'pointer':'default'}">${text}</span>`;
@@ -4916,18 +4860,6 @@ function rankAfinidadesHTML(){
         // === DETALHES (ocultos por padrão) ===
         html += `<div id="${cid}" style="display:none;margin-top:10px;padding-top:10px;border-top:1px solid var(--border)">`;
 
-        // Stats pills
-        const maisGenNome = data.mediaA >= data.mediaB ? nomeA : nomeB;
-        const maisGenMedia = Math.max(data.mediaA, data.mediaB);
-        const maisCritNome = data.mediaA < data.mediaB ? nomeA : nomeB;
-        const maisCritMedia = Math.min(data.mediaA, data.mediaB);
-
-        html += `<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px">`;
-        if(data.anoMedio) html += `<div style="background:var(--surface2);border-radius:8px;padding:6px 10px;font-size:11px;text-align:center"><div style="font-weight:800;color:#a0c4ff">~${data.anoMedio}</div><div style="color:var(--muted)">ano médio</div></div>`;
-        html += `<div style="background:var(--surface2);border-radius:8px;padding:6px 10px;font-size:11px;text-align:center"><div style="font-weight:800;color:#46d369">${maisGenMedia}</div><div style="color:var(--muted)">${trunc(maisGenNome,8)} generoso</div></div>`;
-        html += `<div style="background:var(--surface2);border-radius:8px;padding:6px 10px;font-size:11px;text-align:center"><div style="font-weight:800;color:#f5c518">${maisCritMedia}</div><div style="color:var(--muted)">${trunc(maisCritNome,8)} crítico</div></div>`;
-        html += `</div>`;
-
         if(data.ambosNota9.length){
           html += `<div style="font-size:11px;color:#f5c518;font-weight:700;margin-bottom:5px">🌟 Nota máxima em comum (≥9)</div>
           <div style="display:flex;gap:5px;flex-wrap:wrap;margin-bottom:10px">
@@ -4961,49 +4893,6 @@ function rankAfinidadesHTML(){
           <div style="display:flex;gap:5px;flex-wrap:wrap;margin-bottom:10px">
             ${data.exclusivos.map(f=>pill(trunc(f.nome,22),'rgba(206,147,216,.1)','rgba(206,147,216,.3)','#ce93d8',f.id)).join('')}
           </div>`;
-        }
-
-        // Blocos abaixo dão um PERCENTUAL agregado de afinidade (gênero, evolução) — só fazem
-        // sentido em pares 'normal'. Num par 'baixo' isso contradiria, na mesma tela, o que o
-        // cabeçalho acabou de dizer ("ainda conhecendo o gosto de X"): um fato pontual sobre
-        // filmes específicos (nota máxima, maior divergência...) é verdadeiro com 4 filmes;
-        // um percentual agregado não é. Os blocos factuais acima ficam pra qualquer estado.
-        if(estado === 'normal' && data.genreConflito){
-          const gc=data.genreConflito;
-          const amaNome=gc.avgA>gc.avgB?nomeA:nomeB, ama=Math.max(gc.avgA,gc.avgB).toFixed(1);
-          const evitaNome=gc.avgA>gc.avgB?nomeB:nomeA, evita=Math.min(gc.avgA,gc.avgB).toFixed(1);
-          html += `<div style="font-size:11px;color:#e67e22;font-weight:700;margin-bottom:4px">🎭 Gênero divisor: ${esc(gc.g)}</div>
-          <div style="font-size:11px;color:var(--muted);margin-bottom:10px">${trunc(amaNome,10)} ama (${ama}) · ${trunc(evitaNome,10)} evita (${evita})</div>`;
-        }
-
-        if(estado === 'normal' && data.genreScores.length){
-          html += `<div style="font-size:11px;color:#80deea;font-weight:700;margin-bottom:6px">🎯 Afinidade por gênero</div>
-          <div style="display:flex;flex-direction:column;gap:4px;margin-bottom:10px">`;
-          data.genreScores.forEach(gs => {
-            const gc=scoreColor(gs.score);
-            html += `<div style="display:flex;align-items:center;gap:8px">
-              <div style="font-size:11px;color:var(--muted);width:90px;flex-shrink:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(gs.g)}</div>
-              <div style="flex:1;background:var(--surface2);border-radius:3px;height:5px;overflow:hidden">
-                <div style="height:100%;width:${gs.score}%;background:${gc};border-radius:3px"></div>
-              </div>
-              <div style="font-size:11px;font-weight:700;color:${gc};width:32px;text-align:right;flex-shrink:0">${gs.score}%</div>
-            </div>`;
-          });
-          html += `</div>`;
-        }
-
-        if(estado === 'normal' && data.evolucao.length >= 2){
-          html += `<div style="font-size:11px;color:#b0bec5;font-weight:700;margin-bottom:6px">📈 Evolução da afinidade</div>
-          <div style="display:flex;gap:6px;flex-wrap:wrap">`;
-          data.evolucao.forEach(ev => {
-            const ec=scoreColor(ev.score);
-            html += `<div style="background:var(--surface2);border-radius:8px;padding:5px 8px;text-align:center;min-width:52px">
-              <div style="font-size:12px;font-weight:800;color:${ec}">${ev.score}%</div>
-              <div style="font-size:10px;color:var(--muted)">${ev.ano}</div>
-              <div style="font-size:9px;color:var(--muted2)">${ev.count} filmes</div>
-            </div>`;
-          });
-          html += `</div>`;
         }
 
         html += `</div>`; // fecha detalhes
