@@ -1423,6 +1423,17 @@ function routeUrl(view, subtab){
   return sub ? `#/${view}/${sub}` : `#/${view}`;
 }
 
+// Empurra #/filme/<id> — chamada pelas 4 funções open*Panel (Filmes/Pendentes/Avaliações/
+// Recentes) sempre que um filme é aberto num painel ou no modal mobile, pra quem clicou
+// poder copiar o link da barra de endereço. pushState de propósito (não replaceState): cada
+// filme aberto vira um passo de "voltar" que fecha ele e retorna pra lista — comportamento
+// esperado no celular. A única exceção é o boot do deep-link de filme (ver onLogin()), que
+// chama openFilmeInPanel(id, true) pra pular este push — o hash final ali já é decidido por
+// um replaceState próprio, e empurrar de novo criaria uma entrada de histórico a mais.
+function pushFilmeRoute(id){
+  history.pushState({view:CV, filmeId:id}, '', '#/filme/'+id);
+}
+
 // Só interpreta o formato #/view[/subaba] (ou #/filme/<id>, tratado à parte por ter um
 // alfabeto de id diferente — mistura maiúscula/minúscula e hífen, tanto UUID quanto o
 // formato antigo FILME-0211) — qualquer outro hash (ex. o #access_token=...&type=recovery
@@ -1688,9 +1699,14 @@ function renderFilmes(selectedId, forceGenre){
   `;
 }
 
-function openFilmeInPanel(id){
+// _skipHistory (opcional) só existe pro boot do deep-link de filme, que chama esta função
+// direto (sem clique real por trás) — ver onLogin(). Todo outro chamador (clique de linha,
+// prev/next do painel) não passa o 2º argumento, comportamento inalterado.
+function openFilmeInPanel(id, _skipHistory){
   document.querySelectorAll('#viewFilmes tr').forEach(r=>r.classList.remove('selected'));
-  event.currentTarget.classList.add('selected');
+  event?.currentTarget?.classList.add('selected'); // opcional: sem clique real por trás
+                                                    // (boot), não há o que destacar
+  if(!_skipHistory) pushFilmeRoute(id);
   if(window.innerWidth < 769){ openMobileFilmeModal(id); return; }
   document.getElementById('filmDetailPanel').innerHTML=filmDetailHTML(id);
   document.getElementById('filmDetailPanel').scrollTop=0;
@@ -1793,13 +1809,12 @@ function filmDetailHTML(id){
 }
 
 // ── FILM MODAL (for home/ranking click) ──
-// _skipHistory repassa pro navigate('filmes', ...) — só o boot do deep-link de filme usa
-// true (o hash #/filme/<id> é aplicado por quem chama, depois; empurrar +uma entrada de
-// 'filmes' no meio faria o botão voltar precisar de dois toques pra sair do app em vez de
-// um). Todo outro chamador existente continua sem passar o 2º argumento, comportamento
-// inalterado.
-function openFilme(id, _skipHistory){
-  navigate('filmes', _skipHistory);
+// O boot do deep-link de filme NÃO passa por aqui — chama navigate()+openFilmeInPanel()
+// direto (ver onLogin()), porque esta função depende de um clique real (síncrono ou
+// simulado 80ms depois) pra funcionar, e o boot precisa decidir push/skip de histórico sem
+// esperar esse delay nem depender de um clique sintético.
+function openFilme(id){
+  navigate('filmes');
   setTimeout(()=>{
     // find the row and click it
     const rows = document.querySelectorAll('#viewFilmes tbody tr');
@@ -1892,7 +1907,8 @@ function renderPendentes(selId){
 }
 function openPendPanel(id){
   document.querySelectorAll('#viewPendentes tr').forEach(r=>r.classList.remove('selected'));
-  event.currentTarget.classList.add('selected');
+  event?.currentTarget?.classList.add('selected');
+  pushFilmeRoute(id);
   if(window.innerWidth < 769){ openMobileFilmeModal(id); return; }
   document.getElementById('pendDetailPanel').innerHTML=filmDetailHTML(id);
   document.getElementById('pendDetailPanel').scrollTop=0;
@@ -1963,7 +1979,8 @@ function renderAvaliacoes(tab){
 
 function openAvPanel(id){
   document.querySelectorAll('#viewAvaliacoes tr').forEach(r=>r.classList.remove('selected'));
-  event.currentTarget.classList.add('selected');
+  event?.currentTarget?.classList.add('selected');
+  pushFilmeRoute(id);
   document.getElementById('avDetailPanel').innerHTML=filmDetailHTML(id);
   document.getElementById('avDetailPanel').scrollTop=0;
   const _fa=FM[id]; if(_fa) setTimeout(()=>loadExtRatings(id,_fa.nome,_fa.ano),0);
@@ -2011,7 +2028,8 @@ function renderRecentes(){
 
 function openRecentPanel(id){
   document.querySelectorAll('#viewRecentes tr').forEach(r=>r.classList.remove('selected'));
-  event.currentTarget.classList.add('selected');
+  event?.currentTarget?.classList.add('selected');
+  pushFilmeRoute(id);
   document.getElementById('recentDetailPanel').innerHTML=filmDetailHTML(id);
   document.getElementById('recentDetailPanel').scrollTop=0;
   const _fr=FM[id]; if(_fr) setTimeout(()=>loadExtRatings(id,_fr.nome,_fr.ano),0);
@@ -2701,7 +2719,9 @@ document.addEventListener('keydown', e => {
   const isOpen = id => document.getElementById(id)?.classList.contains('open');
 
   if(isOpen('posterLightbox'))   { closePosterLightbox();   return; }
-  if(isOpen('mobileFilmeModal')) { closeMobileFilmeModal(); return; }
+  if(isOpen('mobileFilmeModal')) { history.back();          return; } // ver comentário no
+                                                                       // botão "‹" (HTML) —
+                                                                       // devolve o hash junto
   if(isOpen('adminModal'))       { closeAdmin();            return; }
   if(isOpen('pwModal'))          { closePwModal();          return; }
   if(isOpen('profileModal'))     { closeProfile();          return; }
@@ -5540,10 +5560,13 @@ async function onLogin(session){
         // pro filme, nem pra view. Filme inválido/apagado (FM[bootFilmeId] ausente) cai
         // direto no render() comum, sem erro visível.
         if(bootFilmeId && FM[bootFilmeId] && CV==='home'){
-          openFilme(bootFilmeId, true); // true: não empurra +1 entrada de 'filmes' —
-                                        // o replaceState abaixo já corrige o hash na mesma
-                                        // entrada, senão o botão voltar de quem veio de um
-                                        // link precisaria de dois toques pra sair do app.
+          // navigate()+openFilmeInPanel() direto, sem passar por openFilme() — que
+          // depende de um clique real (ou simulado 80ms depois) pra funcionar. Chamar
+          // openFilmeInPanel(id, true) evita tanto uma 2ª entrada de histórico (o
+          // replaceState abaixo já corrige o hash na mesma entrada) quanto qualquer
+          // dependência de um clique de verdade.
+          navigate('filmes', true);
+          openFilmeInPanel(bootFilmeId, true);
           history.replaceState({view:'filmes', filmeId:bootFilmeId}, '', '#/filme/'+bootFilmeId);
         } else if(bootRoute && bootRoute.view!=='home' && CV==='home'){
           navigate(bootRoute.view, true);
@@ -7285,6 +7308,9 @@ async function exportBackupCSV(){
 }
 
 // ===== MOBILE FILME MODAL =====
+// Sem pushState aqui — quem chama (openFilmeInPanel/openPendPanel) já empurrou
+// #/filme/<id> via pushFilmeRoute() antes de decidir mobile vs desktop; empurrar de novo
+// aqui duplicaria a entrada de histórico.
 function openMobileFilmeModal(id){
   const f=FM[id]; if(!f) return;
   window._currentMobileFilmeId = id;
@@ -7294,7 +7320,6 @@ function openMobileFilmeModal(id){
   document.getElementById('mobileFilmeModal').classList.add('open');
   document.getElementById('mobileFilmeModal').scrollTop=0;
   document.body.style.overflow='hidden';
-  history.pushState({modal:'mobileFilme'},'','');
 }
 function closeMobileFilmeModal(){
   document.getElementById('mobileFilmeModal').classList.remove('open');
@@ -7584,9 +7609,15 @@ function closePosterLightbox(){
 </div>
 
 <!-- MOBILE FILME MODAL -->
+<!-- O botão de fechar chama history.back(), não closeMobileFilmeModal() direto (diferente
+     dos outros modais do app) — abrir um filme empurra #/filme/<id> no histórico
+     (pushFilmeRoute), então voltar restaura o hash da view de baixo sozinho, e o popstate
+     que já existe fecha o modal (ver window.addEventListener('popstate')). Chamar
+     closeMobileFilmeModal() direto aqui deixaria a URL "mentindo" (ainda em #/filme/<id>
+     com o modal já fechado) até o próximo back. -->
 <div id="mobileFilmeModal">
   <div class="mfm-close">
-    <button class="mfm-close-btn" onclick="closeMobileFilmeModal()">‹</button>
+    <button class="mfm-close-btn" onclick="history.back()">‹</button>
     <div class="mfm-close-title" id="mfmTitle"></div>
   </div>
   <div id="mfmContent"></div>
