@@ -10,6 +10,19 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="CineList">
 <title>CineList</title>
+<!-- Open Graph — prévia GENÉRICA (mesma pra qualquer link do app, nunca por filme). O
+     crawler do WhatsApp lê só o HTML estático destas tags, sem executar JS e sem nunca ver
+     o #/filme/<id> (hash não chega ao servidor) — ver CLAUDE.md, seção "Compartilhamento
+     (WhatsApp) e Open Graph", pro motivo completo de por que não dá pra ter pôster por
+     filme aqui. URL/imagem absolutos de propósito (diferente da URL montada em runtime no
+     botão de WhatsApp): meta tag é lida por um bot externo antes de qualquer JS rodar, não
+     tem window.location pra usar. -->
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="CineList">
+<meta property="og:title" content="CineList">
+<meta property="og:description" content="O catálogo de filmes da tropa">
+<meta property="og:image" content="https://lbatinga.github.io/cinelist/icon-512.png">
+<meta property="og:url" content="https://lbatinga.github.io/cinelist/">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-messaging-compat.js"></script>
@@ -1725,10 +1738,13 @@ function filmDetailHTML(id){
   const trailerQ=encodeURIComponent(f.nome+' trailer '+f.ano);
   const whereQ=encodeURIComponent('onde assistir '+f.nome);
   const avCount=Object.values(f.avaliacoes).filter(a=>a.nota!==null).length;
-  const topAvs=Object.entries(f.avaliacoes).filter(([,a])=>a.nota!==null).sort(([,a],[,b])=>b.nota-a.nota).slice(0,3);
-  const avStr=topAvs.map(([uid,av])=>`  • ${USERS[uid]?.nome||uid}: ${fmt(av.nota)}`).join('\n');
-  const appUrl='https://lbatinga.github.io/cinelist/cinelist_login_senha.html';
-  const wpp=encodeURIComponent(`🎬 *CineList da Tropa*\n\n*${f.nome}* (${f.ano||'?'})\n⏱ ${f.duracao_str||'—'} · ${f.classificacao||'Livre'}\n🎭 ${f.categorias.slice(0,3).join(', ')||'—'}\n\n${f.media?`⭐ Nota média: *${fmt(f.media)}* (${avCount} avaliação${avCount!==1?'s':''})\n${avStr}`:'📝 Ainda sem avaliações'}\n\n${f.sinopse?f.sinopse.slice(0,150)+(f.sinopse.length>150?'...':''):''}\n\n🔗 Veja no app: ${appUrl}`);
+  // location.origin+pathname, nunca domínio fixo no código — se o app mudar de endereço,
+  // o link continua certo sozinho (diferente das meta tags Open Graph do <head>, que são
+  // estáticas e por isso precisam de URL absoluta hardcoded — um bot de link preview lê o
+  // HTML sem rodar JS, não tem window.location pra usar).
+  const filmeUrl = location.origin + location.pathname + '#/filme/' + f.id;
+  const notaWpp = f.media ? `⭐ ${fmt(f.media)} (${avCount} avaliação${avCount!==1?'s':''})` : 'Ainda sem nota da tropa';
+  const wpp=encodeURIComponent(`🎬 *${f.nome}* (${f.ano||'?'})\n${f.categorias.slice(0,2).join(', ')||'—'} · ${f.duracao_str||'—'}\n${notaWpp}\n\n${filmeUrl}`);
   return `
     <div class="dp-backdrop" style="background-image:url('${esc(f.poster)}')${f.poster?';cursor:zoom-in':''}">
       <div class="dp-backdrop-grad"></div>
