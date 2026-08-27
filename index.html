@@ -2522,7 +2522,7 @@ async function saveFilme(){
     showToast(`✅ "${f.nome}" adicionado! Avalie agora 👇`);
     // Disparar notificação push para todos
     const nomeUsuario = USERS[CU]?.nome || 'Alguém';
-    enviarNotifFilme(f.nome, nomeUsuario);
+    enviarNotifFilme(f.nome, nomeUsuario, f.ano);
     // Abrir modal de avaliação automaticamente
     setTimeout(() => openRate(f.id), 300);
   }catch(e){
@@ -2612,7 +2612,7 @@ async function adicionarDoBlocoB(tmdbId){
     // filme ficava invisível pra tropa até alguém tropeçar nele por conta própria. Ver
     // CLAUDE.md, seção Recomendações, pro histórico completo da decisão.
     const nomeUsuario = USERS[CU]?.nome || 'Alguém';
-    enviarNotifFilme(f.nome, nomeUsuario);
+    enviarNotifFilme(f.nome, nomeUsuario, f.ano);
     setTimeout(() => openRate(f.id), 300);
   }catch(e){
     console.error('Erro ao adicionar filme do Bloco B:', e);
@@ -3104,6 +3104,67 @@ if('serviceWorker' in navigator){
 // ── OFFLINE INDICATOR ──
 window.addEventListener('offline', () => showToast('📡 Sem conexão — modo offline'));
 window.addEventListener('online',  () => showToast('✅ Conexão restaurada'));
+
+// ── CHECAGEM DE VERSÃO ──
+// Detecta deploy novo comparando o Last-Modified do servidor com o instante em que ESTA
+// sessão carregou (performance.timeOrigin) — não com um valor lido do próprio servidor no
+// boot (1ª tentativa, com um furo sem teto: o boot podia ter vindo do cache do navegador,
+// mas a checagem de linha de base ainda lia o servidor ao vivo, "adiantando" a base pra
+// além do que estava realmente rodando — daí em diante nunca mais detectava nada).
+// Comparar com o relógio de parede não tem esse problema: performance.timeOrigin é sempre
+// exatamente "agora" no momento em que o script começou a rodar, nunca lido de rede, nunca
+// pode se adiantar sozinho. O único furo possível é o próprio Cache-Control:max-age=600 do
+// CDN — se o navegador serviu esta página de um cache local gerado pouco antes de um
+// deploy, o conteúdo rodando é velho mas o timeOrigin ainda marca "agora"; esse furo
+// desaparece sozinho em no máximo ~10-20min (a próxima navegação real já não consegue mais
+// servir do cache), nunca fica aberto por dias como o incidente que motivou isto tudo.
+//
+// Compara Last-Modified, não ETag: confirmado ao vivo (curl -I) que o GitHub Pages/Fastly
+// recarimba o mtime de TODO o site a cada deploy, não só do arquivo que mudou de verdade —
+// então um commit que só mexe no CLAUDE.md também dispara o aviso uma vez sem o JS ter
+// mudado. É um falso positivo inofensivo (recarregar não muda nada visível), nunca um
+// falso negativo.
+//
+// HEAD, não GET: custa só cabeçalhos, não os ~380KB inteiros. Throttle de 10min casa com o
+// Cache-Control do CDN — checar mais rápido que isso não pegaria nada mais fresco de
+// qualquer forma. A 1ª checagem de cada sessão nunca é bloqueada pelo throttle (a variável
+// abaixo nasce zerada a cada carregamento de página). Sem debug exposto em window de
+// propósito: por ser script clássico (não module), esta função já fica visível e chamável
+// pelo console do DevTools sem precisar disso.
+let _lastVersionCheck = 0;
+const VERSION_CHECK_THROTTLE_MS = 10 * 60 * 1000;
+
+async function checkAppVersion(){
+  const agora = Date.now();
+  if(agora - _lastVersionCheck < VERSION_CHECK_THROTTLE_MS) return;
+  _lastVersionCheck = agora; // marca mesmo se falhar abaixo — evita retry em loop, tenta de novo só no próximo throttle
+  try{
+    const res = await fetch('./index.html', { method:'HEAD', cache:'no-store' });
+    if(!res.ok) return; // falha silenciosa de propósito — sem toast de erro, sem quebrar nada
+    const lastModHeader = res.headers.get('Last-Modified');
+    if(!lastModHeader) return;
+    const deployTime = new Date(lastModHeader).getTime();
+    if(isNaN(deployTime)) return;
+    if(deployTime > performance.timeOrigin) mostrarAvisoNovaVersao();
+  } catch(e){
+    // sem rede, HEAD falhou, etc. — mesmo silêncio de propósito
+  }
+}
+
+let _avisoNovaVersaoMostrado = false;
+function mostrarAvisoNovaVersao(){
+  if(_avisoNovaVersaoMostrado) return; // uma vez por sessão — não fica reaparecendo a cada checagem
+  _avisoNovaVersaoMostrado = true;
+  const bar = document.createElement('div');
+  bar.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:1000;background:var(--red);color:#fff;font-size:13px;font-weight:600;padding:10px 16px;display:flex;align-items:center;justify-content:center;gap:12px;text-align:center';
+  bar.innerHTML = `<span>Nova versão do CineList disponível</span><button style="background:#fff;color:var(--red);border:none;border-radius:6px;padding:5px 12px;font-weight:800;font-size:12px;cursor:pointer;font-family:inherit" onclick="location.reload()">🔄 Atualizar</button>`;
+  document.body.appendChild(bar);
+}
+
+checkAppVersion(); // já no boot — se o servidor já tiver deploy mais novo que este carregamento, avisa na hora
+document.addEventListener('visibilitychange', () => {
+  if(document.visibilityState === 'visible') checkAppVersion();
+});
 
 // ── PWA INSTALL PROMPT ──
 let _deferredInstall = null;
@@ -5765,10 +5826,13 @@ function urlBase64ToUint8Array(base64String) {
 const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbynMyP2e5nu06F5Gt5LX4MX_-8k8Yjw0K4TQuhRCwYKvNcVnWpS2VHQ9bnOVT9E4Pbv/exec';
 
 // Disparo automático ao adicionar filme (fire-and-forget)
-function enviarNotifFilme(nomeFilme, quemAdicionou) {
+function enviarNotifFilme(nomeFilme, quemAdicionou, ano) {
   try {
     const titulo = '🎬 Novo filme adicionado!';
-    const body = `${quemAdicionou} adicionou "${nomeFilme}" ao catálogo`;
+    // Ano ajuda a identificar remake/franquia sem abrir a notificação — "O Rei Leão" pode
+    // ser 1994 ou 2019, e a tropa tem os dois.
+    const anoTxt = ano ? ` (${ano})` : '';
+    const body = `${quemAdicionou} adicionou "${nomeFilme}"${anoTxt} ao catálogo`;
     const params = new URLSearchParams({ titulo, body, auto: '1' });
     fetch(APPS_SCRIPT_URL + '?' + params.toString(), {
       method: 'GET',
