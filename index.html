@@ -668,7 +668,7 @@ tr.selected td{background:rgba(229,9,20,.05)}
         <label class="form-label">Nota (0 a 10)</label>
         <div class="nota-input-wrap">
           <button class="nota-btn" onclick="changeNota(-0.1)">−</button>
-          <input type="number" id="notaInput" min="0" max="10" step="0.1" value="0.00">
+          <input type="number" id="notaInput" min="0" max="10" step="0.1" placeholder="0,00">
           <button class="nota-btn" onclick="changeNota(0.1)">+</button>
         </div>
       </div>
@@ -2064,7 +2064,7 @@ function openRate(id){
   const f=FM[id];
   const existing=f.avaliacoes[CU];
   document.getElementById('rateFilmName').textContent=f.nome;
-  document.getElementById('notaInput').value=existing?.nota!=null?existing.nota.toFixed(2):'0.00';
+  document.getElementById('notaInput').value=existing?.nota!=null?existing.nota.toFixed(2):'';
   setVai(existing?.vai||'Sim');
   let dateVal = '';
   if(existing?.data){
@@ -2098,6 +2098,7 @@ async function saveRating(){
   const data = isNao ? localDateStr() : document.getElementById('rateData').value;
   const coment = isNao ? '' : document.getElementById('rateComent').value.trim();
   if(!isNao && !data){showToast('⚠️ Preencha a data de avaliação!');return;}
+  if(!isNao && isNaN(nota)){showToast('⚠️ Digite uma nota');return;}
   if(!isNao && (nota<0||nota>10)){showToast('⚠️ Nota deve ser entre 0 e 10');return;}
 
   const btn=document.querySelector('#rateModal .btn-save');
