@@ -364,6 +364,7 @@ tr.selected td{background:rgba(229,9,20,.05)}
 .feed-dot.rate{background:var(--green)}
 .feed-dot.add{background:var(--yellow)}
 .feed-dot.nao{background:#e05555}
+.legend-dot{position:static;display:inline-block;vertical-align:middle}
 .feed-header{display:flex;align-items:center;gap:10px;margin-bottom:8px}
 .feed-avatar{width:30px;height:30px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:11px;color:#000;flex-shrink:0}
 .feed-user{font-size:13px;font-weight:700;flex:1;min-width:0}
@@ -1150,7 +1151,8 @@ function calcUserStats(){
   // Total de membros ativos (que avaliaram pelo menos 1 filme)
   gs.total_membros = uids.filter(u => (STATS[u]?.quant || 0) > 0).length;
 
-  // ── Atividade mensal (monthly_activity) ──
+  // ── Atividade mensal (monthly_activity) ── {nota,recusa} por mês, não um total só —
+  // o gráfico de "Top 10 meses" mostra a composição (ver rankStatsHTML).
   RAW.monthly_activity = {};
   FILMES.forEach(f => {
     Object.values(f.avaliacoes || {}).forEach(av => {
@@ -1158,7 +1160,9 @@ function calcUserStats(){
         const p = av.data.split('/');
         if(p.length === 3){
           const key = `${p[2]}-${p[1].padStart(2,'0')}`;
-          RAW.monthly_activity[key] = (RAW.monthly_activity[key] || 0) + 1;
+          if(!RAW.monthly_activity[key]) RAW.monthly_activity[key] = {nota:0, recusa:0};
+          if(av.nota !== null) RAW.monthly_activity[key].nota++;
+          else RAW.monthly_activity[key].recusa++;
         }
       }
     });
@@ -1166,10 +1170,10 @@ function calcUserStats(){
   const monthEntries = Object.entries(RAW.monthly_activity);
   if(monthEntries.length){
     const MESES_ABR = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
-    const top = monthEntries.sort((a,b)=>b[1]-a[1])[0];
+    const top = monthEntries.sort((a,b)=>(b[1].nota+b[1].recusa)-(a[1].nota+a[1].recusa))[0];
     const [ano,mes] = top[0].split('-');
     gs.top_month = `${MESES_ABR[parseInt(mes)-1]}/${ano}`;
-    gs.top_month_count = top[1];
+    gs.top_month_count = top[1].nota + top[1].recusa;
   }
 
   // ── User personal (top5, bot5, histograma, genre_top5) recalculados ──
@@ -5115,15 +5119,6 @@ function rankStatsHTML(){
     most_added:   src.reduce((a,b)=>b.inseridos.length>a.inseridos.length?b:a, src[0]),
     longest_away: src.filter(m=>m.ultima_av).reduce((a,b)=>monthsSince(b.ultima_av)>monthsSince(a.ultima_av)?b:a, src.find(m=>m.ultima_av)||src[0]),
   };
-  // Monthly activity chart data
-  const monthData = RAW.monthly_activity||{};
-  const monthEntries = Object.entries(monthData).sort((a,b)=>a[0].localeCompare(b[0]));
-  const maxMonthVal = Math.max(...monthEntries.map(([,v])=>v), 1);
-  const monthNames = {
-    '01':'Jan','02':'Fev','03':'Mar','04':'Abr','05':'Mai','06':'Jun',
-    '07':'Jul','08':'Ago','09':'Set','10':'Out','11':'Nov','12':'Dez'
-  };
-
   // Personal stats
   const personal = CU && RAW.user_personal?.[CU];
       const ps_dyn = CU && STATS[CU];
@@ -5203,23 +5198,32 @@ function rankStatsHTML(){
 
       <!-- Top 10 meses mais ativos -->
       <div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:16px;margin-bottom:16px">
-        <div style="font-size:13px;font-weight:700;margin-bottom:14px">📅 Top 10 meses mais ativos</div>
+        <div style="font-size:13px;font-weight:700;margin-bottom:10px">📅 Top 10 meses mais ativos</div>
+        <div style="display:flex;gap:14px;margin-bottom:12px;font-size:11px;color:var(--muted)">
+          <span><span class="feed-dot legend-dot rate"></span> Avaliações</span>
+          <span><span class="feed-dot legend-dot nao"></span> Recusados</span>
+        </div>
         ${(()=>{
           const monthNames = {'01':'Jan','02':'Fev','03':'Mar','04':'Abr','05':'Mai','06':'Jun','07':'Jul','08':'Ago','09':'Set','10':'Out','11':'Nov','12':'Dez'};
           const ma = RAW.monthly_activity || {};
-          const sorted = Object.entries(ma).sort(([,a],[,b])=>b-a).slice(0,10);
+          const sorted = Object.entries(ma)
+            .map(([ym,v])=>[ym, v.nota+v.recusa, v])
+            .sort((a,b)=>b[1]-a[1])
+            .slice(0,10);
           const maxVal = sorted[0]?.[1]||1;
-          return sorted.map(([ym,n],i)=>{
+          return sorted.map(([ym,total,v],i)=>{
             const [y,m] = ym.split('-');
             const label = (monthNames[m]||m)+'/'+y.slice(2);
-            const pct = Math.round(n/maxVal*100);
+            const pctNota = Math.round(v.nota/maxVal*100);
+            const pctRecusa = Math.round(v.recusa/maxVal*100);
             const color = i===0?'var(--red)':i<3?'var(--yellow)':'#4fc3f7';
             return '<div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">'
               +'<div style="font-size:11px;color:var(--muted);min-width:44px;text-align:right">'+label+'</div>'
-              +'<div style="flex:1;height:8px;background:var(--surface2);border-radius:4px;overflow:hidden">'
-              +'<div style="height:100%;width:'+pct+'%;background:'+color+';border-radius:4px;transition:width .5s"></div>'
+              +'<div style="flex:1;height:8px;background:var(--surface2);border-radius:4px;overflow:hidden;display:flex">'
+              +'<div style="height:100%;width:'+pctNota+'%;background:var(--green);transition:width .5s"></div>'
+              +'<div style="height:100%;width:'+pctRecusa+'%;background:#e05555;transition:width .5s"></div>'
               +'</div>'
-              +'<div style="font-size:12px;font-weight:700;min-width:28px;color:'+color+'">'+n+'</div>'
+              +'<div style="font-size:12px;font-weight:700;min-width:28px;color:'+color+'">'+total+'</div>'
               +'</div>';
           }).join('');
         })()}
