@@ -5223,7 +5223,10 @@ function rankStatsHTML(){
               +'<div style="height:100%;width:'+pctNota+'%;background:var(--green);transition:width .5s"></div>'
               +'<div style="height:100%;width:'+pctRecusa+'%;background:#e05555;transition:width .5s"></div>'
               +'</div>'
-              +'<div style="font-size:12px;font-weight:700;min-width:28px;color:'+color+'">'+total+'</div>'
+              +'<div style="min-width:52px;text-align:right">'
+              +'<div style="font-size:12px;font-weight:700;color:'+color+'">'+total+'</div>'
+              +(v.recusa>0?'<div style="font-size:10px;color:var(--muted)">'+v.nota+' · '+v.recusa+'</div>':'')
+              +'</div>'
               +'</div>';
           }).join('');
         })()}
