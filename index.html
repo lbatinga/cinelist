@@ -3330,12 +3330,24 @@ async function computeRecommendations(uid){
     .filter(m => m.vote_count && m.vote_average != null);
   if(!elegiveis.length) return [];
 
-  // Freio de amostra, k=3 — mesmo princípio do Bloco A e da fórmula de compatibilidade
+  // Freio de amostra — mesmo princípio do Bloco A e da fórmula de compatibilidade
   // (r_ajustado), só que a referência aqui é a média de vote_average DOS PRÓPRIOS
   // candidatos da lista, calculada na hora — nunca a média da tropa (escala diferente:
   // nota da tropa é 0-10 subjetivo, vote_average é público geral do TMDB) e nunca um
   // número fixo no código (constante mágica ninguém entende depois).
   const mediaPool = elegiveis.reduce((a,m) => a+m.vote_average, 0) / elegiveis.length;
+
+  // k do freio também vem da própria lista, não é fixo (k=3 fixo é só do Bloco A): aqui
+  // vote_count varia de dezenas a dezenas de milhares — escala bem maior que o Bloco A,
+  // onde n é no máximo ~14 pessoas da tropa. k=3 fixo deixava um filme de 46 votos com
+  // ~94% do peso da própria nota crua — o freio praticamente não existia. Mediana dos
+  // vote_count dos próprios candidatos elegíveis daquela lista, calculada na hora, mesmo
+  // princípio da média de referência acima (ver CLAUDE.md, seção Recomendações).
+  const voteCounts = elegiveis.map(m => m.vote_count).sort((a,b) => a-b);
+  const mid = Math.floor(voteCounts.length/2);
+  const kBlocoB = voteCounts.length % 2
+    ? voteCounts[mid]
+    : (voteCounts[mid-1] + voteCounts[mid]) / 2;
 
   return elegiveis.map(m => {
     const n = m.vote_count;
@@ -3346,7 +3358,7 @@ async function computeRecommendations(uid){
       poster: m.poster_path ? 'https://image.tmdb.org/t/p/w342'+m.poster_path : '',
       sinopse: m.overview || '',
       numAvaliaram: n,
-      notaFinal: (n/(n+3))*m.vote_average + (3/(n+3))*mediaPool
+      notaFinal: (n/(n+kBlocoB))*m.vote_average + (kBlocoB/(n+kBlocoB))*mediaPool
     };
   }).sort((a,b) => b.notaFinal - a.notaFinal);
 }
@@ -3479,7 +3491,7 @@ function recsCacheKey(uid){ return 'cinelist_recs_'+uid; }
 // Sobe a cada mudança na fórmula do Bloco B (mesmo princípio do versao_formula da
 // tabela compatibilidade) — sem isso, um cache calculado com lógica antiga serve pra
 // sempre, porque shouldRecalcRecs só olhava quantidade de avaliações novas.
-const PARA_VOCE_VERSAO_FORMULA = 'v2-freio-k3';
+const PARA_VOCE_VERSAO_FORMULA = 'v3-freio-kmediana';
 
 function shouldRecalcRecs(uid, cache){
   if(!cache) return true;
