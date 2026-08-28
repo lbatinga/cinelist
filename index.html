@@ -942,7 +942,7 @@ async function loadFilmsFromSupabase() {
     while(true) {
       const { data: avs, error } = await supa
         .from('avaliacoes')
-        .select('filme_id,usuario_id,nota,vai_assistir,comentario,data_avaliacao')
+        .select('filme_id,usuario_id,nota,vai_assistir,comentario,data_avaliacao,created_at')
         .range(from, from + 999);
       
       if(error) throw error;
@@ -960,7 +960,8 @@ async function loadFilmsFromSupabase() {
         nota: av.nota,
         vai: av.vai_assistir || '',
         comentario: av.comentario || '',
-        data: av.data_avaliacao ? (av.data_avaliacao.includes('-') ? av.data_avaliacao.split('-').reverse().join('/') : av.data_avaliacao) : ''
+        data: av.data_avaliacao ? (av.data_avaliacao.includes('-') ? av.data_avaliacao.split('-').reverse().join('/') : av.data_avaliacao) : '',
+        criadoEm: av.created_at || null
       };
     });
     
@@ -5293,36 +5294,46 @@ function buildFeedEvents(){
       const dateStr = av.data || '';
       const dateObj = parseFeedDate(dateStr);
       if(!dateObj) return;
+      // ordDate é "quando a atividade aconteceu de verdade" (created_at, com hora) —
+      // dateObj continua sendo a data que a pessoa DIZ que assistiu (data_avaliacao,
+      // só dia, exibida no subtexto do card). São coisas diferentes: quem avalia em
+      // lote (ex. dezenas de filmes de uma vez, com datas antigas escolhidas no modal)
+      // tem todos os eventos agrupados/ordenados por hoje (ordDate), mas cada card
+      // continua mostrando a data de quando assistiu (dateObj). Fallback pro próprio
+      // dateObj só é defensivo — created_at nunca é nulo em avaliacoes hoje.
+      const criadoEm = av.criadoEm ? new Date(av.criadoEm) : null;
+      const ordDate = (criadoEm && !isNaN(criadoEm)) ? criadoEm : dateObj;
       if(av.nota !== null){
         events.push({
-          type:'avaliacao', uid, dateObj, dateStr,
+          type:'avaliacao', uid, dateObj, ordDate, dateStr,
           filmId:f.id, filmNome:f.nome, filmAno:f.ano,
           poster:f.poster, nota:av.nota,
           comentario:av.comentario||''
         });
       } else if(av.vai==='Não'){
         events.push({
-          type:'nao_quer', uid, dateObj, dateStr,
+          type:'nao_quer', uid, dateObj, ordDate, dateStr,
           filmId:f.id, filmNome:f.nome, filmAno:f.ano,
           poster:f.poster, nota:null, comentario:''
         });
       }
     });
   });
-  // 2) Filmes adicionados ao catálogo
+  // 2) Filmes adicionados ao catálogo — já usa data_ts (timestamp real), então
+  // ordDate é o próprio dateObj aqui, sem diferença entre "assistiu" e "aconteceu".
   FILMES.forEach(f => {
     const uid = f.inserido_por;
     if(!uid || uid==='USER-001') return;
     const dateObj = parseDataCadastro(f);
     if(!dateObj) return;
     events.push({
-      type:'adicionado', uid, dateObj,
+      type:'adicionado', uid, dateObj, ordDate:dateObj,
       dateStr:feedFmtDate(dateObj),
       filmId:f.id, filmNome:f.nome, filmAno:f.ano,
       poster:f.poster, nota:null, comentario:''
     });
   });
-  events.sort((a,b) => b.dateObj - a.dateObj);
+  events.sort((a,b) => b.ordDate - a.ordDate);
   return events;
 }
 
@@ -5414,7 +5425,7 @@ function rankAtividadesHTML(){
   html += '<div class="feed-timeline">';
   let lastGrp = '';
   visible.forEach(ev => {
-    const grp = feedGroup(ev.dateObj);
+    const grp = feedGroup(ev.ordDate);
     if(grp !== lastGrp){
       html += `<div class="feed-date-divider">${grp}</div>`;
       lastGrp = grp;
@@ -5429,7 +5440,7 @@ function rankAtividadesHTML(){
       <div class="feed-header">
         ${avatarHTML(ev.uid,{size:30,fontSize:11})}
         <div class="feed-user">${esc(uName)} <span class="feed-action">${actText}</span></div>
-        <div class="feed-date">${feedRelDate(ev.dateObj)}</div>
+        <div class="feed-date">${feedRelDate(ev.ordDate)}</div>
       </div>
       <div class="feed-body" onclick="openFilme('${ev.filmId}')">
         ${ev.poster?`<img class="feed-poster" src="${esc(ev.poster)}" loading="lazy" onerror="this.style.display='none'">`:'<div class="feed-poster"></div>'}
