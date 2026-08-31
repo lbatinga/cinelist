@@ -14,8 +14,9 @@ const messaging = firebase.messaging();
 
 // Notificação em background (app fechado)
 messaging.onBackgroundMessage(payload => {
-  const { title = 'CineList', body = '' } = payload.notification || {};
   const data = payload.data || {};
+  const title = data.title || 'CineList';
+  const body = data.body || '';
   self.registration.showNotification(title, {
     body,
     icon: './icon-192.png',

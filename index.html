@@ -2527,7 +2527,7 @@ async function saveFilme(){
     showToast(`✅ "${f.nome}" adicionado! Avalie agora 👇`);
     // Disparar notificação push para todos
     const nomeUsuario = USERS[CU]?.nome || 'Alguém';
-    enviarNotifFilme(f.nome, nomeUsuario, f.ano);
+    enviarNotifFilme(f.nome, nomeUsuario, f.ano, f.id);
     // Abrir modal de avaliação automaticamente
     setTimeout(() => openRate(f.id), 300);
   }catch(e){
@@ -2617,7 +2617,7 @@ async function adicionarDoBlocoB(tmdbId){
     // filme ficava invisível pra tropa até alguém tropeçar nele por conta própria. Ver
     // CLAUDE.md, seção Recomendações, pro histórico completo da decisão.
     const nomeUsuario = USERS[CU]?.nome || 'Alguém';
-    enviarNotifFilme(f.nome, nomeUsuario, f.ano);
+    enviarNotifFilme(f.nome, nomeUsuario, f.ano, f.id);
     setTimeout(() => openRate(f.id), 300);
   }catch(e){
     console.error('Erro ao adicionar filme do Bloco B:', e);
@@ -5853,7 +5853,7 @@ function urlBase64ToUint8Array(base64String) {
 const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbynMyP2e5nu06F5Gt5LX4MX_-8k8Yjw0K4TQuhRCwYKvNcVnWpS2VHQ9bnOVT9E4Pbv/exec';
 
 // Disparo automático ao adicionar filme (fire-and-forget)
-function enviarNotifFilme(nomeFilme, quemAdicionou, ano) {
+function enviarNotifFilme(nomeFilme, quemAdicionou, ano, filmeId) {
   try {
     const titulo = '🎬 Novo filme adicionado!';
     // Ano ajuda a identificar remake/franquia sem abrir a notificação — "O Rei Leão" pode
@@ -5861,6 +5861,9 @@ function enviarNotifFilme(nomeFilme, quemAdicionou, ano) {
     const anoTxt = ano ? ` (${ano})` : '';
     const body = `${quemAdicionou} adicionou "${nomeFilme}"${anoTxt} ao catálogo`;
     const params = new URLSearchParams({ titulo, body, auto: '1' });
+    if (filmeId) {
+      params.set('url', location.origin + location.pathname + '#/filme/' + filmeId);
+    }
     fetch(APPS_SCRIPT_URL + '?' + params.toString(), {
       method: 'GET',
       mode: 'no-cors'
@@ -5962,8 +5965,8 @@ window.addEventListener('cinelist:login', async () => {
 if (window.fbMessaging) {
   window.fbMessaging.onMessage((payload) => {
     console.log('Notificação foreground:', payload);
-    const title = payload.notification?.title || '🎬 CineList';
-    const body = payload.notification?.body || '';
+    const title = payload.data?.title || '🎬 CineList';
+    const body = payload.data?.body || '';
     // Mostra apenas toast dentro do app (a notificação do sistema só aparece com app fechado, via Service Worker)
     if (window.showToast) showToast('🔔 ' + title + (body ? ' — ' + body : ''));
   });

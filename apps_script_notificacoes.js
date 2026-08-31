@@ -31,11 +31,12 @@ const SERVICE_ACCOUNT_KEY   = "-----BEGIN PRIVATE KEY-----\nCOLE_SUA_CHAVE_AQUI\
 // ══════════════════════════════════════════
 function doGet(e) {
   try {
-    const titulo = e.parameter.titulo || '🎬 CineList';
-    const body   = e.parameter.body   || '';
-    const isTest = e.parameter.test   === '1';
+    const titulo  = e.parameter.titulo || '🎬 CineList';
+    const body    = e.parameter.body   || '';
+    const isTest  = e.parameter.test   === '1';
+    const linkUrl = e.parameter.url    || '';
 
-    Logger.log("doGet recebido — titulo: " + titulo + " | body: " + body + " | test: " + isTest);
+    Logger.log("doGet recebido — titulo: " + titulo + " | body: " + body + " | url: " + linkUrl + " | test: " + isTest);
 
     if (!body && !isTest) {
       return jsonResponse({ ok: false, error: "Parâmetro 'body' vazio" });
@@ -56,7 +57,7 @@ function doGet(e) {
     let sent = 0, errors = [];
     tokens.forEach(function(tokenObj) {
       try {
-        sendPush(accessToken, tokenObj.token, titulo, body);
+        sendPush(accessToken, tokenObj.token, titulo, body, linkUrl);
         sent++;
       } catch(err) {
         Logger.log("Erro ao enviar para " + tokenObj.email + ": " + err);
@@ -175,25 +176,22 @@ function getFirebaseAccessToken() {
 // ══════════════════════════════════════════
 // ENVIA PUSH VIA FCM V1
 // ══════════════════════════════════════════
-function sendPush(accessToken, fcmToken, title, body) {
-  var url = "https://fcm.googleapis.com/v1/projects/" + FCM_PROJECT_ID + "/messages:send";
+function sendPush(accessToken, fcmToken, title, body, url) {
+  var endpoint = "https://fcm.googleapis.com/v1/projects/" + FCM_PROJECT_ID + "/messages:send";
+  var linkUrl = url || "https://lbatinga.github.io/cinelist/";
 
   var payload = {
     message: {
       token: fcmToken,
-      notification: {
+      data: {
         title: title,
-        body: body
-      },
-      webpush: {
-        fcm_options: {
-          link: "https://lbatinga.github.io/cinelist/"
-        }
+        body: body,
+        url: linkUrl
       }
     }
   };
 
-  var res = UrlFetchApp.fetch(url, {
+  var res = UrlFetchApp.fetch(endpoint, {
     method: "post",
     contentType: "application/json",
     headers: { "Authorization": "Bearer " + accessToken },
