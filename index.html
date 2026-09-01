@@ -14,8 +14,9 @@
      crawler do WhatsApp lê só o HTML estático destas tags, sem executar JS e sem nunca ver
      o #/filme/<id> (hash não chega ao servidor) — ver CLAUDE.md, seção "Compartilhamento
      (WhatsApp) e Open Graph", pro motivo completo de por que não dá pra ter pôster por
-     filme aqui. URL/imagem absolutos de propósito (diferente da URL montada em runtime no
-     botão de WhatsApp): meta tag é lida por um bot externo antes de qualquer JS rodar, não
+     filme aqui. URL/imagem absolutos de propósito (diferente do link de filme, montado em
+     runtime a partir de location.origin+pathname em vários lugares do app — ver
+     pushFilmeRoute()): meta tag é lida por um bot externo antes de qualquer JS rodar, não
      tem window.location pra usar. -->
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="CineList">
@@ -1789,14 +1790,6 @@ function filmDetailHTML(id){
     .sort(([,a],[,b])=>b.nota-a.nota);
   const trailerQ=encodeURIComponent(f.nome+' trailer '+f.ano);
   const whereQ=encodeURIComponent('onde assistir '+f.nome);
-  const avCount=Object.values(f.avaliacoes).filter(a=>a.nota!==null).length;
-  // location.origin+pathname, nunca domínio fixo no código — se o app mudar de endereço,
-  // o link continua certo sozinho (diferente das meta tags Open Graph do <head>, que são
-  // estáticas e por isso precisam de URL absoluta hardcoded — um bot de link preview lê o
-  // HTML sem rodar JS, não tem window.location pra usar).
-  const filmeUrl = location.origin + location.pathname + '#/filme/' + f.id;
-  const notaWpp = f.media ? `⭐ ${fmt(f.media)} (${avCount} avaliação${avCount!==1?'s':''})` : 'Ainda sem nota da tropa';
-  const wpp=encodeURIComponent(`🎬 *${f.nome}* (${f.ano||'?'})\n${f.categorias.slice(0,2).join(', ')||'—'} · ${f.duracao_str||'—'}\n${notaWpp}\n\n${filmeUrl}`);
   return `
     <div class="dp-backdrop" style="background-image:url('${esc(f.poster)}')${f.poster?';cursor:zoom-in':''}">
       <div class="dp-backdrop-grad"></div>
@@ -1834,9 +1827,6 @@ function filmDetailHTML(id){
         <div class="dp-btn dp-btn-grey" onclick="openMaisInfo('${f.id}','${encodeURIComponent(f.nome)}','${f.ano}')">
           <span class="dp-btn-icon">ℹ️</span><span class="dp-btn-label">Mais Info</span>
         </div>
-        <a href="https://wa.me/?text=${wpp}" target="_blank" class="dp-btn dp-btn-grey" style="text-decoration:none">
-          <span class="dp-btn-icon">💬</span><span class="dp-btn-label">WhatsApp</span>
-        </a>
       </div>
       ${avList.length?`
         <div class="dp-section-title">Avaliações do grupo (${avList.length})</div>
