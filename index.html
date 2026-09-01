@@ -3176,6 +3176,12 @@ window.addEventListener('online',  () => showToast('✅ Conexão restaurada'));
 // pelo console do DevTools sem precisar disso.
 let _lastVersionCheck = 0;
 const VERSION_CHECK_THROTTLE_MS = 10 * 60 * 1000;
+// Epoch ms do Last-Modified do index.html rodando nesta sessão — capturado uma vez, no
+// primeiro fetch bem-sucedido (boot ou o primeiro visibilitychange que conseguir rede),
+// nunca sobrescrito depois. Diferente de performance.timeOrigin (quando a sessão abriu):
+// isso identifica QUAL versão está rodando, pra registrar em perfis.versao_app — ver
+// syncVersaoVista() na seção PROFILE.
+let _runningVersionSeen = null;
 
 async function checkAppVersion(){
   const agora = Date.now();
@@ -3188,6 +3194,10 @@ async function checkAppVersion(){
     if(!lastModHeader) return;
     const deployTime = new Date(lastModHeader).getTime();
     if(isNaN(deployTime)) return;
+    if(_runningVersionSeen === null){
+      _runningVersionSeen = deployTime;
+      syncVersaoVista();
+    }
     if(deployTime > performance.timeOrigin) mostrarAvisoNovaVersao();
   } catch(e){
     // sem rede, HEAD falhou, etc. — mesmo silêncio de propósito
@@ -6036,15 +6046,40 @@ async function loadProfilesFromSupabase(){
         favFilme: p.fav_filme || '',
         bio: p.bio || '',
         color: p.avatar_color || '',
-        photo: p.avatar_url || null
+        photo: p.avatar_url || null,
+        versaoApp: p.versao_app || null
       };
     });
     try { localStorage.setItem('cinelist_profiles', JSON.stringify(profileData)); } catch(e) {}
     updateTopbarAvatar();
     applyUserToUI();
+    syncVersaoVista(); // pode já ter CU+versão prontos aqui, ou não — ver comentário na função
   } catch(e) {
     console.warn('Erro ao carregar perfis:', e);
   }
+}
+
+// Registra qual versão do app (Last-Modified do index.html, capturado em checkAppVersion())
+// esta pessoa está rodando — item 6/7 do CLAUDE.md ("saber quem já atualizou depois de um
+// deploy", pra não decidir no escuro antes de mexer em algo que depende de deploy propagado,
+// como aconteceu com o item 4 de notificações). Duas pré-condições, de duas fontes
+// assíncronas independentes que podem terminar em qualquer ordem — CU/profileData (login) e
+// _runningVersionSeen (primeiro HEAD bem-sucedido) — por isso é chamada de dois lugares
+// (aqui e em checkAppVersion()); a que terminar por último é a que efetivamente sincroniza.
+// Comparação por instante (.getTime()), não por string: o que o JS grava (toISOString(),
+// sufixo Z) e o que o Postgres devolve (timestamptz, sufixo +00:00) são o mesmo instante em
+// formatos de string diferentes — comparar como texto nunca bateria, escreveria toda vez.
+function syncVersaoVista(){
+  if(!CU || _runningVersionSeen === null) return;
+  const jaRegistrada = profileData[CU]?.versaoApp;
+  if(jaRegistrada && new Date(jaRegistrada).getTime() === _runningVersionSeen) return;
+  const atualIso = new Date(_runningVersionSeen).toISOString();
+  supa.from('perfis').upsert({ legacy_id: CU, versao_app: atualIso }, { onConflict: 'legacy_id' })
+    .then(({error}) => {
+      if(error){ console.warn('syncVersaoVista falhou:', error); return; }
+      if(!profileData[CU]) profileData[CU] = {};
+      profileData[CU].versaoApp = atualIso;
+    });
 }
 
 async function saveProfiles(){
