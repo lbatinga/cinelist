@@ -5405,9 +5405,24 @@ function feedFmtDate(d){
   return String(d.getDate()).padStart(2,'0')+'/'+String(d.getMonth()+1).padStart(2,'0')+'/'+d.getFullYear();
 }
 
-function feedRelDate(d){
+// Diferença em dias de CALENDÁRIO local entre agora e d — nunca ms brutos divididos por
+// 86400000, que só bate com o dia certo quando d já está ancorado em meia-noite local (caso
+// de dateObj, vindo de data_avaliacao/data_cadastro). created_at e data_ts carregam hora
+// real (ex. alguém avaliou às 22h) — dividir o tempo decorrido por 24h nesse caso mostra
+// "Hoje" por até 24h a partir DAQUELE horário, não até a virada de dia local, atravessando
+// a data errada (achado real: avaliação feita 31/08 22:14 em Maceió, created_at UTC vira
+// 01/09 01:14 — 22h vira "1h da manhã do dia seguinte" só em UTC, o feed nunca olha isso,
+// mas o floor(diff/86400000) já bagunçava o balde mesmo sem nenhum UTC envolvido). Truncar
+// os dois lados pra meia-noite local antes de subtrair resolve os dois casos de uma vez.
+function diasLocalAtras(d){
   const now = new Date();
-  const diff = Math.floor((now - d) / 86400000);
+  const hojeMeiaNoite = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const dMeiaNoite = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+  return Math.round((hojeMeiaNoite - dMeiaNoite) / 86400000);
+}
+
+function feedRelDate(d){
+  const diff = diasLocalAtras(d);
   if(diff===0) return 'Hoje';
   if(diff===1) return 'Ontem';
   if(diff<7) return diff+' dias atrás';
@@ -5416,8 +5431,7 @@ function feedRelDate(d){
 }
 
 function feedGroup(d){
-  const now = new Date();
-  const diff = Math.floor((now - d) / 86400000);
+  const diff = diasLocalAtras(d);
   if(diff===0) return 'Hoje';
   if(diff===1) return 'Ontem';
   if(diff<7) return 'Esta semana';
