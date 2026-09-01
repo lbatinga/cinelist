@@ -2345,6 +2345,17 @@ async function searchTMDB(nome,ano){
   }));
 }
 
+// Formato canônico de duração — única fonte da string, sempre derivada de duracao_min
+// (nunca o contrário). Mesma regra aplicada na normalização em massa dos 1.009 filmes do
+// banco (2026-09-01): sem espaço entre h/min, hora exata sem "0min", menos de 1h sem "0h".
+function fmtDuracaoStr(min){
+  if(!min) return '';
+  const h = Math.floor(min/60), m = min%60;
+  if(h === 0) return `${m}min`;
+  if(m === 0) return `${h}h`;
+  return `${h}h${m}min`;
+}
+
 // Busca detalhes completos de um candidato TMDB (runtime, gêneros, classificação)
 async function enrichTMDBResult(candidate){
   const info=await(await fetch(`https://api.themoviedb.org/3/movie/${candidate.tmdbId}?api_key=${TMDB_KEY}&language=pt-BR&append_to_response=release_dates`)).json();
@@ -2357,7 +2368,7 @@ async function enrichTMDBResult(candidate){
     sinopse:info.overview||candidate.overview,
     categorias:(info.genres||[]).map(g=>g.name),
     classificacao:getCert(info.release_dates),
-    duracao_str:rt?`${h}h ${m}min`:'',
+    duracao_str:fmtDuracaoStr(rt),
     duracao_min:rt,
     duracao_hhmm:rt?`${h}:${String(m).padStart(2,'0')}`:''
   };
@@ -2479,7 +2490,7 @@ async function inserirFilmeDoTmdb(td){
   const nomeFinal = td.titulo;
   const anoInt = parseInt(td.ano) || null;
   const durMin = td.duracao_min || 0;
-  const durStr = td.duracao_str || (durMin ? `${Math.floor(durMin/60)}h ${durMin%60}min` : '');
+  const durStr = fmtDuracaoStr(durMin);
 
   // Verificar duplicata (ano é TEXT no banco — compara como string, mesma regra de coalesce(ano,'') do índice único)
   const anoStr = td.ano ? String(td.ano) : '';
