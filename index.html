@@ -1352,7 +1352,9 @@ let CU=null, CV='home', AGenre=null, navList=[], searchQ='', rateFilmeId=null, v
 var sortState = {
   filmes: {col:'nota', dir:'desc'},
   pendentes: {col:'nota', dir:'desc'},
-  avaliacoes: {col:'nota', dir:'desc'}
+  avaliacoes: {col:'nota', dir:'desc'},
+  avaliacoes_nq: {col:'nome', dir:'asc'},
+  recentes: {col:'nota', dir:'desc'}
 };
 function toggleSort(view, col){
   const s = sortState[view];
@@ -1365,6 +1367,16 @@ function sortIcon(view, col){
   if(s.col !== col) return '';
   return s.dir === 'asc' ? ' ↑' : ' ↓';
 }
+// Duração ausente (filme sem duracao_min cadastrado) sempre por último, nas duas direções —
+// null não é "0 minutos", é "sem dado", e tratar como 0 faria esses filmes ocuparem o topo
+// assim que alguém ordenasse crescente.
+function sortDuracao(a, b, dir){
+  const da = a.duracao_min, db = b.duracao_min;
+  if(da == null && db == null) return 0;
+  if(da == null) return 1;
+  if(db == null) return -1;
+  return dir * (da - db);
+}
 function applySortFilmes(list){
   const s = sortState.filmes;
   const dir = s.dir === 'asc' ? 1 : -1;
@@ -1373,6 +1385,7 @@ function applySortFilmes(list){
       case 'nota': return dir * ((a.media||0) - (b.media||0));
       case 'nome': return dir * a.nome.localeCompare(b.nome);
       case 'ano': return dir * ((parseInt(a.ano)||0) - (parseInt(b.ano)||0));
+      case 'duracao': return sortDuracao(a, b, dir);
       case 'por': return dir * ((USERS[a.inserido_por]?.nome||'').localeCompare(USERS[b.inserido_por]?.nome||''));
       default: return 0;
     }
@@ -1386,6 +1399,7 @@ function applySortPendentes(list){
       case 'nota': return dir * ((a.media||0) - (b.media||0));
       case 'nome': return dir * a.nome.localeCompare(b.nome);
       case 'ano': return dir * ((parseInt(a.ano)||0) - (parseInt(b.ano)||0));
+      case 'duracao': return sortDuracao(a, b, dir);
       case 'por': return dir * ((USERS[a.inserido_por]?.nome||'').localeCompare(USERS[b.inserido_por]?.nome||''));
       case 'avals': return dir * ((Object.values(a.avaliacoes).filter(x=>x.nota!==null).length) - (Object.values(b.avaliacoes).filter(x=>x.nota!==null).length));
       default: return 0;
@@ -1406,6 +1420,39 @@ function applySortAvaliacoes(list){
         const na = pa.length===3 ? pa[2]+pa[1]+pa[0] : da;
         const nb = pb.length===3 ? pb[2]+pb[1]+pb[0] : db;
         return dir * na.localeCompare(nb);
+      }
+      default: return 0;
+    }
+  });
+}
+function applySortAvaliacoesNQ(list){
+  const s = sortState.avaliacoes_nq;
+  const dir = s.dir === 'asc' ? 1 : -1;
+  return list.sort((a,b)=>{
+    switch(s.col){
+      case 'nome': return dir * a.nome.localeCompare(b.nome);
+      case 'ano': return dir * ((parseInt(a.ano)||0) - (parseInt(b.ano)||0));
+      default: return 0;
+    }
+  });
+}
+function applySortRecentes(list){
+  const s = sortState.recentes;
+  const dir = s.dir === 'asc' ? 1 : -1;
+  return list.sort((a,b)=>{
+    switch(s.col){
+      case 'nome': return dir * a.nome.localeCompare(b.nome);
+      case 'ano': return dir * ((parseInt(a.ano)||0) - (parseInt(b.ano)||0));
+      case 'nota': return dir * ((a.media||0) - (b.media||0));
+      case 'adicionado': {
+        // data_ts é misto (ISO string nos filmes novos, Unix timestamp em segundos nos
+        // antigos — ver parseDataCadastro) — subtrair o campo bruto dá NaN quando um dos
+        // dois é string. parseDataCadastro já resolve os dois formatos pra Date real.
+        const ta = parseDataCadastro(a); const tb = parseDataCadastro(b);
+        if(!ta && !tb) return 0;
+        if(!ta) return 1;  // sem data cadastrada sempre por último, mesma regra do sortDuracao
+        if(!tb) return -1;
+        return dir * (ta.getTime() - tb.getTime());
       }
       default: return 0;
     }
@@ -1696,7 +1743,7 @@ function renderFilmes(selectedId, forceGenre){
           </div>
         </div>
         <table>
-          <thead><tr><th style="width:60px;cursor:pointer" onclick="toggleSort('filmes','nota')">Nota${sortIcon('filmes','nota')}</th><th style="width:28px"></th><th style="cursor:pointer" onclick="toggleSort('filmes','nome')">Nome${sortIcon('filmes','nome')}</th><th>Ano</th><th>Duração</th><th style="cursor:pointer" onclick="toggleSort('filmes','por')">Por${sortIcon('filmes','por')}</th></tr></thead>
+          <thead><tr><th style="width:60px;cursor:pointer" onclick="toggleSort('filmes','nota')">Nota${sortIcon('filmes','nota')}</th><th style="width:28px"></th><th style="cursor:pointer" onclick="toggleSort('filmes','nome')">Nome${sortIcon('filmes','nome')}</th><th style="cursor:pointer" onclick="toggleSort('filmes','ano')">Ano${sortIcon('filmes','ano')}</th><th style="cursor:pointer" onclick="toggleSort('filmes','duracao')">Duração${sortIcon('filmes','duracao')}</th><th style="cursor:pointer" onclick="toggleSort('filmes','por')">Por${sortIcon('filmes','por')}</th></tr></thead>
           <tbody>
           ${list.map(f=>{
             const nota=f.media?`<span style="color:${nC(f.media)}">${fmt(f.media)}</span>`:`<span style="color:var(--muted2)">—</span>`;
@@ -1850,16 +1897,6 @@ function openFilme(id){
 }
 
 // ── PENDENTES ──
-let pendSortKey='nota';
-function applyPendSort(list){
-  if(pendSortKey==='nota')      list.sort((a,b)=>(b.media||0)-(a.media||0));
-  else if(pendSortKey==='nota_asc') list.sort((a,b)=>(a.media||0)-(b.media||0));
-  else if(pendSortKey==='avals')    list.sort((a,b)=>b.num_avaliacoes-a.num_avaliacoes);
-  else if(pendSortKey==='nome')     list.sort((a,b)=>a.nome.localeCompare(b.nome));
-  else if(pendSortKey==='ano_desc') list.sort((a,b)=>(b.ano||0)-(a.ano||0));
-  else if(pendSortKey==='ano_asc')  list.sort((a,b)=>(a.ano||0)-(b.ano||0));
-}
-function setPendSort(val){ pendSortKey=val; renderPendentes(); }
 
 // Helper genérico — qualquer ação que chama render() (ele reconstrói a view ativa inteira via
 // innerHTML) precisa capturar o scroll antes e restaurar depois, senão o container zera. Quem
@@ -1904,7 +1941,7 @@ function renderPendentes(selId){
           </div>
         </div>
         <table>
-          <thead><tr><th style="width:60px;cursor:pointer" onclick="toggleSort('pendentes','nota')">Nota${sortIcon('pendentes','nota')}</th><th style="width:28px"></th><th style="cursor:pointer" onclick="toggleSort('pendentes','nome')">Nome${sortIcon('pendentes','nome')}</th><th>Ano</th><th>Duração</th><th style="cursor:pointer" onclick="toggleSort('pendentes','por')">Por${sortIcon('pendentes','por')}</th><th style="cursor:pointer" onclick="toggleSort('pendentes','avals')">Avals${sortIcon('pendentes','avals')}</th></tr></thead>
+          <thead><tr><th style="width:60px;cursor:pointer" onclick="toggleSort('pendentes','nota')">Nota${sortIcon('pendentes','nota')}</th><th style="width:28px"></th><th style="cursor:pointer" onclick="toggleSort('pendentes','nome')">Nome${sortIcon('pendentes','nome')}</th><th style="cursor:pointer" onclick="toggleSort('pendentes','ano')">Ano${sortIcon('pendentes','ano')}</th><th style="cursor:pointer" onclick="toggleSort('pendentes','duracao')">Duração${sortIcon('pendentes','duracao')}</th><th style="cursor:pointer" onclick="toggleSort('pendentes','por')">Por${sortIcon('pendentes','por')}</th><th style="cursor:pointer" onclick="toggleSort('pendentes','avals')">Avals${sortIcon('pendentes','avals')}</th></tr></thead>
           <tbody>
           ${list.map(f=>{
             const nota=f.media?`<span style="color:${nC(f.media)}">${fmt(f.media)}</span>`:'<span style="color:var(--muted2)">—</span>';
@@ -1949,7 +1986,7 @@ function renderAvaliacoes(tab){
 
   let list = avTab === 'nao_quer' ? listNQ : listAv;
   if(searchQ) list = list.filter(f=>f.nome.toLowerCase().includes(searchQ));
-  if(avTab === 'nao_quer') list.sort((a,b)=>a.nome.localeCompare(b.nome));
+  if(avTab === 'nao_quer') applySortAvaliacoesNQ(list);
   else applySortAvaliacoes(list);
   navList = list;
   const sel = list[0]?.id;
@@ -1983,7 +2020,7 @@ function renderAvaliacoes(tab){
           </tbody>
         </table>` : `
         <table>
-          <thead><tr><th>Filme</th><th>Ano</th><th>Ação</th></tr></thead>
+          <thead><tr><th style="cursor:pointer" onclick="toggleSort('avaliacoes_nq','nome')">Filme${sortIcon('avaliacoes_nq','nome')}</th><th style="cursor:pointer" onclick="toggleSort('avaliacoes_nq','ano')">Ano${sortIcon('avaliacoes_nq','ano')}</th><th>Ação</th></tr></thead>
           <tbody>
           ${list.map(f=>`<tr class="${f.id===sel?'selected':''}" onclick="openAvPanel('${f.id}')">
               <td class="td-name">${esc(f.nome)}</td>
@@ -2011,7 +2048,7 @@ function openAvPanel(id){
 function renderRecentes(){
   let list=RECENT_IDS.map(id=>FM[id]).filter(Boolean);
   if(searchQ) list=list.filter(f=>f.nome.toLowerCase().includes(searchQ));
-  list.sort((a,b)=>(b.media||0)-(a.media||0));
+  applySortRecentes(list);
   navList=list;
   const el=document.getElementById('viewRecentes');
   if(!list.length){
@@ -2026,7 +2063,7 @@ function renderRecentes(){
           <p style="font-size:12px;color:var(--muted);margin-bottom:14px">Adicionados nos últimos 15 dias</p>
         </div>
         <table>
-          <thead><tr><th>Nome</th><th>Ano</th><th>Nota</th><th>Adicionado</th><th>Status</th></tr></thead>
+          <thead><tr><th style="cursor:pointer" onclick="toggleSort('recentes','nome')">Nome${sortIcon('recentes','nome')}</th><th style="cursor:pointer" onclick="toggleSort('recentes','ano')">Ano${sortIcon('recentes','ano')}</th><th style="cursor:pointer" onclick="toggleSort('recentes','nota')">Nota${sortIcon('recentes','nota')}</th><th style="cursor:pointer" onclick="toggleSort('recentes','adicionado')">Adicionado${sortIcon('recentes','adicionado')}</th><th>Status</th></tr></thead>
           <tbody>
           ${list.map(f=>{
             const hasAv=CU&&f.avaliacoes[CU]&&f.avaliacoes[CU].nota!==null;
