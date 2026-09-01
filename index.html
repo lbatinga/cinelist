@@ -5354,17 +5354,21 @@ function buildFeedEvents(){
       // continua mostrando a data de quando assistiu (dateObj). Fallback pro próprio
       // dateObj só é defensivo — created_at nunca é nulo em avaliacoes hoje.
       const criadoEm = av.criadoEm ? new Date(av.criadoEm) : null;
-      const ordDate = (criadoEm && !isNaN(criadoEm)) ? criadoEm : dateObj;
+      const temCriadoEm = !!(criadoEm && !isNaN(criadoEm));
+      const ordDate = temCriadoEm ? criadoEm : dateObj;
+      // temHora: se ordDate carrega hora real (criadoEm) ou é o fallback em dateObj, que é
+      // sempre meia-noite (parseFeedDate nunca lê hora de data_avaliacao) — usado só pra
+      // decidir se feedHora(ordDate) mostra algo ou não, nunca inventa "00:00".
       if(av.nota !== null){
         events.push({
-          type:'avaliacao', uid, dateObj, ordDate, dateStr,
+          type:'avaliacao', uid, dateObj, ordDate, dateStr, temHora:temCriadoEm,
           filmId:f.id, filmNome:f.nome, filmAno:f.ano,
           poster:f.poster, nota:av.nota,
           comentario:av.comentario||''
         });
       } else if(av.vai==='Não'){
         events.push({
-          type:'nao_quer', uid, dateObj, ordDate, dateStr,
+          type:'nao_quer', uid, dateObj, ordDate, dateStr, temHora:temCriadoEm,
           filmId:f.id, filmNome:f.nome, filmAno:f.ano,
           poster:f.poster, nota:null, comentario:''
         });
@@ -5379,7 +5383,9 @@ function buildFeedEvents(){
     const dateObj = parseDataCadastro(f);
     if(!dateObj) return;
     events.push({
-      type:'adicionado', uid, dateObj, ordDate:dateObj,
+      // temHora: só quando data_ts existe — sem ele, parseDataCadastro cai no fallback de
+      // data_cadastro (data pura) e dateObj vira meia-noite, sem hora real pra mostrar.
+      type:'adicionado', uid, dateObj, ordDate:dateObj, temHora:!!f.data_ts,
       dateStr:feedFmtDate(dateObj),
       filmId:f.id, filmNome:f.nome, filmAno:f.ano,
       poster:f.poster, nota:null, comentario:''
@@ -5403,6 +5409,12 @@ function parseFeedDate(s){
 function feedFmtDate(d){
   if(!d) return '';
   return String(d.getDate()).padStart(2,'0')+'/'+String(d.getMonth()+1).padStart(2,'0')+'/'+d.getFullYear();
+}
+
+// HH:MM local, 24h — só chamada quando ev.temHora é true (ver buildFeedEvents), nunca pra
+// dateObj de fallback (que é sempre meia-noite e mostraria "00:00" falso).
+function feedHora(d){
+  return String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0');
 }
 
 // Diferença em dias de CALENDÁRIO local entre agora e d — nunca ms brutos divididos por
@@ -5506,7 +5518,7 @@ function rankAtividadesHTML(){
       <div class="feed-header">
         ${avatarHTML(ev.uid,{size:30,fontSize:11})}
         <div class="feed-user">${esc(uName)} <span class="feed-action">${actText}</span></div>
-        <div class="feed-date">${feedRelDate(ev.ordDate)}</div>
+        <div class="feed-date">${feedRelDate(ev.ordDate)}${ev.temHora?' '+feedHora(ev.ordDate):''}</div>
       </div>
       <div class="feed-body" onclick="openFilme('${ev.filmId}')">
         ${ev.poster?`<img class="feed-poster" src="${esc(ev.poster)}" loading="lazy" onerror="this.style.display='none'">`:'<div class="feed-poster"></div>'}
