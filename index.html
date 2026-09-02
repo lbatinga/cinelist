@@ -2507,14 +2507,21 @@ async function inserirFilmeDoTmdb(td){
     classificacao: td.classificacao||null,
     inserido_por: CU,
     tmdb_id: td.tmdbId||null,
-    data_cadastro: (()=>{ const n=new Date(); return `${String(n.getDate()).padStart(2,'0')}/${String(n.getMonth()+1).padStart(2,'0')}/${n.getFullYear()}`; })()
+    data_cadastro: (()=>{ const n=new Date(); return `${String(n.getDate()).padStart(2,'0')}/${String(n.getMonth()+1).padStart(2,'0')}/${n.getFullYear()}`; })(),
+    // Unix em segundos, mesmo formato dos filmes antigos (ver parseDataCadastro) — nunca
+    // ficou de fora de propósito, era um bug: o insert abaixo não mandava esse campo, então
+    // caía no default 0 da coluna. O objeto local (ver "Add to local data" logo abaixo)
+    // mascarava isso com uma string ISO só na sessão atual — o filme parecia certo até
+    // recarregar a página, quando voltava a ler o 0 do banco.
+    data_ts: Math.floor(Date.now()/1000)
   };
 
   const {data,error}=await supa.from('filmes').insert([filme]).select().single();
   if(error)throw error;
 
-  // Add to local data
-  const f={...filme, id:data.id||newId, avaliacoes:{}, media:null, num_avaliacoes:0, is_recent:true, data_ts:new Date().toISOString()};
+  // Add to local data — filme já carrega data_ts correto (número, igual ao que foi
+  // inserido) via spread, sem sobrescrever com outro formato.
+  const f={...filme, id:data.id||newId, avaliacoes:{}, media:null, num_avaliacoes:0, is_recent:true};
   FILMES.unshift(f);
   FILMES_MAP[f.id]=f;
   RAW.filmes.unshift(f);
