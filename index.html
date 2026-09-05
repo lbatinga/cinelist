@@ -6718,6 +6718,15 @@ function openEditDataAdmin(filmeId, uid){
   document.getElementById('editDataInput').value = dateVal;
   document.getElementById('editDataMsg').textContent = '';
 
+  // Reset defensivo do botão: este modal é markup estático (nunca reconstruído por
+  // innerHTML), então o mesmo <button> sobrevive de uma abertura pra outra — se QUALQUER
+  // caminho de saída de saveDataAdmin() (hoje ou no futuro) esquecer de reabilitar o botão,
+  // reabrir o modal aqui garante um estado limpo de qualquer forma. É esta linha, não a de
+  // saveDataAdmin(), que continua protegendo se um caminho de saída novo for adicionado lá
+  // e esquecer o reset.
+  const editBtn = document.getElementById('editDataSaveBtn');
+  if(editBtn){ editBtn.textContent = 'Salvar'; editBtn.disabled = false; }
+
   document.getElementById('editDataModal').classList.add('open');
 }
 
@@ -6773,6 +6782,11 @@ async function saveDataAdmin(){
         if(mc) mc.innerHTML = filmDetailHTML(filmeId);
       }
     } catch(e){ console.warn('Re-render parcial falhou:', e); }
+
+    // Reseta o botão no próprio caminho de sucesso — antes só o catch fazia isso, então
+    // toda gravação bem-sucedida deixava "Salvando.../disabled" travado pra sempre (o modal
+    // fica só escondido, não recriado, então o botão sobrevive assim até a próxima abertura).
+    if(btn){ btn.textContent = 'Salvar'; btn.disabled = false; }
 
     closeEditDataModal();
     showToast(`📅 Data de ${USERS[uid]?.nome||uid} atualizada!`);
