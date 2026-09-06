@@ -821,8 +821,16 @@ async function loadConquistasEFilmeStatsFromSupabase() {
     (fstats || []).forEach(f => { newFilmeStats[f.filme_id] = f; });
     RAW.filme_stats = newFilmeStats;
 
+    // Lista de vencedores do Oscar de Melhor Filme (98 linhas hoje, cresce ~1/ano) —
+    // pequena, carrega junto. Casada por tmdb_id, nunca por nome (ver CLAUDE.md, item 12).
+    const { data: oscarRows, error: errOscar } = await supa
+      .from('oscar_vencedores')
+      .select('tmdb_id');
+    if (errOscar) throw errOscar;
+    RAW.oscarVencedores = new Set((oscarRows || []).map(r => r.tmdb_id));
+
     RAW.conquistasLoadFailed = false;
-    console.log(`✅ ${(conq||[]).length} conquistas, ${(fstats||[]).length} filme_stats carregados`);
+    console.log(`✅ ${(conq||[]).length} conquistas, ${(fstats||[]).length} filme_stats, ${(oscarRows||[]).length} oscar_vencedores carregados`);
     return true;
   } catch(e) {
     console.warn('⚠️ Erro ao carregar conquistas/filme_stats:', e);
@@ -3772,6 +3780,11 @@ const TRILHAS_DEF = [
     levels:[
       {nome:'Indicador',emoji:'📣',threshold:3},{nome:'Formador de Gosto',emoji:'🎙️',threshold:10},
       {nome:'Referência',emoji:'🗿',threshold:25}
+    ] },
+  { slug:'oscar', nome:'Oscar de Melhor Filme', icon:'🏆', unit:'vencedores do Oscar de Melhor Filme assistidos', teto:true,
+    levels:[
+      {nome:'Convidado de Honra',emoji:'🎟️',threshold:3},{nome:'Indicado',emoji:'🌟',threshold:7},
+      {nome:'Membro da Academia',emoji:'🎓',threshold:12}
     ] }
 ];
 
@@ -3820,6 +3833,7 @@ function getAchievementData(uid){
       duracao_min: f.duracao_min || 0,
       categorias: f.categorias || [],
       ano: f.ano,
+      tmdb_id: f.tmdb_id,
       avaliacoes: f.avaliacoes
     }));
 
@@ -3879,10 +3893,14 @@ function getAchievementData(uid){
     return aprovadores.length >= 5;
   }).length;
 
+  // Oscar de Melhor Filme — quantos vencedores (RAW.oscarVencedores, tabela oscar_vencedores)
+  // a pessoa já avaliou, casado por tmdb_id (nunca por nome — ver CLAUDE.md, item 12)
+  const oscarCount = minhasAvs.filter(a => RAW.oscarVencedores?.has(a.tmdb_id)).length;
+
   const valoresAoVivo = {
     volume: quant, curadoria: inseridos, pioneirismo: soEle, maratona: maxMes,
     tempo: horas, diversidade: generosVistos, decadas: decadasCobertas,
-    epicos: longos, consistencia: mesesAtivos, influencia: influenciaCount
+    epicos: longos, consistencia: mesesAtivos, influencia: influenciaCount, oscar: oscarCount
   };
   const avisos = { maratona: semDataAviso, consistencia: semDataAviso };
 
