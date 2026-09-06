@@ -2085,7 +2085,7 @@ function openRecentPanel(id){
 
 // ── RANKING V2 injected ──
 var rankTab = 'geral', rankYear = new Date().getFullYear().toString(), rankGenre = 'Ação'; // inicializado cedo
-var rankHistJanela = 12; // período do histórico de posições (item 27) — 6/12/18 ou 'tudo'
+var rankHistJanela = 6; // período do histórico de posições (item 27) — 6/12/18 ou 'tudo'
 var rankDetailUid = null; // uid do perfil aberto em #rankTabContent, ou null se for a lista da aba — ver renderRankTab()
 
 
@@ -4809,7 +4809,7 @@ function rankHistViradas(checkpoints, rankings){
         const passados = Object.keys(prevPos).filter(q =>
           q!==uid && prevPos[q] < prevPos[uid] && currPos[q]!==undefined && currPos[q] > currPos[uid]
         );
-        if(passados.length) viradas.push({ mesKey: checkpoints[i], uid, de: prevPos[uid]+1, para: currPos[uid]+1, passados });
+        if(passados.length) viradas.push({ mesKey: checkpoints[i], i, uid, de: prevPos[uid]+1, para: currPos[uid]+1, passados });
       }
     });
   }
@@ -4822,6 +4822,66 @@ function rankHistJoinNomes(uids){
   return nomes.length===1 ? nomes[0] : nomes.slice(0,-1).join(', ') + ' e ' + nomes[nomes.length-1];
 }
 
+// Paleta própria do gráfico, por índice na lista já ordenada por posição atual — não
+// aC(), que ordena por quando a pessoa entrou no Supabase, sem relação com quem fica
+// vizinho no gráfico, e só tem 9 cores pra até 16 pessoas (colisão exata garantida acima
+// de 9). Matiz calculado (360°/total, com ou sem luminosidade alternada) NÃO bastou —
+// testado ao vivo com os 15 do ranking real: a faixa de verdes comprime muito
+// perceptualmente, dois verdes a 24° de distância ainda pareciam quase iguais, porque
+// sensibilidade a matiz não é uniforme no espectro. Troca por paleta categórica fixa e
+// já validada (Tableau10 + suas 10 variantes claras) — 10 matizes bem distintos entre
+// si primeiro, depois as versões claras dos mesmos matizes, então os primeiros 10 (a
+// maioria da tropa hoje) nunca caem em matizes parecidos. Sempre a paleta, nunca
+// getProfile(uid).color: avatar_color é sorteado na criação do usuário, não escolha de
+// ninguém — testado ao vivo, um sorteio coincidindo com o vizinho calculado (Batinga
+// laranja vs Jheffeson laranja da paleta, Raissa verde vs Thales verde-claro da paleta)
+// já bastou pra colidir. O avatar continua usando getProfile/aC normalmente — só o
+// gráfico e os nomes coloridos na lista de viradas usam esta paleta.
+const RANK_HIST_PALETA = [
+  '#1f77b4','#ff7f0e','#2ca02c','#d62728','#9467bd','#8c564b','#e377c2','#7f7f7f','#bcbd22','#17becf',
+  '#aec7e8','#ffbb78','#98df8a','#ff9896','#c5b0d5','#c49c94','#f7b6d2','#c7c7c7','#dbdb8d','#9edae5'
+];
+function rankHistCores(membros){
+  const cores = {};
+  membros.forEach((uid, i) => {
+    cores[uid] = RANK_HIST_PALETA[i % RANK_HIST_PALETA.length];
+  });
+  return cores;
+}
+
+// Já ocupou essa posição antes, num checkpoint anterior dentro do período calculado —
+// só usado pra escolher o texto da virada (regra "retomou"), não muda a detecção em si.
+function rankHistJaOcupou(uid, posicao, checkpointIdx, rankings){
+  for(let k=0; k<checkpointIdx; k++){
+    const idx = rankings[k].findIndex(r=>r.uid===uid);
+    if(idx>=0 && rankings[k][idx].total>0 && idx+1===posicao) return true;
+  }
+  return false;
+}
+
+// Disco com o número da posição alcançada — ouro/prata/bronze pro pódio, neutro do 4º em
+// diante. CSS puro (círculo + número centrado), nunca emoji de medalha.
+function rankHistDisco(pos){
+  const estilo = pos===1 ? 'background:#f5c518;color:#141414'
+    : pos===2 ? 'background:#c7c7c7;color:#141414'
+    : pos===3 ? 'background:#cd7f32;color:#141414'
+    : 'background:var(--surface2);color:var(--muted);border:1px solid var(--border)';
+  return `<div style="width:22px;height:22px;border-radius:50%;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:800;${estilo}">${pos}</div>`;
+}
+
+// Texto da virada por regra calculada, não molde único — a primeira regra que casar
+// ganha. Não muda o que é uma virada nem quem foi ultrapassado (rankHistViradas segue
+// igual), só como isso vira frase.
+function rankHistTextoVirada(v, rankings, cores){
+  const nome = `<strong style="color:${cores[v.uid]}">${esc(displayName(v.uid))}</strong>`;
+  const quem = rankHistJoinNomes(v.passados);
+  if(v.para === 1) return `${nome} assumiu a liderança, passando ${quem}`;
+  if(v.para === 2 || v.para === 3) return `${nome} subiu ao pódio, passando ${quem}`;
+  if(v.passados.length >= 2) return `${nome} saltou de ${v.de}º para <strong>${v.para}º</strong>, passando ${quem}`;
+  if(rankHistJaOcupou(v.uid, v.para, v.i, rankings)) return `${nome} retomou o ${v.para}º de ${quem}`;
+  return `${nome} passou ${quem} e chegou ao <strong>${v.para}º</strong>`;
+}
+
 function setRankHistJanela(j){
   rankHistJanela = j;
   // O histórico fica no fim da página — sem isso, trocar de período jogaria a pessoa
@@ -4832,11 +4892,11 @@ function setRankHistJanela(j){
   restoreScroll(savedScroll);
 }
 
-// Uma linha por pessoa, posição no eixo vertical, meses no horizontal. Cores via
-// getProfile/aC — mesma fonte de cor que avatarHTML() já usa, nunca uma paleta nova por
-// nome. maxPos é o total de membros do ranking (dinâmico) — todo mundo entra, não só um
-// top fixo.
-function rankHistChartSVG(membros, checkpoints, rankings){
+// Uma linha por pessoa, posição no eixo vertical, meses no horizontal. cores vem de
+// rankHistCores() — mesmo mapa usado nos nomes coloridos da lista de viradas, garantindo
+// que a cor de alguém é igual nos dois lugares. maxPos é o total de membros do ranking
+// (dinâmico) — todo mundo entra, não só um top fixo.
+function rankHistChartSVG(membros, checkpoints, rankings, cores){
   if(checkpoints.length < 2){
     return `<div style="font-size:12px;color:var(--muted);padding:16px 0;text-align:center">Histórico curto demais pra desenhar ainda.</div>`;
   }
@@ -4860,7 +4920,7 @@ function rankHistChartSVG(membros, checkpoints, rankings){
   });
 
   membros.forEach(uid => {
-    const cor = getProfile(uid).color || aC(uid);
+    const cor = cores[uid];
     const posicoes = rankings.map(r => {
       const idx = r.findIndex(x=>x.uid===uid);
       return (idx>=0 && r[idx].total>0) ? idx+1 : null;
@@ -4905,14 +4965,13 @@ function rankHistoricoHTML(membros){
 
   const rankings = checkpoints.map(mesKey => rankHistRankingEm(mesKey, membros, porPessoa));
   const viradas = rankHistViradas(checkpoints, rankings);
+  const cores = rankHistCores(membros);
 
   const viradasHTML = viradas.length ? viradas.map(v => `
-    <div style="display:flex;gap:12px;padding:9px 0;border-bottom:1px solid var(--border)">
-      <div style="font-size:11px;color:var(--muted);min-width:44px;padding-top:1px">${rankHistFmtMes(v.mesKey)}</div>
-      <div style="font-size:13px;line-height:1.5">
-        <span style="color:var(--green);font-weight:700">▲</span>
-        <strong>${esc(displayName(v.uid))}</strong> subiu de ${v.de}º para <strong>${v.para}º</strong>, passando ${rankHistJoinNomes(v.passados)}
-      </div>
+    <div style="display:flex;gap:12px;padding:9px 0;border-bottom:1px solid var(--border);align-items:flex-start">
+      <div style="font-size:11px;color:var(--muted);min-width:44px;padding-top:5px">${rankHistFmtMes(v.mesKey)}</div>
+      ${rankHistDisco(v.para)}
+      <div style="font-size:13px;line-height:1.5;padding-top:3px">${rankHistTextoVirada(v, rankings, cores)}</div>
     </div>`).join('')
     : `<div style="font-size:12px;color:var(--muted);padding:8px 0 0">Nenhuma virada de posição no período.</div>`;
 
@@ -4929,7 +4988,7 @@ function rankHistoricoHTML(membros){
       ${isDesktop ? `
         <div style="display:flex;gap:6px;margin-bottom:14px">${periodoBtns}</div>
         ${bloco>1?`<div style="font-size:11px;color:var(--muted2);margin-bottom:10px">Um ponto a cada ${bloco} meses — mudanças dentro do período não aparecem.</div>`:''}
-        ${rankHistChartSVG(membros, checkpoints, rankings)}
+        ${rankHistChartSVG(membros, checkpoints, rankings, cores)}
       ` : ''}
       <div style="font-size:13px;font-weight:700;margin:${isDesktop?'22px':'2px'} 0 8px;color:#e5e5e5">🔀 Viradas</div>
       ${viradasHTML}
