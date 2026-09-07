@@ -2096,6 +2096,8 @@ var rankTab = 'geral', rankYear = new Date().getFullYear().toString(), rankGenre
 var rankHistJanela = 6; // período do histórico de posições (item 27) — 6/12/18 ou 'tudo'
 var rankDetailUid = null; // uid do perfil aberto em #rankTabContent, ou null se for a lista da aba — ver renderRankTab()
 var rankYearDetail = null; // {uid,year} do drill-down de ano aberto (dentro de um perfil OU direto da lista), ou null — ver renderRankTab() e item 11 do CLAUDE.md
+var rankListScroll = null;    // scroll de #appScroll salvo ao sair da lista (Geral/Por Ano/...) pra abrir perfil ou ano direto — restaurado em closeRankDetail/closeYearDetail
+var rankProfileScroll = null; // scroll de #appScroll salvo ao sair de um perfil pra abrir um ano de dentro dele — restaurado em closeYearDetail
 
 
 
@@ -3720,19 +3722,25 @@ function renderRankTab(){
 }
 
 // Fecha o perfil aberto e volta pra lista da aba atual — usado pelo botão "← Voltar" do perfil.
+// Restaura rankListScroll (salvo em openUserDetail) em vez de ir pro topo: abrir uma tela nova
+// rola pro topo, voltar restaura de onde a pessoa saiu — comportamentos diferentes de propósito.
 function closeRankDetail(){
   rankDetailUid = null;
   renderRankTab();
+  document.getElementById('appScroll').scrollTop = rankListScroll || 0;
 }
 
 // Fecha o ano aberto — usado pelo botão "← Voltar" de dentro do drill-down de ano. Só limpa
 // rankYearDetail e deixa renderRankTab() decidir o próximo nível: se o ano foi aberto de
 // dentro de um perfil, rankDetailUid continua valendo e volta pro perfil; se foi aberto direto
-// da lista de viradas (histórico de posições), rankDetailUid nunca foi tocado e fica null, e
-// cai na lista da aba — nunca num perfil vazio.
+// da aba "Por Ano" (lista de membros por ano, rankAnoHTML), rankDetailUid nunca foi tocado e
+// fica null, e cai na lista da aba — nunca num perfil vazio. Restaura o scroll do nível pro qual
+// está voltando: rankProfileScroll se voltou pro perfil, rankListScroll se voltou pra lista.
 function closeYearDetail(){
+  const voltaProPerfil = !!rankDetailUid;
   rankYearDetail = null;
   renderRankTab();
+  document.getElementById('appScroll').scrollTop = (voltaProPerfil ? rankProfileScroll : rankListScroll) || 0;
 }
 
 // ── CONQUISTAS / BADGES (Fase 5) ──
@@ -4413,6 +4421,7 @@ function renderConquistasHTML(uid){
 function openUserDetail(uid){
   const html = userDetailHTML(uid, { context: 'ranking' });
   if(!html) return;
+  rankListScroll = document.getElementById('appScroll').scrollTop;
   rankDetailUid = uid;
   document.getElementById('rankTabContent').innerHTML = html;
   document.getElementById('appScroll').scrollTop = 0;
@@ -5087,10 +5096,16 @@ function rankAnoHTML(){
 
 // Abre o drill-down de ano — só seta o estado e delega pro dispatcher (renderRankTab), em vez
 // de escrever no DOM direto: é isso que faz o ano sobreviver a um render() genérico disparado
-// enquanto ele está aberto (ver comentário de renderRankTab, item 11 do CLAUDE.md).
+// enquanto ele está aberto (ver comentário de renderRankTab, item 11 do CLAUDE.md). Salva o
+// scroll de onde está saindo — perfil (rankProfileScroll) se rankDetailUid já está setado, ou
+// lista (rankListScroll) se foi aberto direto da aba "Por Ano" — e zera pro topo, mesmo padrão
+// de abrir perfil (openUserDetail).
 function openUserYearDetail(uid, year){
+  const scroll = document.getElementById('appScroll').scrollTop;
+  if(rankDetailUid) rankProfileScroll = scroll; else rankListScroll = scroll;
   rankYearDetail = { uid, year };
   renderRankTab();
+  document.getElementById('appScroll').scrollTop = 0;
 }
 
 function userYearDetailHTML(uid, year){
