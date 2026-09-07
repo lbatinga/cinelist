@@ -2095,6 +2095,7 @@ function openRecentPanel(id){
 var rankTab = 'geral', rankYear = new Date().getFullYear().toString(), rankGenre = 'Ação'; // inicializado cedo
 var rankHistJanela = 6; // período do histórico de posições (item 27) — 6/12/18 ou 'tudo'
 var rankDetailUid = null; // uid do perfil aberto em #rankTabContent, ou null se for a lista da aba — ver renderRankTab()
+var rankYearDetail = null; // {uid,year} do drill-down de ano aberto (dentro de um perfil OU direto da lista), ou null — ver renderRankTab() e item 11 do CLAUDE.md
 
 
 
@@ -3701,14 +3702,16 @@ function renderRanking(){
   renderRankTab();
 }
 
-function setRankTab(tab){ rankTab=tab; rankDetailUid=null; renderRanking(); history.replaceState({view:'ranking'},'', routeUrl('ranking', tab)); }
+function setRankTab(tab){ rankTab=tab; rankDetailUid=null; rankYearDetail=null; renderRanking(); history.replaceState({view:'ranking'},'', routeUrl('ranking', tab)); }
 
-// Perfil aberto (rankDetailUid) tem prioridade sobre a aba — é o que faz renderRankTab()
-// sobreviver a um render() genérico disparado por um carregamento em segundo plano (ex.
-// loadComparativoParaUsuario) enquanto um perfil está aberto, em vez de voltar pra lista
-// por baixo dos pés de quem está vendo o perfil. Ver CLAUDE.md, seção Rendering.
+// Ano aberto (rankYearDetail) tem prioridade sobre perfil, que por sua vez tem prioridade
+// sobre a aba — é o que faz renderRankTab() sobreviver a um render() genérico disparado por
+// um carregamento em segundo plano (ex. loadComparativoParaUsuario) enquanto um perfil ou um
+// ano está aberto, em vez de voltar pra lista por baixo dos pés de quem está vendo. Ver
+// CLAUDE.md, seção Rendering, item 11.
 function renderRankTab(){
   const el = document.getElementById('rankTabContent');
+  if(rankYearDetail){ el.innerHTML = userYearDetailHTML(rankYearDetail.uid, rankYearDetail.year); return; }
   if(rankDetailUid){ el.innerHTML = userDetailHTML(rankDetailUid, { context: 'ranking' }); return; }
   if(rankTab==='geral') el.innerHTML = rankGeralHTML();
   else if(rankTab==='ano') el.innerHTML = rankAnoHTML();
@@ -3716,9 +3719,19 @@ function renderRankTab(){
   else if(rankTab==='genero') el.innerHTML = rankGeneroHTML();
 }
 
-// Fecha o perfil aberto e volta pra lista da aba atual — usado pelo botão "← Voltar".
+// Fecha o perfil aberto e volta pra lista da aba atual — usado pelo botão "← Voltar" do perfil.
 function closeRankDetail(){
   rankDetailUid = null;
+  renderRankTab();
+}
+
+// Fecha o ano aberto — usado pelo botão "← Voltar" de dentro do drill-down de ano. Só limpa
+// rankYearDetail e deixa renderRankTab() decidir o próximo nível: se o ano foi aberto de
+// dentro de um perfil, rankDetailUid continua valendo e volta pro perfil; se foi aberto direto
+// da lista de viradas (histórico de posições), rankDetailUid nunca foi tocado e fica null, e
+// cai na lista da aba — nunca num perfil vazio.
+function closeYearDetail(){
+  rankYearDetail = null;
   renderRankTab();
 }
 
@@ -5072,13 +5085,21 @@ function rankAnoHTML(){
   `;
 }
 
+// Abre o drill-down de ano — só seta o estado e delega pro dispatcher (renderRankTab), em vez
+// de escrever no DOM direto: é isso que faz o ano sobreviver a um render() genérico disparado
+// enquanto ele está aberto (ver comentário de renderRankTab, item 11 do CLAUDE.md).
 function openUserYearDetail(uid, year){
+  rankYearDetail = { uid, year };
+  renderRankTab();
+}
+
+function userYearDetailHTML(uid, year){
   const s = RAW.users_stats[uid];
   const avList = FILMES.filter(f=>f.avaliacoes[uid]&&f.avaliacoes[uid].nota!==null&&f.avaliacoes[uid].data&&f.avaliacoes[uid].data.split('/')[2]===year)
     .sort((a,b)=>b.avaliacoes[uid].nota-a.avaliacoes[uid].nota);
-  
-  document.getElementById('rankTabContent').innerHTML = `
-    <button onclick="closeRankDetail()" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:13px;margin-bottom:16px">← Voltar</button>
+
+  return `
+    <button onclick="closeYearDetail()" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:13px;margin-bottom:16px">← Voltar</button>
     <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px">
       ${avatarHTML(uid,{fontSize:16})}
       <div>
