@@ -3727,7 +3727,7 @@ function closeRankDetail(){
 // abaixo quanto por qualquer replay/backfill futuro. Ver CLAUDE.md "Catálogo canônico
 // de degraus": duas listas divergindo foi o que causou o desalinhamento com o backfill v1.
 const TRILHAS_DEF = [
-  { slug:'volume', nome:'Volume', icon:'🎬', unit:'filmes avaliados', teto:false,
+  { slug:'volume', nome:'Volume', icon:'🎬', unit:'filmes', descricao:'Filmes que você já assistiu e avaliou', teto:false,
     levels:[
       {nome:'Iniciante',emoji:'🌱',threshold:10},{nome:'Aprendiz',emoji:'🎞️',threshold:30},
       {nome:'Aficionado',emoji:'🍿',threshold:75},{nome:'Cinéfilo',emoji:'🎬',threshold:150},
@@ -3735,48 +3735,48 @@ const TRILHAS_DEF = [
       {nome:'Lenda',emoji:'👑',threshold:550},{nome:'Imortal',emoji:'💫',threshold:700},
       {nome:'Divindade',emoji:'🏆',threshold:900}
     ] },
-  { slug:'curadoria', nome:'Curadoria', icon:'📚', unit:'filmes adicionados', teto:false,
+  { slug:'curadoria', nome:'Curadoria', icon:'📚', unit:'filmes adicionados', descricao:'Filmes que você trouxe pro catálogo', teto:false,
     levels:[
       {nome:'Colaborador',emoji:'📥',threshold:10},{nome:'Colecionador',emoji:'📦',threshold:30},
       {nome:'Curador',emoji:'📚',threshold:75},{nome:'Guardião',emoji:'🛡️',threshold:150},
       {nome:'Patrono',emoji:'🏛️',threshold:300}
     ] },
-  { slug:'maratona', nome:'Maratona Mensal', icon:'🏃', unit:'filmes no mesmo mês', teto:false,
+  { slug:'maratona', nome:'Maratona Mensal', icon:'🏃', unit:'filmes num mês só', descricao:'Seu melhor mês — quantos filmes você avaliou no mês mais intenso', teto:false,
     levels:[
       {nome:'Maratonista',emoji:'🏃',threshold:20},{nome:'Ultramaratonista',emoji:'🥇',threshold:50},
       {nome:'Imparável',emoji:'🔥',threshold:100}
     ] },
-  { slug:'tempo', nome:'Tempo na Tela', icon:'⏰', unit:'horas assistidas', teto:false, numericName:true,
+  { slug:'tempo', nome:'Tempo na Tela', icon:'⏰', unit:'horas', descricao:'Horas de filme que você já assistiu, somando tudo', teto:false, numericName:true,
     levels:[
       {nome:'100 Horas',emoji:'⏱️',threshold:100},{nome:'250 Horas',emoji:'⏰',threshold:250},
       {nome:'500 Horas',emoji:'🕯️',threshold:500},{nome:'1.000 Horas',emoji:'🌙',threshold:1000}
     ] },
-  { slug:'diversidade', nome:'Diversidade de Gêneros', icon:'🧩', unit:'gêneros com 5+ filmes', teto:true,
+  { slug:'diversidade', nome:'Diversidade de Gêneros', icon:'🧩', unit:'gêneros', descricao:'Gêneros que você explorou de verdade — um gênero só conta a partir de 5 filmes dele', teto:true,
     levels:[
       {nome:'Versátil',emoji:'🎨',threshold:8},{nome:'Come de Tudo',emoji:'🧩',threshold:13},
       {nome:'Sem Fronteiras',emoji:'🎪',threshold:18}
     ] },
-  { slug:'decadas', nome:'Viajante do Tempo', icon:'🕰️', unit:'décadas com 10+ filmes', teto:true,
+  { slug:'decadas', nome:'Viajante do Tempo', icon:'🕰️', unit:'décadas', descricao:'Décadas do cinema que você percorreu — uma década só conta a partir de 10 filmes dela', teto:true,
     levels:[
       {nome:'Três Décadas',emoji:'📽️',threshold:3},{nome:'Cinco Décadas',emoji:'🕰️',threshold:5},
       {nome:'Sete Décadas',emoji:'⏳',threshold:7}
     ] },
-  { slug:'epicos', nome:'Filmes Longos', icon:'🎞️', unit:'filmes com 2h30+', teto:false,
+  { slug:'epicos', nome:'Filmes Longos', icon:'🎞️', unit:'filmes longos', descricao:'Filmes com mais de 2h30 que você encarou', teto:false,
     levels:[
       {nome:'Paciente',emoji:'🛋️',threshold:10},{nome:'Resistente',emoji:'🎞️',threshold:30},
       {nome:'Inabalável',emoji:'⚔️',threshold:60}
     ] },
-  { slug:'consistencia', nome:'Consistência', icon:'📅', unit:'meses com avaliações', teto:false,
+  { slug:'consistencia', nome:'Consistência', icon:'📅', unit:'meses', descricao:'Meses diferentes em que você avaliou pelo menos um filme', teto:false,
     levels:[
       {nome:'Regular',emoji:'📆',threshold:6},{nome:'Assíduo',emoji:'🗓️',threshold:12},
       {nome:'Fiel',emoji:'📅',threshold:24}
     ] },
-  { slug:'influencia', nome:'Influência', icon:'📣', unit:'filmes inseridos aprovados pela tropa', teto:false,
+  { slug:'influencia', nome:'Influência', icon:'📣', unit:'filmes aprovados', descricao:'Filmes que você trouxe e a tropa amou — conta quando 5 ou mais pessoas dão nota 8 ou mais', teto:false,
     levels:[
       {nome:'Indicador',emoji:'📣',threshold:3},{nome:'Formador de Gosto',emoji:'🎙️',threshold:10},
       {nome:'Referência',emoji:'🗿',threshold:25}
     ] },
-  { slug:'oscar', nome:'Oscar de Melhor Filme', icon:'🏆', unit:'vencedores do Oscar de Melhor Filme assistidos', teto:true,
+  { slug:'oscar', nome:'Oscar de Melhor Filme', icon:'🏆', unit:'vencedores', descricao:'Vencedores do Oscar de Melhor Filme que você já assistiu', teto:true,
     levels:[
       {nome:'Convidado de Honra',emoji:'🎟️',threshold:5},{nome:'Indicado',emoji:'🌟',threshold:12},
       {nome:'Membro da Academia',emoji:'🎓',threshold:25},{nome:'Governador da Academia',emoji:'🏛️',threshold:40}
@@ -3921,7 +3921,7 @@ function getAchievementData(uid){
     const nextLevel = levels.find(l => !l.done) || null;
 
     return {
-      slug: def.slug, nome: def.nome, icon: def.icon, unit: def.unit, teto: def.teto,
+      slug: def.slug, nome: def.nome, icon: def.icon, unit: def.unit, descricao: def.descricao, teto: def.teto,
       current, currentLevel, nextLevel, levels,
       aviso: avisos[def.slug] || null
     };
@@ -4129,7 +4129,7 @@ function abrirDegrauModal(slug, uid){
         <div style="font-size:26px;line-height:1;flex-shrink:0;filter:${lvl.done ? 'none' : 'grayscale(0.8)'};opacity:${lvl.done ? '1' : (isNext ? '0.9' : '0.4')}">${lvl.emoji}</div>
         <div style="flex:1;min-width:0">
           <div style="font-size:14px;font-weight:700;color:${lvl.done ? '#fff' : (isNext ? 'var(--text)' : 'var(--muted)')}">${esc(lvl.nome)}</div>
-          <div style="font-size:11px;color:var(--muted2);margin-top:2px">${lvl.threshold}+ ${esc(t.unit)}</div>
+          <div style="font-size:11px;color:var(--muted2);margin-top:2px">ao menos ${lvl.threshold} ${esc(t.unit)}</div>
         </div>
         <div style="flex-shrink:0;text-align:right;font-size:11px;font-weight:700;color:${lvl.done ? color : (isNext ? 'var(--text)' : 'var(--muted2)')};padding-top:2px">${rightLabel}</div>
       </div>
@@ -4153,6 +4153,7 @@ function abrirDegrauModal(slug, uid){
       <div style="font-size:10px;font-weight:800;letter-spacing:.6px;text-transform:uppercase;color:var(--muted2)">${esc(t.nome)}</div>
       <div style="font-family:Georgia,'Times New Roman',serif;font-size:24px;font-weight:700;color:${achieved ? color : 'var(--muted)'};margin-top:4px">${esc(displayLevel.nome)}</div>
       <div style="font-size:12px;color:var(--muted);margin-top:6px">${summaryLine}</div>
+      <div style="font-size:11px;color:var(--muted2);margin-top:6px;line-height:1.4">${esc(t.descricao)}</div>
     </div>
     ${hiddenBeforeHTML}
     <div>${rowsHTML}</div>
