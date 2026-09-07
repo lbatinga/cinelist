@@ -3741,11 +3741,6 @@ const TRILHAS_DEF = [
       {nome:'Curador',emoji:'📚',threshold:75},{nome:'Guardião',emoji:'🛡️',threshold:150},
       {nome:'Patrono',emoji:'🏛️',threshold:300}
     ] },
-  { slug:'pioneirismo', nome:'Pioneirismo', icon:'🗺️', unit:'filmes que ninguém mais viu', teto:false,
-    levels:[
-      {nome:'Pioneiro',emoji:'🌟',threshold:5},{nome:'Explorador',emoji:'💎',threshold:20},
-      {nome:'Desbravador',emoji:'🗺️',threshold:50}
-    ] },
   { slug:'maratona', nome:'Maratona Mensal', icon:'🏃', unit:'filmes no mesmo mês', teto:false,
     levels:[
       {nome:'Maratonista',emoji:'🏃',threshold:20},{nome:'Ultramaratonista',emoji:'🥇',threshold:50},
@@ -3841,10 +3836,6 @@ function getAchievementData(uid){
   const media = s.media;
   const inseridos = (s.inseridos || []).length;
 
-  // Pioneirismo
-  const outrosUids = Object.keys(USERS).filter(u => u !== uid && u !== 'USER-001');
-  const soEle = minhasAvs.filter(f => !outrosUids.some(u => f.avaliacoes?.[u]?.nota != null)).length;
-
   // Por mês
   const porMes = {};
   minhasAvs.forEach(a => {
@@ -3898,7 +3889,7 @@ function getAchievementData(uid){
   const oscarCount = minhasAvs.filter(a => RAW.oscarVencedores?.has(a.tmdb_id)).length;
 
   const valoresAoVivo = {
-    volume: quant, curadoria: inseridos, pioneirismo: soEle, maratona: maxMes,
+    volume: quant, curadoria: inseridos, maratona: maxMes,
     tempo: horas, diversidade: generosVistos, decadas: decadasCobertas,
     epicos: longos, consistencia: mesesAtivos, influencia: influenciaCount, oscar: oscarCount
   };
