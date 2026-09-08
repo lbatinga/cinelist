@@ -233,7 +233,7 @@ Views (`v_avaliacao_comparativo`, `v_filme_stats`) usam `security_invoker=true` 
 
 **Regra irmã, mesmo padrão**: toda policy de escrita nasce com o escopo mais largo possível se ninguém restringir — igual ao `EXECUTE` de uma `SECURITY DEFINER` acima. `perfis.perfil_write` era `FOR ALL TO public`: a escrita só era barrada pela condição (`auth.uid()` é sempre `NULL` pra quem só tem a anon key, sem sessão), nunca pelo escopo de role. **Escopo por comando (`FOR INSERT`/`UPDATE`/`DELETE`, nunca `ALL` por hábito) e por role (`TO authenticated`, nunca `public` por padrão) é parte de criar a policy, não um passo separado pra lembrar depois** — se a condição um dia mudar ou tiver um bug, o role é a segunda barreira que sobra. Este é o terceiro caso do mesmo padrão de escopo-largo-demais nesta leva (função `SECURITY DEFINER` exposta via RPC, `compatibilidade` sem RLS nenhuma, e agora esta policy `TO public`) — é o que justifica a regra existir, não coincidência.
 
-**Pendência separada, fora de qualquer migração**: `auth_leaked_password_protection` está desabilitado no Supabase Auth (não checa senhas comprometidas via HaveIBeenPwned). É configuração de Auth, não schema — decidir e aplicar quando fizer sentido, sem misturar com migração SQL.
+**Bloqueado por plano, não pendência de decisão** (verificado 2026-09-08): `auth_leaked_password_protection` (checagem de senha vazada via HaveIBeenPwned) só está disponível a partir do plano Pro do Supabase — no plano gratuito o toggle fica desabilitado no painel, e o Security Advisor mantém o aviso indefinidamente mesmo assim, sem forma de resolver nem de silenciar sem pagar. Não é uma configuração esquecida nem algo ainda a decidir — não há o que decidir enquanto o projeto for free. Detalhe completo (o que a proteção faria se estivesse ativa, e o paliativo gratuito avaliado e descartado) no item 18 das Pendências conhecidas.
 
 ### Auth & admin
 
@@ -387,10 +387,6 @@ Lista com dois blocos. Primeiro, os itens já entregues/descartados, na ordem em
 
 Cada item mantém o número que já tinha na lista cronológica acima — só a posição mudou, pra refletir prioridade real em vez de ordem de nascimento.
 
-**MÉDIA — lixo ativo e segurança**
-
-18. `auth_leaked_password_protection` desabilitado no Supabase Auth — ver Segurança.
-
 **BAIXA — família de datas, valem ser feitas juntas por quem já estiver com o contexto**
 
 23. (baixa prioridade) `(a.data_ts||0)-(b.data_ts||0)` aparece em 6 lugares (hero da Home e alguns rankings/listagens) e dá `NaN` silencioso quando um dos lados é string ISO — `data_ts` é misto (ISO string nos filmes novos, Unix timestamp em segundos nos antigos, ver `parseDataCadastro()`), e subtração direta só funciona quando os dois lados acabam sendo número. Achado ao corrigir o mesmo padrão em `applySortRecentes()` durante o item 9 (coluna "Adicionado" de Recentes). Hoje é inofensivo: em todos os 6 lugares `data_ts` é desempate terciário (depois de nota e nº de avaliações), então o `NaN` nunca decide nada visível — a ordem sai igual com ou sem o bug, porque quase nunca chega a essa terceira comparação com um empate real nas duas primeiras. Conserto é trocar por `parseDataCadastro(f).getTime()`, mesmo padrão já aplicado em `applySortRecentes`. Baixa prioridade: não causa bug visível hoje, mas é uma armadilha se algum desses lugares um dia passar a usar `data_ts` como critério principal em vez de desempate.
@@ -408,6 +404,16 @@ Cada item mantém o número que já tinha na lista cronológica acima — só a 
 **ESPERANDO ALGO EXTERNO — não dá pra fazer agora nem que a gente quisesse**
 
 15. Trilha Cult (filmes antigos) — **destravado (2026-09-06)**: item 12 (Oscar) foi entregue, que era o bloqueio formal. Mas o catálogo ainda só tem 12 filmes anteriores a 1990 hoje — a trilha Oscar acabou de nascer, ainda não teve tempo de trazer clássicos novos pro acervo por conta própria, então essa contagem não mudou sozinha. Continua medindo "quem viu aqueles 12", não uma trilha de verdade, até o acervo crescer. Limiares acima do recorde atual (10) pra não nascer trivial — mesmo raciocínio já registrado no item 12. Pedido do Pedro.
+
+**BLOQUEADO POR PLANO — não dá pra resolver nem silenciar sem pagar**
+
+18. `auth_leaked_password_protection` desabilitado no Supabase Auth — **bloqueado por plano, não é tarefa** (verificado 2026-09-08). A proteção contra senha vazada (checagem via HaveIBeenPwned no cadastro/troca de senha) só existe a partir do plano Pro do Supabase — no plano gratuito o toggle fica desabilitado no painel, e mesmo assim o Security Advisor continua sinalizando o aviso, pra sempre, enquanto o projeto for free. **Não é omissão nem esquecimento** — checado direto no painel nesta data. Registrado explicitamente porque quem for auditar segurança depois precisa saber disso, senão vai tentar resolver de novo e bater na mesma parede.
+
+    O que a proteção faria se estivesse ativa: rejeitaria uma senha já vazada no cadastro e na troca de senha. Não afeta quem já tem conta, e não verifica as senhas já cadastradas hoje.
+
+    **Paliativo gratuito no mesmo painel, avaliado e não aplicado**: aumentar o comprimento mínimo de senha (a própria Supabase recomenda 8 no mínimo) e exigir tipos de caractere. Descartado porque são 15 pessoas conhecidas, num app de filmes, sem dado sensível — endurecer a política agora cria atrito real pra quem já usa a conta, sem ganho de segurança proporcional.
+
+    Se o projeto virar Pro algum dia, o item volta a ser acionável de imediato — é literalmente um toggle no painel do Supabase Auth, sem migração nem código envolvido.
 
 **PROVAVELMENTE NUNCA — mantidos registrados, não priorizados**
 
