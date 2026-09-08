@@ -970,7 +970,10 @@ async function loadFilmsFromSupabase() {
         nota: av.nota,
         vai: av.vai_assistir || '',
         comentario: av.comentario || '',
-        data: av.data_avaliacao ? (av.data_avaliacao.includes('-') ? av.data_avaliacao.split('-').reverse().join('/') : av.data_avaliacao) : '',
+        // data_avaliacao só existe hoje como ISO (AAAA-MM-DD) ou vazio — o formato BR foi
+        // normalizado em 2026-08-28 e toda escrita nova já sai ISO por construção (item 10),
+        // então a conversão é incondicional, sem ramo pra um formato que não existe mais.
+        data: av.data_avaliacao ? av.data_avaliacao.split('-').reverse().join('/') : '',
         criadoEm: av.created_at || null
       };
     });
