@@ -4094,20 +4094,29 @@ function vozPerfil(uid){
 // Fase 5 Etapa D — frase de data pronta por (contexto, precisão), nunca montada por
 // concatenação. Concatenar um prefixo fixo ("desde " + data) quebra pra precisão
 // indeterminada, que não tem data pra encaixar ali ("desde data não registrada" não faz
-// sentido) — então cada combinação tem a frase INTEIRA escrita aqui. NUNCA diz "antes de
-// 2025" nem chuta ano: há avaliações datadas desde 2023, então as 65 linhas indeterminadas
-// (ver Conquistas no CLAUDE.md) só perderam o registro, não são necessariamente antigas.
-// contexto: 'carta' (mês/ano) | 'modal' (dia completo) | 'timeline' (dia completo, Etapa E).
+// sentido) — então cada combinação tem a frase INTEIRA escrita aqui. Três precisões (ver
+// reconstruir_datas_conquistas() no CLAUDE.md): 'exata' (sem suposição, mostra o dia
+// completo), 'aproximada' (estimada por proporção quando a pessoa tem avaliação sem data —
+// mostra só mês/ano, com "~"/"por volta de" na frente; NUNCA mostra o dia, que sugeriria uma
+// certeza que não existe) e 'indeterminada' (sem avaliação datada nenhuma pra estimar a
+// partir dela — hoje zero linhas no banco, mas o branch continua aqui pra alguém sem
+// avaliação datada nenhuma ainda). NUNCA diz "antes de 2025" nem chuta ano pra indeterminada:
+// há avaliações datadas desde 2023, uma linha indeterminada só perdeu o registro, não é
+// necessariamente antiga. contexto: 'carta' (mês/ano) | 'modal' (frase completa) | 'timeline'
+// (dia completo se exata, mês/ano se aproximada, Etapa E).
 const MESES_ABREV = ['jan','fev','mar','abr','mai','jun','jul','ago','set','out','nov','dez'];
 function fraseDataConquista(lvl, contexto){
   if(!lvl || lvl.precisao === 'indeterminada' || !lvl.data){
-    if(contexto === 'modal') return 'conquistado antes do registro de datas';
     if(contexto === 'timeline') return 'sem data';
     return 'data não registrada';
   }
   const d = new Date(lvl.data + 'T00:00:00');
   const mes = MESES_ABREV[d.getMonth()];
   const ano = d.getFullYear();
+  if(lvl.precisao === 'aproximada'){
+    if(contexto === 'modal') return `conquistado por volta de ${mes} ${ano}`;
+    return `~ ${mes} ${ano}`;
+  }
   if(contexto === 'modal') return `conquistado em ${d.getDate()} ${mes} ${ano}`;
   if(contexto === 'timeline') return `${d.getDate()} ${mes} ${ano}`;
   return `desde ${mes} ${ano}`;
