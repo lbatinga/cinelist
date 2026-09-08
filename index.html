@@ -1265,20 +1265,25 @@ const BDAYS_ESPECIAIS = [
 ];
 // RECENT_IDS dinâmico: filmes adicionados nos últimos 10 dias
 function parseDataCadastro(f){
-  // data_ts pode ser: ISO string (novos filmes) ou Unix timestamp em segundos (filmes antigos)
+  // data_ts é sempre number (coluna double precision) — dois significados possíveis, e a
+  // distinção é por CONTEÚDO, não por tipo: data pura do backfill (meia-noite UTC exata, sem
+  // hora real) ou instante real gravado por Date.now() no momento do insert. Um múltiplo
+  // exato de 86400 só acontece por construção (meia-noite UTC); um instante real
+  // praticamente nunca cai exatamente nessa fronteira (~1 em 86400 de chance). Confirmado
+  // contra o banco: 705 múltiplos exatos (os migrados) vs 273 que não são (gravados desde o
+  // fix do data_ts=0, 2026-09-01) — bate com os números já documentados pros dois grupos.
   if(f.data_ts){
     const ts = f.data_ts;
-    if(typeof ts === 'number' || (!isNaN(ts) && !String(ts).includes('-'))){
-      // Unix timestamp em segundos — multiplica por 1000
-      return new Date(parseFloat(ts) * 1000);
+    if(ts % 86400 === 0){
+      // Meia-noite UTC exata — só uma data, sem hora real. Reconstrói como data de
+      // calendário LOCAL (mesmo padrão de data_avaliacao/data_cadastro, ver seção Dates),
+      // pegando os componentes UTC do instante e montando local com eles — sem isso, quem lê
+      // com getters locais (a convenção daqui) enxerga o dia anterior em UTC-3.
+      const meiaNoiteUtc = new Date(ts * 1000);
+      return new Date(meiaNoiteUtc.getUTCFullYear(), meiaNoiteUtc.getUTCMonth(), meiaNoiteUtc.getUTCDate());
     }
-    // ISO string — força interpretação UTC se não tiver indicador de fuso horário
-    // (Supabase timestamp sem timezone é UTC, mas JS interpreta como local por padrão)
-    const s = String(ts);
-    if(s.includes('T') && !s.endsWith('Z') && !/[+\-]\d{2}:\d{2}$/.test(s)) {
-      return new Date(s + 'Z');
-    }
-    return new Date(ts);
+    // Instante real — hora local já é a certa, getters locais funcionam sem ajuste nenhum.
+    return new Date(ts * 1000);
   }
   if(!f.data_cadastro) return null;
   const s = String(f.data_cadastro);
