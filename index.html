@@ -1295,11 +1295,18 @@ function parseDataCadastro(f){
     const [d,m,y] = s.split('/');
     return new Date(parseInt(y), parseInt(m)-1, parseInt(d));
   }
-  // Formato yyyy-mm-dd — trata como UTC meia-noite
+  // Formato yyyy-mm-dd — data de calendário local, mesmo padrão do ramo dd/mm/yyyy acima
+  // (não instante UTC: meia-noite UTC lido com getters locais em UTC-3 mostra o dia
+  // anterior, mesmo bug do item 25 do outro lado desta função — ver CLAUDE.md item 37).
   if(/^\d{4}-\d{2}-\d{2}$/.test(s)) {
-    return new Date(s + 'T00:00:00Z');
+    const [y,m,d] = s.split('-');
+    return new Date(parseInt(y), parseInt(m)-1, parseInt(d));
   }
-  return new Date(ts);
+  // Formato não reconhecido — nunca chuta uma data (item 36). `data_cadastro` é texto livre,
+  // editado à mão nas recuperações manuais de data; um valor fora dos dois formatos acima
+  // deve virar "não sei", não um Date construído a partir de uma variável que não existe
+  // neste escopo (ts era do bloco data_ts, que já retornou antes de chegar aqui).
+  return null;
 }
 
 // Desempate por data de cadastro (item 23) — usado como último critério em 6 comparadores de
