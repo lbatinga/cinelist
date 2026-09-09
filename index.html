@@ -2401,7 +2401,12 @@ async function enrichTMDBResult(candidate){
     classificacao:getCert(info.release_dates),
     duracao_str:fmtDuracaoStr(rt),
     duracao_min:rt,
-    duracao_hhmm:rt?`${h}:${String(m).padStart(2,'0')}`:''
+    duracao_hhmm:rt?`${h}:${String(m).padStart(2,'0')}`:'',
+    // TMDB já devolve isso de graça no /movie/{id} normal, sem append_to_response nenhum
+    // (mesma chamada que fetchAndCacheOmdb já lê pra descobrir imdb_id — ver item 19 do
+    // CLAUDE.md) — sem essa linha, o filme nascia sem imdb_id e ninguém nunca preenchia
+    // depois, porque nada além do insert grava essa coluna.
+    imdb_id:info.imdb_id||null
   };
 }
 
@@ -2548,6 +2553,7 @@ async function inserirFilmeDoTmdb(td){
     classificacao: td.classificacao||null,
     inserido_por: CU,
     tmdb_id: td.tmdbId||null,
+    imdb_id: td.imdb_id||null,
     data_cadastro: (()=>{ const n=new Date(); return `${String(n.getDate()).padStart(2,'0')}/${String(n.getMonth()+1).padStart(2,'0')}/${n.getFullYear()}`; })(),
     // Unix em segundos, mesmo formato dos filmes antigos (ver parseDataCadastro) — nunca
     // ficou de fora de propósito, era um bug: o insert abaixo não mandava esse campo, então
@@ -2921,11 +2927,15 @@ function omdbEhFresco(atualizadoEm, ano, temDados){
 // antes de qualquer request sair — foi exatamente isso que escondeu essa escrita nunca
 // acontecendo (o TypeError subia e era engolido pelo try/catch de fora). .then({error}) é o
 // jeito certo de checar falha nesse builder. Nunca ()=>{} — sempre loga.
-function persistOmdbCache(filmId, d){
+// imdbIdDescoberto (item 19): só preenchido quando fetchAndCacheOmdb descobriu o imdb_id via
+// TMDB porque o filme ainda não tinha (filmes adicionados antes do fix do insert, ou por
+// algum outro motivo) — cache_omdb_rating grava com coalesce, nunca sobrescreve um valor já
+// existente.
+function persistOmdbCache(filmId, d, imdbIdDescoberto){
   const imdb = d.imdbRating!=='N/A' ? d.imdbRating : null;
   const rt = d.Ratings?.find(r=>r.Source==='Rotten Tomatoes')?.Value || null;
   const awards = d.Awards && d.Awards!=='N/A' ? d.Awards : null;
-  supa.rpc('cache_omdb_rating', { p_filme_id: filmId, p_imdb: imdb, p_rt: rt, p_awards: awards })
+  supa.rpc('cache_omdb_rating', { p_filme_id: filmId, p_imdb: imdb, p_rt: rt, p_awards: awards, p_imdb_id_descoberto: imdbIdDescoberto||null })
     .then(({error}) => { if(error) console.warn('cache_omdb_rating falhou:', filmId, error); });
 }
 
@@ -2989,12 +2999,14 @@ async function fetchAndCacheOmdb(filmId, nome, ano){
     }
   }
 
-  if(d?.Response === 'True'){ _omdbCache[filmId] = d; persistOmdbCache(filmId, d); return d; }
+  if(d?.Response === 'True'){ _omdbCache[filmId] = d; persistOmdbCache(filmId, d, imdbId); return d; }
   if(d?.Error === 'Movie not found!'){
     _omdbCache[filmId] = null;
     // NULL explícito, não uma string "N/A" — a próxima leitura (fetchOmdbBasic, via FM)
-    // não pode confundir "sabemos que não tem" com "tem um valor literal N/A".
-    supa.rpc('cache_omdb_rating', { p_filme_id: filmId, p_imdb: null, p_rt: null, p_awards: null })
+    // não pode confundir "sabemos que não tem" com "tem um valor literal N/A". imdbId (item
+    // 19) ainda vai junto se foi descoberto — não achar nota na OMDB não significa que o
+    // imdb_id que o TMDB devolveu esteja errado.
+    supa.rpc('cache_omdb_rating', { p_filme_id: filmId, p_imdb: null, p_rt: null, p_awards: null, p_imdb_id_descoberto: imdbId||null })
       .then(({error}) => { if(error) console.warn('cache_omdb_rating falhou:', filmId, error); });
     return null;
   }
