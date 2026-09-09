@@ -3830,6 +3830,11 @@ const TRILHAS_DEF = [
     levels:[
       {nome:'Convidado de Honra',emoji:'🎟️',threshold:5},{nome:'Indicado',emoji:'🌟',threshold:12},
       {nome:'Membro da Academia',emoji:'🎓',threshold:25},{nome:'Governador da Academia',emoji:'🏛️',threshold:40}
+    ] },
+  { slug:'cult', nome:'Clássicos', icon:'🎥', unit:'filmes', descricao:'Filmes lançados antes de 1990 que você já assistiu', teto:false,
+    levels:[
+      {nome:'Nostálgico',emoji:'🎥',threshold:15},{nome:'Erudito',emoji:'📼',threshold:30},
+      {nome:'Arquivista',emoji:'🗂️',threshold:60}
     ] }
 ];
 
@@ -3938,10 +3943,18 @@ function getAchievementData(uid){
   // a pessoa já avaliou, casado por tmdb_id (nunca por nome — ver CLAUDE.md, item 12)
   const oscarCount = minhasAvs.filter(a => RAW.oscarVencedores?.has(a.tmdb_id)).length;
 
+  // Clássicos — filmes lançados antes de 1990. Mesmo critério do lado SQL (item 15):
+  // `ano` só conta quando é puramente numérico (^[0-9]+$) — vazio ou algo como "2019-"
+  // nunca casa e nunca entra na contagem, sem virar NaN silencioso. Não reusa
+  // `porDecada`/`decadasCobertas` acima: aquilo agrupa por década pra achar quantas
+  // décadas distintas passam de 10 filmes, métrica diferente desta (contagem simples).
+  const classicosCount = minhasAvs.filter(a => /^[0-9]+$/.test(a.ano) && parseInt(a.ano, 10) < 1990).length;
+
   const valoresAoVivo = {
     volume: quant, curadoria: inseridos, maratona: maxMes,
     tempo: horas, diversidade: generosVistos, decadas: decadasCobertas,
-    epicos: longos, consistencia: mesesAtivos, influencia: influenciaCount, oscar: oscarCount
+    epicos: longos, consistencia: mesesAtivos, influencia: influenciaCount, oscar: oscarCount,
+    cult: classicosCount
   };
   const avisos = { maratona: semDataAviso, consistencia: semDataAviso };
 
