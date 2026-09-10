@@ -175,6 +175,7 @@ tr.selected td{background:rgba(229,9,20,.05)}
 .dp-score{font-size:17px;font-weight:800;color:var(--green)}
 .dp-meta-item{font-size:12px;color:var(--muted)}
 .dp-class{font-size:10px;font-weight:700;padding:2px 7px;border-radius:3px;border:1px solid var(--muted2);color:var(--muted)}
+.hero-class{font-size:10px;font-weight:700;padding:2px 7px;border-radius:3px;border:1px solid #666;color:#aaa}
 .dp-cats{display:flex;gap:5px;flex-wrap:wrap;margin-bottom:12px}
 .dp-cat{font-size:11px;padding:3px 10px;border-radius:16px;background:var(--surface2);color:var(--muted)}
 .dp-desc{font-size:13px;color:#ccc;line-height:1.7;margin-bottom:16px}
@@ -1666,7 +1667,7 @@ function heroSlideContent(i){
     <div class="hero-meta">
       <span class="hero-score" style="color:${nC(f.media)}">★ ${fmt(f.media)}</span>
       <span>${f.ano}</span><span>${f.duracao_str}</span>
-      <span style="font-size:10px;font-weight:700;padding:2px 7px;border-radius:3px;border:1px solid #666;color:#aaa">${f.classificacao}</span>
+      <span class="hero-class"${classStyleAttr(f.classificacao)}>${f.classificacao}</span>
     </div>
     <div class="hero-desc">${esc(f.sinopse||'')}</div>
     <div class="hero-btns">
@@ -1722,6 +1723,19 @@ const GENRE_COLORS={
   'Guerra':'#6d4c41','Música':'#ec407a','Faroeste':'#bf8550','Documentário':'#78909c'
 };
 
+// Cores oficiais da classificação indicativa (Ministério da Justiça) — convenção nacional, não precisa de legenda
+const CLASS_COLORS={
+  'L':{bg:'#3AAA35',fg:'#fff'},'10':{bg:'#0F7EC1',fg:'#fff'},'12':{bg:'#F5B301',fg:'#1A1A1A'},
+  '14':{bg:'#E87E04',fg:'#1A1A1A'},'16':{bg:'#CC2229',fg:'#fff'},'18':{bg:'#1A1A1A',fg:'#fff'}
+};
+// Atributo style pro valor oficial (com borda clara — sem ela o 18 preto quase some sobre o fundo escuro
+// do app, #141414/#1f1f1f); string vazia pro fallback (null/NR/valor não mapeado) — cada chamador mantém
+// o próprio estilo neutro (classe CSS) nesse caso, não é forçado a virar igual aos outros dois.
+function classStyleAttr(c){
+  const cc=CLASS_COLORS[c];
+  return cc?` style="background:${cc.bg};color:${cc.fg};border:1px solid rgba(255,255,255,.25)"`:'';
+}
+
 // Converte cor da nota em glow rgba
 function glowC(media){
   if(!media) return 'rgba(0,0,0,.45)';
@@ -1742,7 +1756,7 @@ function pCard(f, showDate){
   return `<div class="poster-card" style="--rating-glow:${glowC(f.media)}" onclick="openFilme('${f.id}')">
     ${f.poster?`<img class="poster-img" src="${esc(f.poster)}" loading="lazy" alt="" onerror="this.style.display='none'">`:`<div class="poster-no-img">🎬</div>`}
     ${f.media?`<div class="poster-badge" style="color:${nC(f.media)}">${fmt(f.media)}</div>`:''}
-    <div class="poster-class">${f.classificacao}</div>
+    <div class="poster-class"${classStyleAttr(f.classificacao)}>${f.classificacao}</div>
     ${showDate&&dataCad?`<div style="position:absolute;bottom:0;left:0;right:0;background:rgba(0,0,0,0.75);color:#aaa;font-size:9px;text-align:center;padding:3px 0">📅 ${dataCad}</div>`:''}
     ${f.poster?`<button class="poster-zoom" onclick="event.stopPropagation();openPosterLightbox('${esc(f.poster)}','${esc(f.nome)}')" title="Ver capa grande">🔍</button>`:''}
     <div class="poster-overlay"></div>
@@ -1842,7 +1856,7 @@ function filmDetailHTML(id){
         ${f.media?`<span class="dp-score" style="color:${nC(f.media)}">★ ${fmt(f.media)}</span>`:''}
         <span class="dp-meta-item">${f.ano}</span>
         <span class="dp-meta-item">${f.duracao_str}</span>
-        <span class="dp-class">${f.classificacao}</span>
+        <span class="dp-class"${classStyleAttr(f.classificacao)}>${f.classificacao}</span>
         <span class="dp-meta-item">${f.num_avaliacoes} avaliações</span>
       </div>
       <div id="extRatings_${f.id}" style="display:flex;gap:6px;margin-bottom:8px;align-items:center;min-height:20px">
