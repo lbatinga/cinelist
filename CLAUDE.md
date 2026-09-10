@@ -431,13 +431,18 @@ Lista com dois blocos. Primeiro, os itens já entregues/descartados, na ordem em
     **Achado de método, sobre o ambiente, não sobre o CineList**: a primeira apuração via TMDB usou `curl | grep` com o `grep` direto no pipe — perdeu dados silenciosamente nesse bash sandbox, 36 filmes vieram marcados como "sem `imdb_id`" quando tinham. Só apareceu porque o resultado foi checado manualmente (`curl` direto num dos "vazios" devolveu o campo preenchido) em vez de aceito como fonte de verdade — sem essa desconfiança, 36 filmes ficariam sem `imdb_id` por um motivo que não existia. Forma confiável no sandbox: salvar a resposta em arquivo (`curl -o`) antes de extrair, com verificação de tamanho (`wc -c`) e retry — extrair direto do pipe não é seguro aqui.
 
     **Prova ao vivo, as duas metades**: legado confirmado pelo próprio resultado do backfill (163/163, sobra só o esperado). Insert-time confirmado pelo primeiro filme real adicionado depois do deploy — "Um Homem de Sorte" (10/09/2026 13:14) nasceu com `imdb_id tt1327194` já preenchido, sem precisar de nenhum backfill futuro pra ele.
+21. Tokens `UNREGISTERED` em `fcm_tokens` nunca eram limpos, só se acumulavam — **entregue e testado ao vivo (2026-09-10)**.
+
+    **Autolimpeza, não backfill pontual**: função nova `deleteFCMToken(token)` no Apps Script (`apps_script_fcm.js.gs`, projeto "API Filmes") — `DELETE` em `fcm_tokens` via PostgREST com a `service_role`, que ignora RLS (a mesma chave que o script já guarda em texto plano pra outras operações, ver seção Notifications). `sendPush()` passou a ler o corpo da resposta em caso de erro e chama `deleteFCMToken` só quando o código é 404, ou 400 com `INVALID_ARGUMENT` no corpo — os dois casos em que a FCM está dizendo "esse token não existe mais", não "algo deu errado agora". Qualquer outro erro (500, cota, instabilidade de rede) mantém o token — a distinção importa: sem ela, uma instabilidade transitória da FCM apagaria tokens bons junto com os mortos de verdade.
+
+    **Isso muda a natureza do item**: a pendência original era "dois tokens mortos hoje", uma limpeza manual pontual. A solução não limpa os dois de hoje e para — remove qualquer token futuro sozinho, no momento em que a FCM avisa que ele morreu. Deixa de ser manutenção recorrente (alguém olhando log e apagando na mão) e vira comportamento permanente do sistema.
+
+    **Testado ao vivo** (`testarNotificacao` pelo editor do Apps Script): "Tokens encontrados: 10", dois 404 com `UNREGISTERED`, dois "Token morto removido (204)", "Enviadas: 8/10". Confirmado no banco: 8 tokens restantes.
+
+    **Implantação confirmada correta**: republicada editando a implantação já existente (Implantar → Gerenciar implantações → ✏️ editar → Versão: Nova versão → Implantar), não criando uma nova — a regra já registrada na seção Notifications (o erro documentado ali, do item 4, não se repetiu aqui).
 ### Pendências abertas, por prioridade (2026-09-07)
 
 Cada item mantém o número que já tinha na lista cronológica acima — só a posição mudou, pra refletir prioridade real em vez de ordem de nascimento.
-
-**BAIXA — limpezas pequenas e independentes**
-
-21. (baixa prioridade) Dois tokens em `fcm_tokens` estão `UNREGISTERED` (celulares que desinstalaram o app ou limparam dados) — confirmado no log do Apps Script do teste do item 4 (2026-09-01): "Enviadas: 8/10", os dois que falham dão 404 por token inválido. Não quebra nada (`sendPush()` já trata erro por token individualmente, um falho não derruba os outros), só desperdiça duas chamadas FCM por push. Ideia: o Apps Script já recebe o erro 404/`UNREGISTERED` de volta da FCM — poderia deletar o token de `fcm_tokens` nessa hora, mesmo padrão de autolimpeza que token expirado já deveria ter.
 
 **BLOQUEADO — impossibilidade externa, não despriorização**
 
