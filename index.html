@@ -124,8 +124,15 @@ body{background:var(--bg);color:var(--text);font-family:'Inter',sans-serif;displ
 .row:first-child{border-top:none;padding-top:0}
 .row-title{font-size:24px;font-weight:800;margin-bottom:16px;color:#fff;letter-spacing:-.3px;display:flex;align-items:center;gap:12px;line-height:1}
 .row-title::before{content:"";display:inline-block;width:4px;height:22px;background:var(--row-accent,#e50914);border-radius:2px;flex-shrink:0}
-.row-track{display:flex;gap:10px;overflow-x:auto;padding-bottom:6px;scrollbar-width:none;-webkit-overflow-scrolling:touch;cursor:grab}
+.row-track-wrap{position:relative}
+.row-track{display:flex;gap:10px;overflow-x:auto;padding-bottom:6px;scrollbar-width:none;-webkit-overflow-scrolling:touch;user-select:none;-webkit-user-select:none}
 .row-track::-webkit-scrollbar{display:none}
+.row-arrow{position:absolute;top:0;bottom:6px;width:40px;background:rgba(0,0,0,.6);border:none;color:#fff;font-size:26px;line-height:1;cursor:pointer;z-index:5;display:flex;align-items:center;justify-content:center;padding:0;opacity:0;transition:opacity .2s,background .2s}
+.row-arrow:hover{background:rgba(0,0,0,.85)}
+.row-arrow-prev{left:0;border-radius:0 6px 6px 0}
+.row-arrow-next{right:0;border-radius:6px 0 0 6px}
+.row-track-wrap:hover .row-arrow:not(.row-arrow-hidden){opacity:1}
+.row-arrow-hidden{opacity:0!important;pointer-events:none}
 .poster-card{flex-shrink:0;width:170px;cursor:pointer;border-radius:6px;overflow:hidden;position:relative;transition:transform .25s,box-shadow .25s;box-shadow:0 0 0 1px rgba(255,255,255,.04), 0 4px 14px -6px var(--rating-glow,rgba(0,0,0,.5))}
 .poster-card:hover{transform:scale(1.08);box-shadow:0 0 0 1px rgba(255,255,255,.1), 0 10px 32px -4px var(--rating-glow,rgba(0,0,0,.8)), 0 6px 28px rgba(0,0,0,.6);z-index:10}
 .poster-img{width:170px;height:255px;object-fit:cover;display:block;background:var(--surface2)}
@@ -283,6 +290,7 @@ tr.selected td{background:rgba(229,9,20,.05)}
   .row{margin-bottom:32px;padding-top:22px}
   .row-title{font-size:19px;margin-bottom:12px}
   .row-title::before{width:3px;height:18px}
+  .row-arrow{display:none}
   .tpage{padding:16px}
   .rank-section{padding:16px;overflow-x:hidden}
   .detail-layout{flex-direction:column;height:auto}
@@ -1615,6 +1623,7 @@ function renderHome(){
         ? rowHTML(`🔍 Resultados da busca (${list.length})`, list, false, '#e50914')
         : `<div class="empty-block"><div class="empty-icon">🔍</div><div>Nenhum filme encontrado.</div></div>`
     }</div>`;
+    document.querySelectorAll('.row-track').forEach(initRowTrack);
     return;
   }
   // Hero: pool dos top 30, embaralhado, pega 8 aleatórios
@@ -1656,6 +1665,7 @@ function renderHome(){
       }
     },{passive:true});
   }
+  document.querySelectorAll('.row-track').forEach(initRowTrack);
   navList=FILMES;
 }
 
@@ -1747,7 +1757,11 @@ function glowC(media){
 }
 
 function rowHTML(title,films,showDate,accent){
-  return `<div class="row" style="--row-accent:${accent||'#e50914'}"><div class="row-title">${title}</div><div class="row-track">${films.map(f=>pCard(f,showDate)).join('')}</div></div>`;
+  return `<div class="row" style="--row-accent:${accent||'#e50914'}"><div class="row-title">${title}</div><div class="row-track-wrap">
+    <button class="row-arrow row-arrow-prev row-arrow-hidden" onclick="scrollRow(this,-1)" aria-label="Anterior">‹</button>
+    <div class="row-track">${films.map(f=>pCard(f,showDate)).join('')}</div>
+    <button class="row-arrow row-arrow-next row-arrow-hidden" onclick="scrollRow(this,1)" aria-label="Próximo">›</button>
+  </div></div>`;
 }
 
 function pCard(f, showDate){
@@ -7961,26 +7975,49 @@ function closePosterLightbox(){
 }
 
 
-// Drag-to-scroll para as filas de posters
-(function(){
-  let isDown=false, slider=null, startX=0, scrollLeft=0;
-  document.addEventListener('mousedown',e=>{
-    const t=e.target.closest('.row-track');
-    if(!t) return;
-    isDown=true; slider=t;
-    startX=e.pageX-t.offsetLeft;
-    scrollLeft=t.scrollLeft;
-    t.style.cursor='grabbing';
-  });
-  document.addEventListener('mouseup',()=>{ isDown=false; if(slider){slider.style.cursor='grab';slider=null;} });
-  document.addEventListener('mouseleave',()=>{ isDown=false; if(slider){slider.style.cursor='grab';slider=null;} });
-  document.addEventListener('mousemove',e=>{
-    if(!isDown||!slider) return;
+// Rolagem horizontal das filas de posters: roda do mouse + setas.
+// Substituiu o drag-to-scroll antigo (mousedown/mousemove arrastando scrollLeft), removido em vez de
+// consertado — era a causa da seleção de texto acidental (nada dava preventDefault no mousedown, então
+// clicar sobre o título do card, visível no hover, entrava em conflito com a seleção nativa do navegador).
+// Não sobrou nenhum caso real que só o drag cobria: mouse sem roda e sem trackpad é hoje inexistente, e
+// mesmo esse caso as setas resolvem; touch nunca passava por esse listener (touchstart/touchmove são
+// eventos diferentes de mousedown/mousemove, e o scroll nativo por toque já funcionava sozinho).
+function scrollRow(btn, dir){
+  const track = btn.closest('.row-track-wrap').querySelector('.row-track');
+  track.scrollBy({left: dir * track.clientWidth * 0.9, behavior:'smooth'});
+}
+// Esconde a seta de um lado quando não há mais pra onde rolar naquela direção — chamada no render
+// inicial (scrollLeft=0 não dispara evento 'scroll' sozinho) e a cada scroll depois.
+function updateRowArrows(track){
+  const wrap = track.closest('.row-track-wrap');
+  if(!wrap) return;
+  const prev = wrap.querySelector('.row-arrow-prev');
+  const next = wrap.querySelector('.row-arrow-next');
+  if(prev) prev.classList.toggle('row-arrow-hidden', track.scrollLeft<=0);
+  if(next) next.classList.toggle('row-arrow-hidden', track.scrollLeft>=track.scrollWidth-track.clientWidth-1);
+}
+// Chamada uma vez por .row-track a cada render (renderHome recria os elementos toda vez, então não
+// duplica listener). O wheel fica só aqui, direto no elemento — não em document — de propósito: um
+// listener {passive:false} em document intercepta TODO wheel da página antes de decidir se age, mesmo
+// que o handler devolva na hora pra quem não é linha de pôster; ficando só nas .row-track, a rolagem em
+// qualquer outra tela do app (Pendentes, Avaliações, Ranking, qualquer modal) nunca passa por esse JS.
+function initRowTrack(track){
+  updateRowArrows(track);
+  // Converte roda vertical em scroll horizontal, mas só quando a linha ainda tem pra onde ir naquela
+  // direção — sem isso, chegar no fim da linha rolando pra baixo prenderia a rolagem vertical da página.
+  track.addEventListener('wheel',e=>{
+    if(!e.deltaY) return;
+    const atStart=track.scrollLeft<=0, atEnd=track.scrollLeft>=track.scrollWidth-track.clientWidth-1;
+    if((e.deltaY<0&&atStart)||(e.deltaY>0&&atEnd)) return;
     e.preventDefault();
-    const x=e.pageX-slider.offsetLeft;
-    slider.scrollLeft=scrollLeft-(x-startX)*1.2;
-  });
-})();
+    track.scrollLeft+=e.deltaY;
+  },{passive:false});
+}
+// 'scroll' não borbulha — captura na fase de captura pra pegar o evento de qualquer .row-track com um
+// listener só, em vez de um por linha.
+document.addEventListener('scroll',e=>{
+  if(e.target.classList&&e.target.classList.contains('row-track')) updateRowArrows(e.target);
+},true);
 
 // ── PULL-TO-REFRESH ──
 (function(){
