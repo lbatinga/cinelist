@@ -175,7 +175,7 @@ tr.selected td{background:rgba(229,9,20,.05)}
 .detail-panel::-webkit-scrollbar{width:4px}
 .detail-panel::-webkit-scrollbar-thumb{background:var(--surface2)}
 .dp-backdrop{width:100%;height:280px;background-size:cover;background-position:center 20%;position:relative}
-.dp-backdrop-grad{position:absolute;inset:0;background:linear-gradient(to top,var(--surface) 0%,rgba(31,31,31,.3) 60%,transparent 100%)}
+.dp-backdrop-grad{position:absolute;inset:0;background:linear-gradient(to top,var(--surface) 0%,rgba(31,31,31,.85) 8%,rgba(31,31,31,.62) 16%,rgba(31,31,31,.38) 24%,rgba(31,31,31,.18) 32%,transparent 40%)}
 .dp-body{padding:0 24px 32px;margin-top:-60px;position:relative}
 .dp-title{font-size:24px;font-weight:900;margin-bottom:10px;line-height:1.1}
 .dp-meta{display:flex;align-items:center;gap:10px;margin-bottom:12px;flex-wrap:wrap}
@@ -187,7 +187,7 @@ tr.selected td{background:rgba(229,9,20,.05)}
 .dp-cat{font-size:11px;padding:3px 10px;border-radius:16px;background:var(--surface2);color:var(--muted)}
 .dp-desc{font-size:13px;color:#ccc;line-height:1.7;margin-bottom:16px}
 .dp-actions{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px}
-.dp-btn{display:flex;flex-direction:column;align-items:center;gap:4px;padding:10px 14px;border-radius:10px;cursor:pointer;border:none;font-family:inherit;min-width:64px;transition:opacity .2s;text-decoration:none}
+.dp-btn{display:flex;flex-direction:column;align-items:center;gap:4px;padding:10px 14px;border-radius:16px;cursor:pointer;border:none;font-family:inherit;min-width:64px;transition:opacity .2s;text-decoration:none}
 .dp-btn:hover{opacity:.85}
 .dp-btn-icon{font-size:18px}
 .dp-btn-label{font-size:10px;font-weight:700;color:#000}
@@ -196,6 +196,9 @@ tr.selected td{background:rgba(229,9,20,.05)}
 .dp-btn-grey .dp-btn-label{color:#fff}
 .dp-btn-red{background:var(--red);color:#fff}
 .dp-btn-red .dp-btn-label{color:#fff}
+.dp-del{opacity:.55;transition:opacity .2s}
+.dp-del:hover,.dp-del:focus-visible{opacity:1}
+@media(hover:none){.dp-del{opacity:.65}}
 .dp-section-title{font-size:13px;font-weight:700;color:#e5e5e5;margin:16px 0 10px}
 .dp-ratings{display:flex;flex-direction:column;gap:6px}
 .dp-rating-row{display:flex;align-items:center;gap:10px;padding:8px 12px;background:var(--surface2);border-radius:8px}
@@ -1912,7 +1915,7 @@ function filmDetailHTML(id){
                     :`<div style="font-size:10px;color:var(--muted2);margin-top:1px;font-style:italic">sem data</div>`))}
             </div>
             <div class="dp-r-nota" style="color:${nC(av.nota)}">★ ${fmt(av.nota)}</div>
-            ${isAdminUser()?`<button onclick="event.stopPropagation();deleteAvaliacaoAdmin('${f.id}','${uid}',this)" title="Excluir esta nota (admin)" style="background:transparent;border:1px solid #3a1414;color:#e05555;border-radius:6px;padding:4px 7px;margin-left:6px;cursor:pointer;font-size:12px;line-height:1">🗑️</button>`:''}
+            ${isAdminUser()?`<button class="dp-del" onclick="event.stopPropagation();deleteAvaliacaoAdmin('${f.id}','${uid}',this)" title="Excluir esta nota (admin)" style="background:transparent;border:1px solid #3a1414;color:#e05555;border-radius:6px;padding:4px 7px;margin-left:6px;cursor:pointer;font-size:12px;line-height:1">🗑️</button>`:''}
           </div>`).join('')}
         </div>`:''}
       <div class="dp-footer">
@@ -1925,7 +1928,7 @@ function filmDetailHTML(id){
       })()}
       ${isAdminUser()?`
       <div style="margin-top:16px;padding-top:14px;border-top:1px solid #2a2a2a;display:flex;justify-content:flex-end;gap:8px">
-        <button onclick="deleteFilmeFromDetail('${f.id}',this)" title="Excluir filme (admin)" style="background:#1a0a0a;color:#e05555;border:1px solid #3a1414;border-radius:8px;padding:8px 14px;cursor:pointer;font-size:12px;font-weight:700;font-family:inherit">🗑️ Excluir filme (admin)</button>
+        <button class="dp-del" onclick="deleteFilmeFromDetail('${f.id}',this)" title="Excluir filme (admin)" style="background:#1a0a0a;color:#e05555;border:1px solid #3a1414;border-radius:8px;padding:8px 14px;cursor:pointer;font-size:12px;font-weight:700;font-family:inherit">🗑️ Excluir filme (admin)</button>
       </div>`:''}
     </div>
   `;
