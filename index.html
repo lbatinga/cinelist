@@ -2822,6 +2822,33 @@ async function adicionarDoBlocoB(tmdbId){
   }
 }
 
+// Descarta uma recomendação de fora do catálogo — some das recomendações de quem descartou,
+// só dele (grava usuario_id+tmdb_id). Um toque só, sem confirmação dupla como "➕ Adicionar":
+// é individual e reversível (a linha continua no banco, uma tela de "descartados" futura
+// poderia desfazer só apagando), não cria nada visível pra mais ninguém. Só recebe tmdbId
+// (número, seguro de interpolar direto no onclick) — nunca o título: título vem do TMDB sem
+// passar por esc() (que não escapa aspas simples) e um apóstrofo (ex. "Ocean's Eleven")
+// quebraria a string do onclick se fosse passado como argumento.
+async function descartarRecomendacao(tmdbId){
+  if(!CU){ showToast('⚠️ Selecione seu perfil primeiro!'); return; }
+  try{
+    const {error} = await supa.from('descartes_recomendacao').upsert(
+      { usuario_id: CU, tmdb_id: tmdbId },
+      { onConflict: 'usuario_id,tmdb_id' }
+    );
+    if(error) throw error;
+    removerDoCacheParaVoce(tmdbId); // mesmo patch cirúrgico usado quando o filme entra no catálogo
+
+    const savedScroll = captureScroll();
+    render();
+    restoreScroll(savedScroll);
+    showToast('🚫 Não vai mais aparecer nas suas recomendações');
+  }catch(e){
+    console.error('Erro ao descartar recomendação:', e);
+    showToast('❌ Não foi possível descartar. Tente novamente.');
+  }
+}
+
 function buildUD(){
   const el = document.getElementById('udList');
   if(!el) return;
@@ -3521,6 +3548,16 @@ async function runBatched(items, limit, worker){
   return out;
 }
 
+// Tmdb_ids que o usuário descartou explicitamente de "fora do catálogo" (recomendação que
+// ele nunca vai querer) — usado só pra filtrar computeRecommendations, nunca lido em outro
+// lugar. Erro de rede aqui não pode travar a recomendação inteira: devolve set vazio e loga,
+// mesmo princípio de robustez de resolveTmdbId/fetchTmdbRecommendations nesta função.
+async function getDescartesTmdbIds(uid){
+  const {data, error} = await supa.from('descartes_recomendacao').select('tmdb_id').eq('usuario_id', uid);
+  if(error){ console.error('Erro ao buscar descartes:', error); return new Set(); }
+  return new Set((data||[]).map(r => r.tmdb_id));
+}
+
 async function computeRecommendations(uid){
   const base = getTop20RatedFilms(uid);
   const withIds = await runBatched(base, 5, async f => ({ f, tmdbId: await resolveTmdbId(f) }));
@@ -3534,12 +3571,18 @@ async function computeRecommendations(uid){
   const localByTmdbId = new Map();
   FILMES.forEach(f => { if(f.tmdb_id) localByTmdbId.set(f.tmdb_id, f); });
 
+  const descartados = await getDescartesTmdbIds(uid);
+
   // Todo filme do catálogo (avaliado ou não) fica de fora daqui — o Bloco A
   // ("Do CineList, pra você") é dono desse território agora; o mesmo filme
   // aparecendo nos dois blocos seria confuso. "Sem nota nenhuma" (vote_count=0)
-  // também é descartado — nada pra ajustar.
+  // também é descartado — nada pra ajustar. Filme que o usuário descartou
+  // explicitamente (descartarRecomendacao) nunca mais entra numa recomputação real —
+  // o patch pontual de cache (removerDoCacheParaVoce) já tira o card na hora, só depois
+  // do insert confirmado; este filtro é o que garante que não volta no próximo recálculo.
   const elegiveis = [...byId.values()]
     .filter(m => !localByTmdbId.get(m.id))
+    .filter(m => !descartados.has(m.id))
     .filter(m => m.vote_count && m.vote_average != null);
   if(!elegiveis.length) return [];
 
@@ -3820,7 +3863,10 @@ function recCardHTML(r){
         <div style="font-size:10px;font-weight:700;padding:3px 8px;border-radius:12px;background:rgba(70,211,105,.15);color:var(--green);width:fit-content">${fmt(r.notaFinal)} · nota do TMDB ajustada</div>
         <div style="font-size:10px;color:var(--muted2)">${r.numAvaliaram.toLocaleString('pt-BR')} pessoa${r.numAvaliaram!==1?'s':''} avaliaram (TMDB)</div>
         ${syn?`<div style="font-size:11.5px;color:var(--muted);line-height:1.4">${esc(syn)}</div>`:''}
-        <button id="addBtn_${r.tmdbId}" onclick="tocarAdicionarBlocoB(${r.tmdbId})" style="font-size:10px;font-family:inherit;font-weight:700;padding:4px 10px;border-radius:12px;border:1px solid var(--border);width:fit-content;margin-top:2px;background:${btnAdd.background};color:${btnAdd.cor};cursor:pointer">${btnAdd.texto}</button>
+        <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:2px">
+          <button id="addBtn_${r.tmdbId}" onclick="tocarAdicionarBlocoB(${r.tmdbId})" style="font-size:10px;font-family:inherit;font-weight:700;padding:4px 10px;border-radius:12px;border:1px solid var(--border);width:fit-content;background:${btnAdd.background};color:${btnAdd.cor};cursor:pointer">${btnAdd.texto}</button>
+          <button onclick="descartarRecomendacao(${r.tmdbId})" style="font-size:10px;font-family:inherit;font-weight:700;padding:4px 10px;border-radius:12px;border:1px solid var(--border);width:fit-content;background:var(--surface2);color:var(--muted);cursor:pointer">🚫 Descartar</button>
+        </div>
       </div>
     </div>
   `;
