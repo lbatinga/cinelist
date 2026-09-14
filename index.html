@@ -309,12 +309,13 @@ tr.selected td{background:rgba(229,9,20,.05)}
   .td-name{font-size:14px;max-width:200px}
   .detail-panel{display:none}
   table tbody tr{cursor:pointer;-webkit-tap-highlight-color:rgba(255,255,255,.08)}
-  /* ── FILMES (só mobile — desktop volta a ser a table acima) ── */
+  /* ── Listas com card+miniatura, só mobile — Filmes e Recentes hoje, desktop volta a ser
+     a <table> de cada tela ── */
   .film-list-header{display:flex;align-items:center;gap:12px;padding:0 8px 8px;font-size:11px;font-weight:500;letter-spacing:.4px;text-transform:uppercase;color:var(--muted2)}
   .film-lh-spacer{width:32px;flex-shrink:0}
   .film-lh-nota{width:48px;flex-shrink:0;cursor:pointer}
   .film-lh-nome{flex:1;cursor:pointer}
-  .film-card{display:flex;align-items:center;gap:12px;background:var(--surface);border-radius:10px;padding:10px 8px;margin-bottom:6px;cursor:pointer;-webkit-tap-highlight-color:rgba(255,255,255,.08)}
+  .film-card{display:flex;align-items:center;gap:12px;background:var(--surface);border-left:4px solid transparent;border-radius:10px;padding:10px 8px;margin-bottom:6px;cursor:pointer;-webkit-tap-highlight-color:rgba(255,255,255,.08)}
   .film-card.selected{background:rgba(229,9,20,.08)}
   .film-thumb{width:32px;height:48px;object-fit:cover;border-radius:4px;flex-shrink:0;background:var(--surface2)}
   .film-thumb-empty{width:32px;height:48px;border-radius:4px;flex-shrink:0;background:var(--surface2);display:flex;align-items:center;justify-content:center;font-size:16px;color:var(--muted)}
@@ -1762,6 +1763,17 @@ function classStyleAttr(c){
   return cc?` style="background:${cc.bg};color:${cc.fg};border:1px solid rgba(255,255,255,.25)"`:'';
 }
 
+// Cor da barra de status nos cards mobile — status de QUEM ESTÁ OLHANDO (CU), não do grupo.
+// nota!==null vale como assistido mesmo se vai vier '' ou 'Sim' (ex. marcado via "Quero ver"
+// e depois avaliado); vai==='Não' só conta como recusa quando não há nota — confirmado ao
+// vivo que essa combinação (nota preenchida + vai='Não') não existe no banco hoje.
+function myStatusColor(f){
+  const av = CU ? f.avaliacoes[CU] : null;
+  if(av && av.nota !== null) return 'var(--green)';
+  if(av && av.vai === 'Não') return 'var(--red)';
+  return 'var(--muted2)';
+}
+
 // Converte cor da nota em glow rgba
 function glowC(media){
   if(!media) return 'rgba(0,0,0,.45)';
@@ -1822,7 +1834,7 @@ function renderFilmes(selectedId, forceGenre){
         </div>
         ${list.map(f=>{
           const nota=f.media?`<span style="color:${nC(f.media)}">${fmt(f.media)}</span>`:`<span style="color:var(--muted2)">—</span>`;
-          return `<div class="film-card ${f.id===selId?'selected':''}" onclick="openFilmeInPanel('${f.id}')">
+          return `<div class="film-card ${f.id===selId?'selected':''}" style="border-left-color:${myStatusColor(f)}" onclick="openFilmeInPanel('${f.id}')">
             ${f.poster?`<img class="film-thumb" src="${esc(f.poster)}" loading="lazy" alt="" onerror="this.style.display='none'">`:`<div class="film-thumb-empty">🎬</div>`}
             <div class="film-card-content">
               <div class="film-nota">${nota}</div>
@@ -2148,13 +2160,26 @@ function renderRecentes(){
     el.innerHTML=`<div class="tpage"><div class="tpage-header"><div class="tpage-title">Filmes Recentes</div></div><div class="empty-block"><div class="empty-icon">🎬</div><div>Nenhum filme adicionado nos últimos 15 dias.</div></div></div>`;
     return;
   }
-  el.innerHTML=`
-    <div class="detail-layout">
-      <div class="detail-list">
-        <div class="tpage" style="padding-bottom:0">
-          <div class="tpage-header"><div class="tpage-title">Filmes Recentes <span style="color:var(--muted);font-size:13px;font-weight:400">${list.length}</span></div></div>
-          <p style="font-size:12px;color:var(--muted);margin-bottom:14px">Adicionados nos últimos 15 dias</p>
+  // Mesmo padrão da aba Filmes: miniatura+card só no mobile, desktop mantém a table original.
+  const isMobile = window.innerWidth < 769;
+  const listHTML = isMobile ? `
+        <div class="film-list-header">
+          <div class="film-lh-spacer"></div>
+          <div class="film-lh-nota" onclick="toggleSort('recentes','nota')">Nota${sortIcon('recentes','nota')}</div>
+          <div class="film-lh-nome" onclick="toggleSort('recentes','nome')">Nome${sortIcon('recentes','nome')}</div>
         </div>
+        ${list.map(f=>{
+          const dCad = parseDataCadastro(f);
+          const relDate = dCad ? feedRelDate(dCad) : '—';
+          return `<div class="film-card ${f.id===list[0].id?'selected':''}" style="border-left-color:${myStatusColor(f)}" onclick="openRecentPanel('${f.id}')">
+            ${f.poster?`<img class="film-thumb" src="${esc(f.poster)}" loading="lazy" alt="" onerror="this.style.display='none'">`:`<div class="film-thumb-empty">🎬</div>`}
+            <div class="film-card-content">
+              <div class="film-nota">${f.media?`<span style="color:${nC(f.media)}">${fmt(f.media)}</span>`:`<span style="color:var(--muted2)">—</span>`}</div>
+              <div class="film-nome">${esc(f.nome)}</div>
+              <div class="film-sub">${f.ano} · ${f.duracao_str} · adicionado por ${esc(displayName(f.inserido_por))} · ${relDate}</div>
+            </div>
+          </div>`;
+        }).join('')}` : `
         <table>
           <thead><tr><th style="cursor:pointer" onclick="toggleSort('recentes','nome')">Nome${sortIcon('recentes','nome')}</th><th style="cursor:pointer" onclick="toggleSort('recentes','ano')">Ano${sortIcon('recentes','ano')}</th><th style="cursor:pointer" onclick="toggleSort('recentes','nota')">Nota${sortIcon('recentes','nota')}</th><th style="cursor:pointer" onclick="toggleSort('recentes','adicionado')">Adicionado${sortIcon('recentes','adicionado')}</th><th>Status</th></tr></thead>
           <tbody>
@@ -2170,7 +2195,16 @@ function renderRecentes(){
             </tr>`;
           }).join('')}
           </tbody>
-        </table>
+        </table>`;
+
+  el.innerHTML=`
+    <div class="detail-layout">
+      <div class="detail-list">
+        <div class="tpage" style="padding-bottom:0">
+          <div class="tpage-header"><div class="tpage-title">Filmes Recentes <span style="color:var(--muted);font-size:13px;font-weight:400">${list.length}</span></div></div>
+          <p style="font-size:12px;color:var(--muted);margin-bottom:14px">Adicionados nos últimos 15 dias</p>
+        </div>
+        ${listHTML}
       </div>
       <div class="detail-panel" id="recentDetailPanel">${filmDetailHTML(list[0].id)}</div>
     </div>
@@ -2178,7 +2212,7 @@ function renderRecentes(){
 }
 
 function openRecentPanel(id){
-  document.querySelectorAll('#viewRecentes tr').forEach(r=>r.classList.remove('selected'));
+  document.querySelectorAll('#viewRecentes tr, #viewRecentes .film-card').forEach(r=>r.classList.remove('selected'));
   event?.currentTarget?.classList.add('selected');
   pushFilmeRoute(id);
   document.getElementById('recentDetailPanel').innerHTML=filmDetailHTML(id);
