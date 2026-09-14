@@ -2786,6 +2786,54 @@ function tocarAdicionarBlocoB(tmdbId){
   atualizarBotaoAdicionar(tmdbId);
 }
 
+// Mesmo mecanismo de confirmação de dois toques do "➕ Adicionar" acima, réplica exata —
+// estado próprio (blocoBDescarteArmado), não o blocoBArmado do Adicionar, pra armar um botão
+// não mexer no outro no mesmo card. Cor de confirmação diferente (#e05555, não var(--yellow)):
+// mesmo tom que .dp-del/"não quero assistir" já usam no resto do app pra ação destrutiva —
+// não var(--red), que é o vermelho de marca usado em ações normais/destaque.
+var blocoBDescarteArmado = null; // { tmdbId, timeoutId } | null
+
+function estiloBotaoDescartar(tmdbId){
+  const armado = blocoBDescarteArmado?.tmdbId === tmdbId;
+  return {
+    texto: armado ? 'Confirmar?' : '🚫 Descartar',
+    background: armado ? '#e05555' : 'var(--surface2)',
+    cor: armado ? '#000' : 'var(--muted)'
+  };
+}
+
+function atualizarBotaoDescartar(tmdbId){
+  const btn = document.getElementById('descartBtn_'+tmdbId);
+  if(!btn) return; // card já não está mais na tela — nada a fazer, sem erro
+  const s = estiloBotaoDescartar(tmdbId);
+  btn.textContent = s.texto;
+  btn.style.background = s.background;
+  btn.style.color = s.cor;
+}
+
+function tocarDescartarRecomendacao(tmdbId){
+  if(blocoBDescarteArmado?.tmdbId === tmdbId){
+    // 2º toque no mesmo botão — confirma de verdade
+    clearTimeout(blocoBDescarteArmado.timeoutId);
+    blocoBDescarteArmado = null;
+    descartarRecomendacao(tmdbId);
+    return;
+  }
+  // Só um card armado por vez — desarma o anterior (se houver) antes de armar este
+  if(blocoBDescarteArmado){
+    clearTimeout(blocoBDescarteArmado.timeoutId);
+    const tmdbIdAnterior = blocoBDescarteArmado.tmdbId;
+    blocoBDescarteArmado = null;
+    atualizarBotaoDescartar(tmdbIdAnterior);
+  }
+  const timeoutId = setTimeout(() => {
+    blocoBDescarteArmado = null;
+    atualizarBotaoDescartar(tmdbId);
+  }, 3000);
+  blocoBDescarteArmado = { tmdbId, timeoutId };
+  atualizarBotaoDescartar(tmdbId);
+}
+
 // Adiciona ao catálogo direto do card do Bloco B — pula busca por nome (tmdb_id já
 // conhecido) e encadeia "avalie agora" igual ao fluxo do modal.
 async function adicionarDoBlocoB(tmdbId){
@@ -2823,8 +2871,9 @@ async function adicionarDoBlocoB(tmdbId){
 }
 
 // Descarta uma recomendação de fora do catálogo — some das recomendações de quem descartou,
-// só dele (grava usuario_id+tmdb_id). Um toque só, sem confirmação dupla como "➕ Adicionar":
-// é individual e reversível (a linha continua no banco, uma tela de "descartados" futura
+// só dele (grava usuario_id+tmdb_id). Chamada só pelo 2º toque de tocarDescartarRecomendacao()
+// (confirmação dupla, mesmo mecanismo do "➕ Adicionar") — nunca direto do onclick do card.
+// É individual e reversível (a linha continua no banco, uma tela de "descartados" futura
 // poderia desfazer só apagando), não cria nada visível pra mais ninguém. Só recebe tmdbId
 // (número, seguro de interpolar direto no onclick) — nunca o título: título vem do TMDB sem
 // passar por esc() (que não escapa aspas simples) e um apóstrofo (ex. "Ocean's Eleven")
@@ -3853,6 +3902,7 @@ function paraVoceHTML(list, calculatedAt){
 function recCardHTML(r){
   const syn = r.sinopse ? (r.sinopse.length>140 ? r.sinopse.slice(0,140)+'…' : r.sinopse) : '';
   const btnAdd = estiloBotaoAdicionar(r.tmdbId);
+  const btnDescartar = estiloBotaoDescartar(r.tmdbId);
   return `
     <div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;overflow:hidden;display:flex;flex-direction:column">
       ${r.poster
@@ -3865,7 +3915,7 @@ function recCardHTML(r){
         ${syn?`<div style="font-size:11.5px;color:var(--muted);line-height:1.4">${esc(syn)}</div>`:''}
         <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:2px">
           <button id="addBtn_${r.tmdbId}" onclick="tocarAdicionarBlocoB(${r.tmdbId})" style="font-size:10px;font-family:inherit;font-weight:700;padding:4px 10px;border-radius:12px;border:1px solid var(--border);width:fit-content;background:${btnAdd.background};color:${btnAdd.cor};cursor:pointer">${btnAdd.texto}</button>
-          <button onclick="descartarRecomendacao(${r.tmdbId})" style="font-size:10px;font-family:inherit;font-weight:700;padding:4px 10px;border-radius:12px;border:1px solid var(--border);width:fit-content;background:var(--surface2);color:var(--muted);cursor:pointer">🚫 Descartar</button>
+          <button id="descartBtn_${r.tmdbId}" onclick="tocarDescartarRecomendacao(${r.tmdbId})" style="font-size:10px;font-family:inherit;font-weight:700;padding:4px 10px;border-radius:12px;border:1px solid var(--border);width:fit-content;background:${btnDescartar.background};color:${btnDescartar.cor};cursor:pointer">${btnDescartar.texto}</button>
         </div>
       </div>
     </div>
