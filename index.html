@@ -166,6 +166,25 @@ tr.selected td{background:rgba(229,9,20,.05)}
 .td-name{font-weight:500;max-width:380px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .td-muted{color:var(--muted)}
 
+/* ── FILMES: linhas viram cards com miniatura (item novo) ── */
+.film-list-header{display:flex;align-items:center;gap:12px;padding:0 12px 8px;font-size:11px;font-weight:500;letter-spacing:.4px;text-transform:uppercase;color:var(--muted2)}
+.film-lh-spacer{width:32px;flex-shrink:0}
+.film-lh-nota{width:48px;flex-shrink:0;cursor:pointer}
+.film-lh-nome{flex:1;cursor:pointer}
+.film-lh-ano,.film-lh-duracao,.film-lh-por{width:70px;flex-shrink:0;cursor:pointer}
+.film-card{display:flex;align-items:center;gap:12px;background:var(--surface);border-radius:10px;padding:8px 12px;margin-bottom:6px;cursor:pointer;transition:background .15s}
+.film-card:hover{background:var(--surface2)}
+.film-card.selected{background:rgba(229,9,20,.08)}
+.film-thumb{width:32px;height:48px;object-fit:cover;border-radius:4px;flex-shrink:0;background:var(--surface2)}
+.film-thumb-empty{width:32px;height:48px;border-radius:4px;flex-shrink:0;background:var(--surface2);display:flex;align-items:center;justify-content:center;font-size:16px;color:var(--muted)}
+.film-card-content{display:flex;align-items:center;gap:12px;flex:1;min-width:0}
+.film-nota{width:48px;flex-shrink:0;font-weight:800;font-size:14px}
+.film-name-wrap{flex:1;min-width:0}
+.film-nome{font-weight:500;font-size:13px}
+.film-sub{display:none;font-size:11px;color:var(--muted);margin-top:2px}
+.film-ano,.film-duracao{width:70px;flex-shrink:0;color:var(--muted);font-size:13px}
+.film-por{width:70px;flex-shrink:0;color:var(--muted);font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+
 /* ── FILM DETAIL (split panel) ── */
 .detail-layout{display:flex;height:calc(100vh - 60px - var(--safe-top));overflow:hidden}
 .detail-list{width:55%;border-right:1px solid var(--border);overflow-y:auto;flex-shrink:0}
@@ -309,6 +328,13 @@ tr.selected td{background:rgba(229,9,20,.05)}
   .td-name{font-size:14px;max-width:200px}
   .detail-panel{display:none}
   table tbody tr{cursor:pointer;-webkit-tap-highlight-color:rgba(255,255,255,.08)}
+  .film-list-header{padding:0 8px 8px}
+  .film-lh-ano,.film-lh-duracao,.film-lh-por{display:none}
+  .film-card{padding:10px 8px;-webkit-tap-highlight-color:rgba(255,255,255,.08)}
+  .film-card-content{flex-direction:column;align-items:flex-start;gap:2px}
+  .film-ano,.film-duracao,.film-por{display:none}
+  .film-sub{display:block}
+  .film-nome{font-size:14px}
   /* Add film modal — mobile fits */
   .modal-overlay{padding:12px}
   .add-modal-box{padding:18px;max-height:calc(100vh - 24px)}
@@ -1811,22 +1837,30 @@ function renderFilmes(selectedId, forceGenre){
             ${genres.map(g=>`<button class="gpill ${AGenre===g?'active':''}" onclick="setGenre('${esc(g)}')">${g}</button>`).join('')}
           </div>
         </div>
-        <table>
-          <thead><tr><th style="width:60px;cursor:pointer" onclick="toggleSort('filmes','nota')">Nota${sortIcon('filmes','nota')}</th><th style="width:28px"></th><th style="cursor:pointer" onclick="toggleSort('filmes','nome')">Nome${sortIcon('filmes','nome')}</th><th style="cursor:pointer" onclick="toggleSort('filmes','ano')">Ano${sortIcon('filmes','ano')}</th><th style="cursor:pointer" onclick="toggleSort('filmes','duracao')">Duração${sortIcon('filmes','duracao')}</th><th style="cursor:pointer" onclick="toggleSort('filmes','por')">Por${sortIcon('filmes','por')}</th></tr></thead>
-          <tbody>
-          ${list.map(f=>{
-            const nota=f.media?`<span style="color:${nC(f.media)}">${fmt(f.media)}</span>`:`<span style="color:var(--muted2)">—</span>`;
-            return `<tr class="${f.id===selId?'selected':''}" onclick="openFilmeInPanel('${f.id}')">
-              <td class="td-nota">${nota}</td>
-              <td style="color:var(--muted2);font-size:11px">↗</td>
-              <td class="td-name">${esc(f.nome)}</td>
-              <td class="td-muted">${f.ano}</td>
-              <td class="td-muted">${f.duracao_str}</td>
-              <td class="td-muted" style="max-width:80px;overflow:hidden;text-overflow:ellipsis">${esc(displayName(f.inserido_por))}</td>
-            </tr>`;
-          }).join('')}
-          </tbody>
-        </table>
+        <div class="film-list-header">
+          <div class="film-lh-spacer"></div>
+          <div class="film-lh-nota" onclick="toggleSort('filmes','nota')">Nota${sortIcon('filmes','nota')}</div>
+          <div class="film-lh-nome" onclick="toggleSort('filmes','nome')">Nome${sortIcon('filmes','nome')}</div>
+          <div class="film-lh-ano" onclick="toggleSort('filmes','ano')">Ano${sortIcon('filmes','ano')}</div>
+          <div class="film-lh-duracao" onclick="toggleSort('filmes','duracao')">Duração${sortIcon('filmes','duracao')}</div>
+          <div class="film-lh-por" onclick="toggleSort('filmes','por')">Por${sortIcon('filmes','por')}</div>
+        </div>
+        ${list.map(f=>{
+          const nota=f.media?`<span style="color:${nC(f.media)}">${fmt(f.media)}</span>`:`<span style="color:var(--muted2)">—</span>`;
+          return `<div class="film-card ${f.id===selId?'selected':''}" onclick="openFilmeInPanel('${f.id}')">
+            ${f.poster?`<img class="film-thumb" src="${esc(f.poster)}" loading="lazy" alt="" onerror="this.style.display='none'">`:`<div class="film-thumb-empty">🎬</div>`}
+            <div class="film-card-content">
+              <div class="film-nota">${nota}</div>
+              <div class="film-name-wrap">
+                <div class="film-nome">${esc(f.nome)}</div>
+                <div class="film-sub">${f.ano} · ${esc(displayName(f.inserido_por))}</div>
+              </div>
+              <div class="film-ano">${f.ano}</div>
+              <div class="film-duracao">${f.duracao_str}</div>
+              <div class="film-por">${esc(displayName(f.inserido_por))}</div>
+            </div>
+          </div>`;
+        }).join('')}
       </div>
       <div class="detail-panel" id="filmDetailPanel">${selId?filmDetailHTML(selId):'<div class="dp-empty">Selecione um filme</div>'}</div>
     </div>
@@ -1837,7 +1871,7 @@ function renderFilmes(selectedId, forceGenre){
 // direto (sem clique real por trás) — ver onLogin(). Todo outro chamador (clique de linha,
 // prev/next do painel) não passa o 2º argumento, comportamento inalterado.
 function openFilmeInPanel(id, _skipHistory){
-  document.querySelectorAll('#viewFilmes tr').forEach(r=>r.classList.remove('selected'));
+  document.querySelectorAll('#viewFilmes .film-card').forEach(r=>r.classList.remove('selected'));
   event?.currentTarget?.classList.add('selected'); // opcional: sem clique real por trás
                                                     // (boot), não há o que destacar
   if(!_skipHistory) pushFilmeRoute(id);
@@ -1943,7 +1977,7 @@ function openFilme(id){
   navigate('filmes');
   setTimeout(()=>{
     // find the row and click it
-    const rows = document.querySelectorAll('#viewFilmes tbody tr');
+    const rows = document.querySelectorAll('#viewFilmes .film-card');
     const idx = navList.findIndex(f=>f.id===id);
     if(idx>=0 && rows[idx]){
       rows[idx].scrollIntoView({block:'center', behavior:'smooth'});
