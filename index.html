@@ -2120,6 +2120,69 @@ function renderAvaliacoes(tab){
   navList = list;
   const sel = list[0]?.id;
 
+  // Mesmo padrão de Filmes/Recentes/Pendentes: card+miniatura só no mobile, desktop mantém
+  // a table original. Sem barra de status nas duas sub-abas — Avaliadas é 100% verde por
+  // definição (só chega lá quem tem nota) e Não quero é 100% vermelha (só chega lá quem
+  // recusou) — a barra seria sempre a mesma cor, zero informação, mesmo raciocínio da
+  // Pendentes (que é sempre cinza por definição).
+  const isMobile = window.innerWidth < 769;
+  const listHTML = avTab === 'avaliadas' ? (isMobile ? `
+        <div class="film-list-header">
+          <div class="film-lh-spacer"></div>
+          <div class="film-lh-nota" onclick="toggleSort('avaliacoes','nota')">Nota${sortIcon('avaliacoes','nota')}</div>
+          <div class="film-lh-nome" onclick="toggleSort('avaliacoes','nome')">Nome${sortIcon('avaliacoes','nome')}</div>
+        </div>
+        ${list.map(f=>{
+          const av=f.avaliacoes[CU];
+          // Data pode vir vazia (buraco histórico de avaliações sem data, ver CLAUDE.md) —
+          // monta a sublinha como lista e filtra os vazios antes de juntar, em vez de
+          // concatenar string fixa, pra não sobrar "· " pendurado quando falta um campo.
+          const sub = [f.ano, f.duracao_str, av.data].filter(Boolean).join(' · ');
+          return `<div class="film-card ${f.id===sel?'selected':''}" onclick="openAvPanel('${f.id}')">
+            ${f.poster?`<img class="film-thumb" src="${esc(f.poster)}" loading="lazy" alt="" onerror="this.style.display='none'">`:`<div class="film-thumb-empty">🎬</div>`}
+            <div class="film-card-content">
+              <div class="film-nota" style="color:${nC(av.nota)}">${fmt(av.nota)}</div>
+              <div class="film-nome">${esc(f.nome)}</div>
+              <div class="film-sub">${sub}</div>
+            </div>
+          </div>`;
+        }).join('')}` : `
+        <table>
+          <thead><tr><th style="cursor:pointer" onclick="toggleSort('avaliacoes','nome')">Filme${sortIcon('avaliacoes','nome')}</th><th style="width:70px;cursor:pointer" onclick="toggleSort('avaliacoes','nota')">Nota${sortIcon('avaliacoes','nota')}</th><th style="cursor:pointer" onclick="toggleSort('avaliacoes','data')">Data${sortIcon('avaliacoes','data')}</th></tr></thead>
+          <tbody>
+          ${list.map(f=>{
+            const av=f.avaliacoes[CU];
+            return `<tr class="${f.id===sel?'selected':''}" onclick="openAvPanel('${f.id}')">
+              <td class="td-name">${esc(f.nome)}</td>
+              <td><span style="color:${nC(av.nota)};font-weight:800">${fmt(av.nota)}</span></td>
+              <td class="td-muted">${av.data||''}</td>
+            </tr>`;
+          }).join('')}
+          </tbody>
+        </table>`) : (isMobile ? `
+        <div class="film-list-header">
+          <div class="film-lh-spacer"></div>
+          <div class="film-lh-nome" onclick="toggleSort('avaliacoes_nq','nome')">Nome${sortIcon('avaliacoes_nq','nome')}</div>
+        </div>
+        ${list.map(f=>`<div class="film-card ${f.id===sel?'selected':''}" onclick="openAvPanel('${f.id}')">
+            ${f.poster?`<img class="film-thumb" src="${esc(f.poster)}" loading="lazy" alt="" onerror="this.style.display='none'">`:`<div class="film-thumb-empty">🎬</div>`}
+            <div class="film-card-content">
+              <div class="film-nome">${esc(f.nome)}</div>
+              <div class="film-sub">${f.ano} · ${f.duracao_str}</div>
+            </div>
+            <span onclick="event.stopPropagation();mudarDeOpiniao('${f.id}')" style="color:#e05555;font-size:11px;font-weight:700;cursor:pointer;padding:8px 10px;flex-shrink:0">🔄 Mudar</span>
+          </div>`).join('')}` : `
+        <table>
+          <thead><tr><th style="cursor:pointer" onclick="toggleSort('avaliacoes_nq','nome')">Filme${sortIcon('avaliacoes_nq','nome')}</th><th style="cursor:pointer" onclick="toggleSort('avaliacoes_nq','ano')">Ano${sortIcon('avaliacoes_nq','ano')}</th><th>Ação</th></tr></thead>
+          <tbody>
+          ${list.map(f=>`<tr class="${f.id===sel?'selected':''}" onclick="openAvPanel('${f.id}')">
+              <td class="td-name">${esc(f.nome)}</td>
+              <td class="td-muted">${f.ano}</td>
+              <td><span onclick="event.stopPropagation();mudarDeOpiniao('${f.id}')" style="color:#e05555;font-size:11px;cursor:pointer;font-weight:700">🔄 Mudar</span></td>
+            </tr>`).join('')}
+          </tbody>
+        </table>`);
+
   document.getElementById('viewAvaliacoes').innerHTML=`
     <div class="detail-layout">
       <div class="detail-list">
@@ -2134,30 +2197,7 @@ function renderAvaliacoes(tab){
             </button>
           </div>
         </div>
-        ${avTab === 'avaliadas' ? `
-        <table>
-          <thead><tr><th style="cursor:pointer" onclick="toggleSort('avaliacoes','nome')">Filme${sortIcon('avaliacoes','nome')}</th><th style="width:70px;cursor:pointer" onclick="toggleSort('avaliacoes','nota')">Nota${sortIcon('avaliacoes','nota')}</th><th style="cursor:pointer" onclick="toggleSort('avaliacoes','data')">Data${sortIcon('avaliacoes','data')}</th></tr></thead>
-          <tbody>
-          ${list.map(f=>{
-            const av=f.avaliacoes[CU];
-            return `<tr class="${f.id===sel?'selected':''}" onclick="openAvPanel('${f.id}')">
-              <td class="td-name">${esc(f.nome)}</td>
-              <td><span style="color:${nC(av.nota)};font-weight:800">${fmt(av.nota)}</span></td>
-              <td class="td-muted">${av.data||''}</td>
-            </tr>`;
-          }).join('')}
-          </tbody>
-        </table>` : `
-        <table>
-          <thead><tr><th style="cursor:pointer" onclick="toggleSort('avaliacoes_nq','nome')">Filme${sortIcon('avaliacoes_nq','nome')}</th><th style="cursor:pointer" onclick="toggleSort('avaliacoes_nq','ano')">Ano${sortIcon('avaliacoes_nq','ano')}</th><th>Ação</th></tr></thead>
-          <tbody>
-          ${list.map(f=>`<tr class="${f.id===sel?'selected':''}" onclick="openAvPanel('${f.id}')">
-              <td class="td-name">${esc(f.nome)}</td>
-              <td class="td-muted">${f.ano}</td>
-              <td><span onclick="event.stopPropagation();mudarDeOpiniao('${f.id}')" style="color:#e05555;font-size:11px;cursor:pointer;font-weight:700">🔄 Mudar</span></td>
-            </tr>`).join('')}
-          </tbody>
-        </table>`}
+        ${listHTML}
       </div>
       <div class="detail-panel" id="avDetailPanel">${sel?filmDetailHTML(sel):'<div class="dp-empty">Selecione um filme</div>'}</div>
     </div>
@@ -2165,7 +2205,7 @@ function renderAvaliacoes(tab){
 }
 
 function openAvPanel(id){
-  document.querySelectorAll('#viewAvaliacoes tr').forEach(r=>r.classList.remove('selected'));
+  document.querySelectorAll('#viewAvaliacoes tr, #viewAvaliacoes .film-card').forEach(r=>r.classList.remove('selected'));
   event?.currentTarget?.classList.add('selected');
   pushFilmeRoute(id);
   document.getElementById('avDetailPanel').innerHTML=filmDetailHTML(id);
