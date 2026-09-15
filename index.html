@@ -2037,14 +2037,40 @@ function renderPendentes(selId){
   navList=list;
   const sid=selId||(list[0]?.id);
   
-  document.getElementById('viewPendentes').innerHTML=`
-    <div class="detail-layout">
-      <div class="detail-list">
-        <div class="tpage" style="padding-bottom:0">
-          <div class="tpage-header">
-            <div class="tpage-title">Meus Pendentes <span style="color:var(--muted);font-size:13px;font-weight:400">${list.length}</span></div>
-          </div>
+  // Mesmo padrão de Filmes/Recentes: card+miniatura só no mobile, desktop mantém a table
+  // original. Sem barra de status aqui — todo filme em s.pendentes já é, por construção,
+  // "CU ainda não avaliou nem recusou" (calcUserStats), então a barra seria sempre cinza,
+  // sem informação nenhuma (confirmado antes de propor, ver CLAUDE.md quando fechar o item).
+  const isMobile = window.innerWidth < 769;
+  const listHTML = isMobile ? `
+        <div class="film-list-header">
+          <div class="film-lh-spacer"></div>
+          <div class="film-lh-nota" onclick="toggleSort('pendentes','nota')">Nota${sortIcon('pendentes','nota')}</div>
+          <div class="film-lh-nome" onclick="toggleSort('pendentes','nome')">Nome${sortIcon('pendentes','nome')}</div>
         </div>
+        ${list.map(f=>{
+          const nota=f.media?`<span style="color:${nC(f.media)}">${fmt(f.media)}</span>`:'<span style="color:var(--muted2)">—</span>';
+          // "Quem quer ver" — nunca inclui CU (tudo aqui já é implicitamente "CU não viu",
+          // mostrar o próprio nome não diria nada novo); é o resto da tropa que já bookmarkou
+          // via "🔖 Quero ver" (vai='Sim', sem nota ainda) que é o dado útil. Dado nunca
+          // agregado/exibido em lugar nenhum do app antes desta tela — não é coluna existente
+          // virando sublinha, é derivado pela 1ª vez de f.avaliacoes, já carregado em memória.
+          const quemQuer = Object.entries(f.avaliacoes)
+            .filter(([uid,av]) => uid!==CU && av.vai==='Sim' && av.nota===null)
+            .map(([uid]) => displayName(uid))
+            .sort((a,b) => a.localeCompare(b));
+          const quemQuerTxt = quemQuer.length
+            ? (quemQuer.length>2 ? quemQuer.slice(0,2).join(', ')+' +'+(quemQuer.length-2) : quemQuer.join(', '))
+            : '—';
+          return `<div class="film-card ${f.id===sid?'selected':''}" onclick="openPendPanel('${f.id}')">
+            ${f.poster?`<img class="film-thumb" src="${esc(f.poster)}" loading="lazy" alt="" onerror="this.style.display='none'">`:`<div class="film-thumb-empty">🎬</div>`}
+            <div class="film-card-content">
+              <div class="film-nota">${nota}</div>
+              <div class="film-nome">${esc(f.nome)}</div>
+              <div class="film-sub">${f.ano} · ${f.duracao_str} · 🔖 ${esc(quemQuerTxt)}</div>
+            </div>
+          </div>`;
+        }).join('')}` : `
         <table>
           <thead><tr><th style="width:60px;cursor:pointer" onclick="toggleSort('pendentes','nota')">Nota${sortIcon('pendentes','nota')}</th><th style="width:28px"></th><th style="cursor:pointer" onclick="toggleSort('pendentes','nome')">Nome${sortIcon('pendentes','nome')}</th><th style="cursor:pointer" onclick="toggleSort('pendentes','ano')">Ano${sortIcon('pendentes','ano')}</th><th style="cursor:pointer" onclick="toggleSort('pendentes','duracao')">Duração${sortIcon('pendentes','duracao')}</th><th style="cursor:pointer" onclick="toggleSort('pendentes','por')">Por${sortIcon('pendentes','por')}</th><th style="cursor:pointer" onclick="toggleSort('pendentes','avals')">Avals${sortIcon('pendentes','avals')}</th></tr></thead>
           <tbody>
@@ -2062,14 +2088,24 @@ function renderPendentes(selId){
             </tr>`;
           }).join('')}
           </tbody>
-        </table>
+        </table>`;
+
+  document.getElementById('viewPendentes').innerHTML=`
+    <div class="detail-layout">
+      <div class="detail-list">
+        <div class="tpage" style="padding-bottom:0">
+          <div class="tpage-header">
+            <div class="tpage-title">Meus Pendentes <span style="color:var(--muted);font-size:13px;font-weight:400">${list.length}</span></div>
+          </div>
+        </div>
+        ${listHTML}
       </div>
       <div class="detail-panel" id="pendDetailPanel">${sid?filmDetailHTML(sid):'<div class="dp-empty">Selecione um filme</div>'}</div>
     </div>
   `;
 }
 function openPendPanel(id){
-  document.querySelectorAll('#viewPendentes tr').forEach(r=>r.classList.remove('selected'));
+  document.querySelectorAll('#viewPendentes tr, #viewPendentes .film-card').forEach(r=>r.classList.remove('selected'));
   event?.currentTarget?.classList.add('selected');
   pushFilmeRoute(id);
   if(window.innerWidth < 769){ openMobileFilmeModal(id); return; }
