@@ -2050,24 +2050,12 @@ function renderPendentes(selId){
         </div>
         ${list.map(f=>{
           const nota=f.media?`<span style="color:${nC(f.media)}">${fmt(f.media)}</span>`:'<span style="color:var(--muted2)">—</span>';
-          // "Quem quer ver" — nunca inclui CU (tudo aqui já é implicitamente "CU não viu",
-          // mostrar o próprio nome não diria nada novo); é o resto da tropa que já bookmarkou
-          // via "🔖 Quero ver" (vai='Sim', sem nota ainda) que é o dado útil. Dado nunca
-          // agregado/exibido em lugar nenhum do app antes desta tela — não é coluna existente
-          // virando sublinha, é derivado pela 1ª vez de f.avaliacoes, já carregado em memória.
-          const quemQuer = Object.entries(f.avaliacoes)
-            .filter(([uid,av]) => uid!==CU && av.vai==='Sim' && av.nota===null)
-            .map(([uid]) => displayName(uid))
-            .sort((a,b) => a.localeCompare(b));
-          const quemQuerTxt = quemQuer.length
-            ? (quemQuer.length>2 ? quemQuer.slice(0,2).join(', ')+' +'+(quemQuer.length-2) : quemQuer.join(', '))
-            : '—';
           return `<div class="film-card ${f.id===sid?'selected':''}" onclick="openPendPanel('${f.id}')">
             ${f.poster?`<img class="film-thumb" src="${esc(f.poster)}" loading="lazy" alt="" onerror="this.style.display='none'">`:`<div class="film-thumb-empty">🎬</div>`}
             <div class="film-card-content">
               <div class="film-nota">${nota}</div>
               <div class="film-nome">${esc(f.nome)}</div>
-              <div class="film-sub">${f.ano} · ${f.duracao_str} · 🔖 ${esc(quemQuerTxt)}</div>
+              <div class="film-sub">${f.ano} · ${f.duracao_str}</div>
             </div>
           </div>`;
         }).join('')}` : `
