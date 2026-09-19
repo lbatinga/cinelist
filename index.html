@@ -1535,11 +1535,11 @@ document.getElementById('appScroll').addEventListener('scroll',function(){
 // rota no boot (refresh) e o deep-link de filme moram em onLogin() e no .then() de
 // loadFilmsFromSupabase() — ver ali pra por que precisam esperar o fetch.
 const HASH_VIEWS = ['home','filmes','pendentes','avaliacoes','recentes','ranking','descobertas'];
-const HASH_SUBTABS = { ranking: ['geral','ano','genero','filmes'], descobertas: ['stats','afinidades','atividades','pra_voce'] };
+const HASH_SUBTABS = { ranking: ['geral','ano','genero','filmes'], descobertas: ['pra_voce','stats','afinidades','atividades'] };
 
 function currentSubtab(view){
   if(view==='ranking') return rankTab;
-  if(view==='descobertas') return window.descTab || 'stats';
+  if(view==='descobertas') return window.descTab || 'pra_voce';
   return null;
 }
 
@@ -3580,17 +3580,17 @@ function scrollActiveTab(){
 
 function renderDescobertas(){
   const el = document.getElementById('viewDescobertas');
-  const descTab = window.descTab || 'stats';
+  const descTab = window.descTab || 'pra_voce';
   el.innerHTML = `
     <div class="rank-section">
       <div class="tpage-header" style="margin-bottom:16px">
         <div class="tpage-title">💡 Descobertas</div>
       </div>
       <div class="rtabs-wrap"><div class="rtabs">
+        <div class="rtab ${descTab==='pra_voce'?'active':''}" onclick="setDescTab('pra_voce')">🎯 Pra você</div>
         <div class="rtab ${descTab==='stats'?'active':''}" onclick="setDescTab('stats')">📊 Estatísticas</div>
         <div class="rtab ${descTab==='afinidades'?'active':''}" onclick="setDescTab('afinidades')">🤝 Afinidades</div>
         <div class="rtab ${descTab==='atividades'?'active':''}" onclick="setDescTab('atividades')">📢 Atividades</div>
-        <div class="rtab ${descTab==='pra_voce'?'active':''}" onclick="setDescTab('pra_voce')">🎯 Pra você</div>
       </div></div>
       <div id="descTabContent"></div>
     </div>
@@ -3610,7 +3610,7 @@ function renderDescobertas(){
 function setDescTab(tab){ window.descTab=tab; renderDescobertas(); scrollActiveTab(); history.replaceState({view:'descobertas'},'', routeUrl('descobertas', tab)); }
 
 function renderDescTab(){
-  const tab = window.descTab || 'stats';
+  const tab = window.descTab || 'pra_voce';
   const el = document.getElementById('descTabContent');
   if(tab==='afinidades') el.innerHTML = rankAfinidadesHTML();
   else if(tab==='atividades') el.innerHTML = rankAtividadesHTML();
@@ -3785,7 +3785,7 @@ function computeCineListParaVoce(uid){
     out.push({ filme: f, notaFinal, numAvaliaram: n, top: pesados.slice(0,3) });
   });
   out.sort((a,b) => b.notaFinal - a.notaFinal);
-  return out.slice(0,20);
+  return out.slice(0,8); // 8, não 20: o Bloco A não faz chamada de rede — o corte é só de rolagem/imagens no celular
 }
 
 // "Quero ver" sem abrir o modal de avaliação — mesmo padrão do mudarDeOpiniao() (upsert/
