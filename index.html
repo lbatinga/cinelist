@@ -944,49 +944,52 @@ async function loadComparativoParaUsuario(uid) {
   }
 }
 
+// Busca uma tabela inteira em páginas. A 1ª página vem com count exato; com ele, as demais
+// saem todas juntas em vez de uma esperar a outra (eram 6 idas e voltas em série só pra
+// filmes e 5 pra avaliações). Sem count (não deveria acontecer), cai no laço sequencial.
+async function fetchTodasPaginas(tabela, colunas, tamanho, ordem, timeoutMs){
+  const pagina = (i, contar) => {
+    let q = supa.from(tabela).select(colunas, contar ? { count: 'exact' } : undefined);
+    if(ordem) q = q.order(ordem.col, { ascending: ordem.asc });
+    q = q.range(i*tamanho, (i+1)*tamanho - 1);
+    if(!timeoutMs) return q;
+    return Promise.race([q, new Promise((_, rej) => setTimeout(() => rej(new Error('Timeout '+tabela)), timeoutMs))]);
+  };
+  const primeira = await pagina(0, true);
+  if(primeira.error) throw primeira.error;
+  let rows = primeira.data || [];
+  if(rows.length < tamanho) return rows;
+  if(primeira.count != null){
+    const total = Math.ceil(primeira.count / tamanho);
+    const resto = await Promise.all(Array.from({length: total-1}, (_, k) => pagina(k+1, false)));
+    resto.forEach(r => { if(r.error) throw r.error; rows = rows.concat(r.data || []); });
+    return rows;
+  }
+  for(let i=1;;i++){
+    const r = await pagina(i, false);
+    if(r.error) throw r.error;
+    if(!r.data || !r.data.length) break;
+    rows = rows.concat(r.data);
+    if(r.data.length < tamanho) break;
+  }
+  return rows;
+}
+
 // Load films from Supabase
 async function loadFilmsFromSupabase() {
   try {
-    document.getElementById('loaderMsg').textContent = 'Carregando filmes...';
-    
-    // Load films in batches
-    let allFilmes = [];
-    let from = 0;
-    const batchSize = 200;
-    
-    while(true) {
-      const { data: filmes, error } = await Promise.race([
-        supa.from('filmes')
-          .select('id,nome,ano,duracao_str,duracao_min,poster,sinopse,categorias,classificacao,inserido_por,data_cadastro,data_ts,tmdb_id,imdb_id,omdb_imdb_rating,omdb_rt_rating,omdb_awards,omdb_atualizado_em')
-          .range(from, from + batchSize - 1)
-          .order('data_ts', { ascending: false }),
-        new Promise((_, rej) => setTimeout(() => rej(new Error('Timeout filmes')), 15000))
-      ]);
-      
-      if(error) throw error;
-      if(!filmes || filmes.length === 0) break;
-      allFilmes = allFilmes.concat(filmes);
-      if(filmes.length < batchSize) break;
-      from += batchSize;
-    }
-    
-    document.getElementById('loaderMsg').textContent = 'Carregando avaliações...';
-    
-    // Load all avaliacoes
-    let allAvaliacoes = [];
-    from = 0;
-    while(true) {
-      const { data: avs, error } = await supa
-        .from('avaliacoes')
-        .select('filme_id,usuario_id,nota,vai_assistir,comentario,data_avaliacao,created_at')
-        .range(from, from + 999);
-      
-      if(error) throw error;
-      if(!avs || avs.length === 0) break;
-      allAvaliacoes = allAvaliacoes.concat(avs);
-      if(avs.length < 1000) break;
-      from += 1000;
-    }
+    document.getElementById('loaderMsg').textContent = 'Carregando dados...';
+
+    // Cinco cargas sem dependência entre si, todas de uma vez. As três do fim têm try/catch
+    // próprio e nunca rejeitam (devolvem false + flag de falha); filmes/avaliações rejeitam
+    // e caem no catch de baixo, como antes.
+    const [allFilmes, allAvaliacoes] = await Promise.all([
+      fetchTodasPaginas('filmes', 'id,nome,ano,duracao_str,duracao_min,poster,sinopse,categorias,classificacao,inserido_por,data_cadastro,data_ts,tmdb_id,imdb_id,omdb_imdb_rating,omdb_rt_rating,omdb_awards,omdb_atualizado_em', 200, { col: 'data_ts', asc: false }, 15000),
+      fetchTodasPaginas('avaliacoes', 'filme_id,usuario_id,nota,vai_assistir,comentario,data_avaliacao,created_at', 1000, null, null),
+      loadUsuariosFromSupabase(),
+      loadConquistasEFilmeStatsFromSupabase(),
+      loadCompatibilidadeFromSupabase()
+    ]);
     
     // Build avaliacoes map
     const avMap = {};
@@ -1028,16 +1031,6 @@ async function loadFilmsFromSupabase() {
     RECENT_IDS = getRecentIds();
     RAW.recent_ids = RECENT_IDS;
     
-    // Calcula estatísticas dinâmicas
-    document.getElementById('loaderMsg').textContent = 'Carregando membros...';
-    await loadUsuariosFromSupabase();
-
-    document.getElementById('loaderMsg').textContent = 'Carregando conquistas...';
-    await loadConquistasEFilmeStatsFromSupabase();
-
-    document.getElementById('loaderMsg').textContent = 'Carregando compatibilidade...';
-    await loadCompatibilidadeFromSupabase();
-
     // Calcula estatísticas dinâmicas
     document.getElementById('loaderMsg').textContent = 'Calculando estatísticas...';
     calcUserStats();
@@ -1656,7 +1649,7 @@ function renderHome(){
   const rows = buildRows();
   el.innerHTML = `
     <div class="hero" id="heroSection">
-      ${heroSlides.map((f,i)=>`<div class="hero-slide${i===0?' active':''}" id="hslide${i}" style="background-image:url('${esc(f.poster)}')"><div class="hero-gradient"></div></div>`).join('')}
+      ${heroSlides.map((f,i)=>`<div class="hero-slide${i===0?' active':''}" id="hslide${i}"${i===0?` style="background-image:url('${esc(f.poster)}')"`:''}><div class="hero-gradient"></div></div>`).join('')}
       <div class="hero-content" id="heroContent">${heroSlideContent(0)}</div>
       <button class="hero-arrow hero-arrow-prev" onclick="goHeroSlide((heroIdx-1+heroSlides.length)%heroSlides.length)">&#8249;</button>
       <button class="hero-arrow hero-arrow-next" onclick="goHeroSlide((heroIdx+1)%heroSlides.length)">&#8250;</button>
@@ -1665,6 +1658,7 @@ function renderHome(){
     <div class="rows-section">${rows}</div>
   `;
   heroIdx=0;
+  heroBg(1); // 2º slide já começa a baixar; os demais só quando chegar a vez (ver heroBg)
   clearInterval(heroTimer);
   heroTimer=setInterval(()=>goHeroSlide((heroIdx+1)%heroSlides.length),6000);
 
@@ -1704,8 +1698,16 @@ function heroSlideContent(i){
   `;
 }
 
+// Antes os 8 slides pediam o pôster no 1º paint (background-image, opacity:0 não adia o
+// download) pra mostrar 1 só. Agora só o visível e o próximo; o resto baixa quando chega a vez.
+function heroBg(i){
+  const s=document.getElementById('hslide'+i), f=heroSlides[i];
+  if(s && f && !s.style.backgroundImage) s.style.backgroundImage=`url("${f.poster}")`;
+}
+
 function goHeroSlide(i){
   heroIdx=i;
+  heroBg(i); heroBg((i+1)%heroSlides.length);
   document.querySelectorAll('.hero-slide').forEach((s,j)=>s.classList.toggle('active',j===i));
   document.querySelectorAll('.hero-dot').forEach((d,j)=>d.classList.toggle('active',j===i));
   const hc=document.getElementById('heroContent');
@@ -1792,11 +1794,16 @@ function rowHTML(title,films,showDate,accent){
   </div></div>`;
 }
 
+// O card mostra 170 px de largura: w342 cobre até 2x de densidade com ~metade dos bytes do w500
+// (média de 10 pôsteres medidos: 39 KB contra 75 KB). Só troca o tamanho padrão w500 — qualquer
+// outra URL fica como está. O lightbox continua usando f.poster (tamanho original).
+function posterCard(url){ return url.replace('/t/p/w500/','/t/p/w342/'); }
+
 function pCard(f, showDate){
   const d = parseDataCadastro ? parseDataCadastro(f) : null;
   const dataCad = d ? `${String(d.getDate()).padStart(2,'0')}/${String(d.getMonth()+1).padStart(2,'0')}/${d.getFullYear()}` : null;
   return `<div class="poster-card" style="--rating-glow:${glowC(f.media)}" onclick="openFilme('${f.id}')">
-    ${f.poster?`<img class="poster-img" src="${esc(f.poster)}" loading="lazy" alt="" onerror="this.style.display='none'">`:`<div class="poster-no-img">🎬</div>`}
+    ${f.poster?`<img class="poster-img" src="${esc(posterCard(f.poster))}" loading="lazy" alt="" onerror="this.style.display='none'">`:`<div class="poster-no-img">🎬</div>`}
     ${f.media?`<div class="poster-badge" style="color:${nC(f.media)}">${fmt(f.media)}</div>`:''}
     <div class="poster-class"${classStyleAttr(f.classificacao)}>${f.classificacao}</div>
     ${showDate&&dataCad?`<div style="position:absolute;bottom:0;left:0;right:0;background:rgba(0,0,0,0.75);color:#aaa;font-size:9px;text-align:center;padding:3px 0">📅 ${dataCad}</div>`:''}
