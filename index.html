@@ -1402,6 +1402,10 @@ function inactiveSince(s){
   return m >= 12 ? Math.floor(m/12)+'a '+(m%12)+'m' : m+'m';
 }
 const esc = s=>s?s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'):'';
+// Argumento string de handler inline (onclick="fn(${jsArg(x)})"): literal JS entre aspas duplas,
+// já escapado pro atributo HTML. esc() sozinho NÃO serve aqui — não trata a aspa simples, então um
+// valor com ' (ex.: "Assassin's Creed") ou um id/ano gravado via API sai da string JS.
+const jsArg = v => esc(JSON.stringify(String(v)));
 const classC = c=>{const n=parseInt(c);return n>=18?'#e05555':n>=16?'#f5a623':n>=14?'#f5c518':'#46d369'};
 
 let CU=null, CV='home', AGenre=null, navList=[], searchQ='', rateFilmeId=null, vaiVal='Sim';
@@ -1687,13 +1691,13 @@ function heroSlideContent(i){
     <div class="hero-title">${esc(f.nome)}</div>
     <div class="hero-meta">
       <span class="hero-score" style="color:${nC(f.media)}">★ ${fmt(f.media)}</span>
-      <span>${f.ano}</span><span>${f.duracao_str}</span>
-      <span class="hero-class"${classStyleAttr(f.classificacao)}>${f.classificacao}</span>
+      <span>${esc(f.ano)}</span><span>${esc(f.duracao_str)}</span>
+      <span class="hero-class"${classStyleAttr(f.classificacao)}>${esc(f.classificacao)}</span>
     </div>
     <div class="hero-desc">${esc(f.sinopse||'')}</div>
     <div class="hero-btns">
-      <button class="btn-play" onclick="openFilme('${f.id}')">▶ Detalhes</button>
-      <button class="btn-info" onclick="openFilme('${f.id}')">ℹ Mais Info</button>
+      <button class="btn-play" onclick="openFilme(${jsArg(f.id)})">▶ Detalhes</button>
+      <button class="btn-info" onclick="openFilme(${jsArg(f.id)})">ℹ Mais Info</button>
     </div>
   `;
 }
@@ -1809,12 +1813,12 @@ function posterThumb(url, tam){
 function pCard(f, showDate){
   const d = parseDataCadastro ? parseDataCadastro(f) : null;
   const dataCad = d ? `${String(d.getDate()).padStart(2,'0')}/${String(d.getMonth()+1).padStart(2,'0')}/${d.getFullYear()}` : null;
-  return `<div class="poster-card" style="--rating-glow:${glowC(f.media)}" onclick="openFilme('${f.id}')">
+  return `<div class="poster-card" style="--rating-glow:${glowC(f.media)}" onclick="openFilme(${jsArg(f.id)})">
     ${f.poster?`<img class="poster-img" src="${esc(posterThumb(f.poster,'medio'))}" loading="lazy" alt="" onerror="this.style.display='none'">`:`<div class="poster-no-img">🎬</div>`}
     ${f.media?`<div class="poster-badge" style="color:${nC(f.media)}">${fmt(f.media)}</div>`:''}
-    <div class="poster-class"${classStyleAttr(f.classificacao)}>${f.classificacao}</div>
+    <div class="poster-class"${classStyleAttr(f.classificacao)}>${esc(f.classificacao)}</div>
     ${showDate&&dataCad?`<div style="position:absolute;bottom:0;left:0;right:0;background:rgba(0,0,0,0.75);color:#aaa;font-size:9px;text-align:center;padding:3px 0">📅 ${dataCad}</div>`:''}
-    ${f.poster?`<button class="poster-zoom" onclick="event.stopPropagation();openPosterLightbox('${esc(f.poster)}','${esc(f.nome)}')" title="Ver capa grande">🔍</button>`:''}
+    ${f.poster?`<button class="poster-zoom" onclick="event.stopPropagation();openPosterLightbox(${jsArg(f.id)})" title="Ver capa grande">🔍</button>`:''}
     <div class="poster-overlay"></div>
     <div class="poster-info">
       <div class="poster-title">${esc(f.nome)}</div>
@@ -1848,12 +1852,12 @@ function renderFilmes(selectedId, forceGenre){
         </div>
         ${list.map(f=>{
           const nota=f.media?`<span style="color:${nC(f.media)}">${fmt(f.media)}</span>`:`<span style="color:var(--muted2)">—</span>`;
-          return `<div class="film-card ${f.id===selId?'selected':''}" style="border-left-color:${myStatusColor(f)}" onclick="openFilmeInPanel('${f.id}')">
+          return `<div class="film-card ${f.id===selId?'selected':''}" style="border-left-color:${myStatusColor(f)}" onclick="openFilmeInPanel(${jsArg(f.id)})">
             ${f.poster?`<img class="film-thumb" src="${esc(posterThumb(f.poster))}" loading="lazy" alt="" onerror="this.style.display='none'">`:`<div class="film-thumb-empty">🎬</div>`}
             <div class="film-card-content">
               <div class="film-nota">${nota}</div>
               <div class="film-nome">${esc(f.nome)}</div>
-              <div class="film-sub">${f.ano} · ${f.duracao_str} · ${esc(displayName(f.inserido_por))}</div>
+              <div class="film-sub">${esc(f.ano)} · ${esc(f.duracao_str)} · ${esc(displayName(f.inserido_por))}</div>
             </div>
           </div>`;
         }).join('')}` : `
@@ -1862,12 +1866,12 @@ function renderFilmes(selectedId, forceGenre){
           <tbody>
           ${list.map(f=>{
             const nota=f.media?`<span style="color:${nC(f.media)}">${fmt(f.media)}</span>`:`<span style="color:var(--muted2)">—</span>`;
-            return `<tr class="${f.id===selId?'selected':''}" onclick="openFilmeInPanel('${f.id}')">
+            return `<tr class="${f.id===selId?'selected':''}" onclick="openFilmeInPanel(${jsArg(f.id)})">
               <td class="td-nota">${nota}</td>
               <td style="color:var(--muted2);font-size:11px">↗</td>
               <td class="td-name">${esc(f.nome)}</td>
-              <td class="td-muted">${f.ano}</td>
-              <td class="td-muted">${f.duracao_str}</td>
+              <td class="td-muted">${esc(f.ano)}</td>
+              <td class="td-muted">${esc(f.duracao_str)}</td>
               <td class="td-muted" style="max-width:80px;overflow:hidden;text-overflow:ellipsis">${esc(displayName(f.inserido_por))}</td>
             </tr>`;
           }).join('')}
@@ -1884,7 +1888,7 @@ function renderFilmes(selectedId, forceGenre){
           </div>
           <div class="genre-pills">
             <button class="gpill ${!AGenre?'active':''}" onclick="setGenre(null)">Todos</button>
-            ${genres.map(g=>`<button class="gpill ${AGenre===g?'active':''}" onclick="setGenre('${esc(g)}')">${g}</button>`).join('')}
+            ${genres.map(g=>`<button class="gpill ${AGenre===g?'active':''}" data-g="${esc(g)}" onclick="setGenre(this.dataset.g)">${esc(g)}</button>`).join('')}
           </div>
         </div>
         ${listHTML}
@@ -1923,37 +1927,37 @@ function filmDetailHTML(id){
     <div class="dp-backdrop" style="background-image:url('${esc(f.poster)}')${f.poster?';cursor:zoom-in':''}">
       <div class="dp-backdrop-grad"></div>
       <div class="dp-nav">
-        <button class="dp-nav-btn" onclick="openFilmeInPanel('${prev}')" ${!prev?'disabled':''}>‹</button>
-        <button class="dp-nav-btn" onclick="openFilmeInPanel('${next}')" ${!next?'disabled':''}>›</button>
+        <button class="dp-nav-btn" onclick="openFilmeInPanel(${jsArg(prev)})" ${!prev?'disabled':''}>‹</button>
+        <button class="dp-nav-btn" onclick="openFilmeInPanel(${jsArg(next)})" ${!next?'disabled':''}>›</button>
       </div>
-      ${f.poster?`<button class="dp-zoom-btn" onclick="openPosterLightbox('${esc(f.poster)}','${esc(f.nome)}')" title="Ver capa grande">⛶</button>`:''}
+      ${f.poster?`<button class="dp-zoom-btn" onclick="openPosterLightbox(${jsArg(f.id)})" title="Ver capa grande">⛶</button>`:''}
     </div>
     <div class="dp-body">
       <div class="dp-title">${esc(f.nome)}</div>
       <div class="dp-meta">
         ${f.media?`<span class="dp-score" style="color:${nC(f.media)}">★ ${fmt(f.media)}</span>`:''}
-        <span class="dp-meta-item">${f.ano}</span>
-        <span class="dp-meta-item">${f.duracao_str}</span>
-        <span class="dp-class"${classStyleAttr(f.classificacao)}>${f.classificacao}</span>
+        <span class="dp-meta-item">${esc(f.ano)}</span>
+        <span class="dp-meta-item">${esc(f.duracao_str)}</span>
+        <span class="dp-class"${classStyleAttr(f.classificacao)}>${esc(f.classificacao)}</span>
         <span class="dp-meta-item">${f.num_avaliacoes} avaliações</span>
       </div>
       <div id="extRatings_${f.id}" style="display:flex;gap:6px;margin-bottom:8px;align-items:center;min-height:20px">
         <span style="font-size:10px;color:#444">carregando...</span>
       </div>
-      <div class="dp-cats">${f.categorias.map(c=>`<span class="dp-cat">${c}</span>`).join('')}</div>
+      <div class="dp-cats">${f.categorias.map(c=>`<span class="dp-cat">${esc(c)}</span>`).join('')}</div>
       <div class="dp-desc">${esc(f.sinopse||'')}</div>
       <div class="dp-actions">
-        <div class="dp-btn ${isAss?'dp-btn-green':'dp-btn-grey'}" onclick="openRate('${f.id}')">
+        <div class="dp-btn ${isAss?'dp-btn-green':'dp-btn-grey'}" onclick="openRate(${jsArg(f.id)})">
           <span class="dp-btn-icon">${isAss?'✅':'⭐'}</span>
           <span class="dp-btn-label" style="color:${isAss?'#000':'#fff'}">${isAss?`${fmt(myAv.nota)}`:'Avaliar'}</span>
         </div>
         <a href="https://www.youtube.com/results?search_query=${trailerQ}" target="_blank" class="dp-btn dp-btn-grey" style="text-decoration:none">
           <span class="dp-btn-icon">🎬</span><span class="dp-btn-label">Trailer</span>
         </a>
-        <div class="dp-btn dp-btn-grey" onclick="openOndeAssistir('${f.id}','${encodeURIComponent(f.nome)}','${f.ano}')">
+        <div class="dp-btn dp-btn-grey" onclick="openOndeAssistir(${jsArg(f.id)})">
           <span class="dp-btn-icon">📺</span><span class="dp-btn-label">Onde assistir?</span>
         </div>
-        <div class="dp-btn dp-btn-grey" onclick="openMaisInfo('${f.id}','${encodeURIComponent(f.nome)}','${f.ano}')">
+        <div class="dp-btn dp-btn-grey" onclick="openMaisInfo(${jsArg(f.id)})">
           <span class="dp-btn-icon">ℹ️</span><span class="dp-btn-label">Mais Info</span>
         </div>
       </div>
@@ -1967,21 +1971,21 @@ function filmDetailHTML(id){
               ${av.data
                 ?`<div style="font-size:10px;color:var(--muted2);margin-top:1px;display:flex;align-items:center;gap:6px">
                     <span>${av.data}</span>
-                    ${(isAdminUser() && uid !== CU)?`<span onclick="event.stopPropagation();openEditDataAdmin('${f.id}','${uid}')" style="cursor:pointer;color:#f5c518;font-size:10px" title="Editar data (admin)">✏️</span>`:''}
+                    ${(isAdminUser() && uid !== CU)?`<span onclick="event.stopPropagation();openEditDataAdmin(${jsArg(f.id)},${jsArg(uid)})" style="cursor:pointer;color:#f5c518;font-size:10px" title="Editar data (admin)">✏️</span>`:''}
                   </div>`
                 :(uid===CU
-                  ?`<div style="font-size:10px;color:#f5c518;margin-top:1px;cursor:pointer" onclick="event.stopPropagation();openRate('${f.id}')">📅 Sem data — toque para adicionar</div>`
+                  ?`<div style="font-size:10px;color:#f5c518;margin-top:1px;cursor:pointer" onclick="event.stopPropagation();openRate(${jsArg(f.id)})">📅 Sem data — toque para adicionar</div>`
                   :(isAdminUser()
-                    ?`<div style="font-size:10px;color:#f5c518;margin-top:1px;cursor:pointer" onclick="event.stopPropagation();openEditDataAdmin('${f.id}','${uid}')">📅 Sem data — adicionar (admin)</div>`
+                    ?`<div style="font-size:10px;color:#f5c518;margin-top:1px;cursor:pointer" onclick="event.stopPropagation();openEditDataAdmin(${jsArg(f.id)},${jsArg(uid)})">📅 Sem data — adicionar (admin)</div>`
                     :`<div style="font-size:10px;color:var(--muted2);margin-top:1px;font-style:italic">sem data</div>`))}
             </div>
             <div class="dp-r-nota" style="color:${nC(av.nota)}">★ ${fmt(av.nota)}</div>
-            ${isAdminUser()?`<button class="dp-del" onclick="event.stopPropagation();deleteAvaliacaoAdmin('${f.id}','${uid}',this)" title="Excluir esta nota (admin)" style="background:transparent;border:1px solid #3a1414;color:#e05555;border-radius:6px;padding:4px 7px;margin-left:6px;cursor:pointer;font-size:12px;line-height:1">🗑️</button>`:''}
+            ${isAdminUser()?`<button class="dp-del" onclick="event.stopPropagation();deleteAvaliacaoAdmin(${jsArg(f.id)},${jsArg(uid)},this)" title="Excluir esta nota (admin)" style="background:transparent;border:1px solid #3a1414;color:#e05555;border-radius:6px;padding:4px 7px;margin-left:6px;cursor:pointer;font-size:12px;line-height:1">🗑️</button>`:''}
           </div>`).join('')}
         </div>`:''}
       <div class="dp-footer">
         <span>Inserido por: <strong style="color:#fff">${esc(displayName(f.inserido_por))}</strong></span>
-        <span>Cadastro: <strong style="color:#fff">${f.data_cadastro ? (f.data_cadastro.includes('-') ? f.data_cadastro.split('-').reverse().join('/') : f.data_cadastro) : '—'}</strong></span>
+        <span>Cadastro: <strong style="color:#fff">${esc(f.data_cadastro ? (f.data_cadastro.includes('-') ? f.data_cadastro.split('-').reverse().join('/') : f.data_cadastro) : '—')}</strong></span>
       </div>
       ${(()=>{
         const naoQ = Object.entries(STATS).filter(([uid,s])=>(s.nao_quer||[]).includes(f.id)).map(([uid])=> uid===CU ? (USERS[uid]?.nome||uid)+' (você)' : USERS[uid]?.nome||uid);
@@ -1989,7 +1993,7 @@ function filmDetailHTML(id){
       })()}
       ${isAdminUser()?`
       <div style="margin-top:16px;padding-top:14px;border-top:1px solid #2a2a2a;display:flex;justify-content:flex-end;gap:8px">
-        <button class="dp-del" onclick="deleteFilmeFromDetail('${f.id}',this)" title="Excluir filme (admin)" style="background:#1a0a0a;color:#e05555;border:1px solid #3a1414;border-radius:8px;padding:8px 14px;cursor:pointer;font-size:12px;font-weight:700;font-family:inherit">🗑️ Excluir filme (admin)</button>
+        <button class="dp-del" onclick="deleteFilmeFromDetail(${jsArg(f.id)},this)" title="Excluir filme (admin)" style="background:#1a0a0a;color:#e05555;border:1px solid #3a1414;border-radius:8px;padding:8px 14px;cursor:pointer;font-size:12px;font-weight:700;font-family:inherit">🗑️ Excluir filme (admin)</button>
       </div>`:''}
     </div>
   `;
@@ -2064,12 +2068,12 @@ function renderPendentes(selId){
         </div>
         ${list.map(f=>{
           const nota=f.media?`<span style="color:${nC(f.media)}">${fmt(f.media)}</span>`:'<span style="color:var(--muted2)">—</span>';
-          return `<div class="film-card ${f.id===sid?'selected':''}" onclick="openPendPanel('${f.id}')">
+          return `<div class="film-card ${f.id===sid?'selected':''}" onclick="openPendPanel(${jsArg(f.id)})">
             ${f.poster?`<img class="film-thumb" src="${esc(posterThumb(f.poster))}" loading="lazy" alt="" onerror="this.style.display='none'">`:`<div class="film-thumb-empty">🎬</div>`}
             <div class="film-card-content">
               <div class="film-nota">${nota}</div>
               <div class="film-nome">${esc(f.nome)}</div>
-              <div class="film-sub">${f.ano} · ${f.duracao_str}</div>
+              <div class="film-sub">${esc(f.ano)} · ${esc(f.duracao_str)}</div>
             </div>
           </div>`;
         }).join('')}` : `
@@ -2079,12 +2083,12 @@ function renderPendentes(selId){
           ${list.map(f=>{
             const nota=f.media?`<span style="color:${nC(f.media)}">${fmt(f.media)}</span>`:'<span style="color:var(--muted2)">—</span>';
             const numAv=Object.values(f.avaliacoes).filter(a=>a.nota!==null).length;
-            return `<tr class="${f.id===sid?'selected':''}" onclick="openPendPanel('${f.id}')">
+            return `<tr class="${f.id===sid?'selected':''}" onclick="openPendPanel(${jsArg(f.id)})">
               <td class="td-nota">${nota}</td>
               <td style="color:var(--muted2);font-size:11px">↗</td>
               <td class="td-name">${esc(f.nome)}</td>
-              <td class="td-muted">${f.ano}</td>
-              <td class="td-muted">${f.duracao_str}</td>
+              <td class="td-muted">${esc(f.ano)}</td>
+              <td class="td-muted">${esc(f.duracao_str)}</td>
               <td class="td-muted">${esc(displayName(f.inserido_por))}</td>
               <td class="td-muted">${numAv}</td>
             </tr>`;
@@ -2152,12 +2156,12 @@ function renderAvaliacoes(tab){
           // monta a sublinha como lista e filtra os vazios antes de juntar, em vez de
           // concatenar string fixa, pra não sobrar "· " pendurado quando falta um campo.
           const sub = [f.ano, f.duracao_str, av.data].filter(Boolean).join(' · ');
-          return `<div class="film-card ${f.id===sel?'selected':''}" onclick="openAvPanel('${f.id}')">
+          return `<div class="film-card ${f.id===sel?'selected':''}" onclick="openAvPanel(${jsArg(f.id)})">
             ${f.poster?`<img class="film-thumb" src="${esc(posterThumb(f.poster))}" loading="lazy" alt="" onerror="this.style.display='none'">`:`<div class="film-thumb-empty">🎬</div>`}
             <div class="film-card-content">
               <div class="film-nota" style="color:${nC(av.nota)}">${fmt(av.nota)}</div>
               <div class="film-nome">${esc(f.nome)}</div>
-              <div class="film-sub">${sub}</div>
+              <div class="film-sub">${esc(sub)}</div>
             </div>
           </div>`;
         }).join('')}` : `
@@ -2166,7 +2170,7 @@ function renderAvaliacoes(tab){
           <tbody>
           ${list.map(f=>{
             const av=f.avaliacoes[CU];
-            return `<tr class="${f.id===sel?'selected':''}" onclick="openAvPanel('${f.id}')">
+            return `<tr class="${f.id===sel?'selected':''}" onclick="openAvPanel(${jsArg(f.id)})">
               <td class="td-name">${esc(f.nome)}</td>
               <td><span style="color:${nC(av.nota)};font-weight:800">${fmt(av.nota)}</span></td>
               <td class="td-muted">${av.data||''}</td>
@@ -2178,21 +2182,21 @@ function renderAvaliacoes(tab){
           <div class="film-lh-spacer"></div>
           <div class="film-lh-nome" onclick="toggleSort('avaliacoes_nq','nome')">Nome${sortIcon('avaliacoes_nq','nome')}</div>
         </div>
-        ${list.map(f=>`<div class="film-card ${f.id===sel?'selected':''}" onclick="openAvPanel('${f.id}')">
+        ${list.map(f=>`<div class="film-card ${f.id===sel?'selected':''}" onclick="openAvPanel(${jsArg(f.id)})">
             ${f.poster?`<img class="film-thumb" src="${esc(posterThumb(f.poster))}" loading="lazy" alt="" onerror="this.style.display='none'">`:`<div class="film-thumb-empty">🎬</div>`}
             <div class="film-card-content">
               <div class="film-nome">${esc(f.nome)}</div>
-              <div class="film-sub">${f.ano} · ${f.duracao_str}</div>
+              <div class="film-sub">${esc(f.ano)} · ${esc(f.duracao_str)}</div>
             </div>
-            <span onclick="event.stopPropagation();mudarDeOpiniao('${f.id}')" style="color:#e05555;font-size:11px;font-weight:700;cursor:pointer;padding:8px 10px;flex-shrink:0">🔄 Mudar</span>
+            <span onclick="event.stopPropagation();mudarDeOpiniao(${jsArg(f.id)})" style="color:#e05555;font-size:11px;font-weight:700;cursor:pointer;padding:8px 10px;flex-shrink:0">🔄 Mudar</span>
           </div>`).join('')}` : `
         <table>
           <thead><tr><th style="cursor:pointer" onclick="toggleSort('avaliacoes_nq','nome')">Filme${sortIcon('avaliacoes_nq','nome')}</th><th style="cursor:pointer" onclick="toggleSort('avaliacoes_nq','ano')">Ano${sortIcon('avaliacoes_nq','ano')}</th><th>Ação</th></tr></thead>
           <tbody>
-          ${list.map(f=>`<tr class="${f.id===sel?'selected':''}" onclick="openAvPanel('${f.id}')">
+          ${list.map(f=>`<tr class="${f.id===sel?'selected':''}" onclick="openAvPanel(${jsArg(f.id)})">
               <td class="td-name">${esc(f.nome)}</td>
-              <td class="td-muted">${f.ano}</td>
-              <td><span onclick="event.stopPropagation();mudarDeOpiniao('${f.id}')" style="color:#e05555;font-size:11px;cursor:pointer;font-weight:700">🔄 Mudar</span></td>
+              <td class="td-muted">${esc(f.ano)}</td>
+              <td><span onclick="event.stopPropagation();mudarDeOpiniao(${jsArg(f.id)})" style="color:#e05555;font-size:11px;cursor:pointer;font-weight:700">🔄 Mudar</span></td>
             </tr>`).join('')}
           </tbody>
         </table>`);
@@ -2249,12 +2253,12 @@ function renderRecentes(){
         ${list.map(f=>{
           const dCad = parseDataCadastro(f);
           const relDate = dCad ? feedRelDate(dCad) : '—';
-          return `<div class="film-card ${f.id===list[0].id?'selected':''}" style="border-left-color:${myStatusColor(f)}" onclick="openRecentPanel('${f.id}')">
+          return `<div class="film-card ${f.id===list[0].id?'selected':''}" style="border-left-color:${myStatusColor(f)}" onclick="openRecentPanel(${jsArg(f.id)})">
             ${f.poster?`<img class="film-thumb" src="${esc(posterThumb(f.poster))}" loading="lazy" alt="" onerror="this.style.display='none'">`:`<div class="film-thumb-empty">🎬</div>`}
             <div class="film-card-content">
               <div class="film-nota">${f.media?`<span style="color:${nC(f.media)}">${fmt(f.media)}</span>`:`<span style="color:var(--muted2)">—</span>`}</div>
               <div class="film-nome">${esc(f.nome)}</div>
-              <div class="film-sub">${f.ano} · ${f.duracao_str} · adicionado por ${esc(displayName(f.inserido_por))} · ${relDate}</div>
+              <div class="film-sub">${esc(f.ano)} · ${esc(f.duracao_str)} · adicionado por ${esc(displayName(f.inserido_por))} · ${relDate}</div>
             </div>
           </div>`;
         }).join('')}` : `
@@ -2264,11 +2268,11 @@ function renderRecentes(){
           ${list.map(f=>{
             const hasAv=CU&&f.avaliacoes[CU]&&f.avaliacoes[CU].nota!==null;
             const dataCad = f.data_cadastro ? (f.data_cadastro.includes('-') ? f.data_cadastro.split('-').reverse().join('/') : f.data_cadastro) : '—';
-            return `<tr class="${f.id===list[0].id?'selected':''}" onclick="openRecentPanel('${f.id}')">
+            return `<tr class="${f.id===list[0].id?'selected':''}" onclick="openRecentPanel(${jsArg(f.id)})">
               <td class="td-name">${esc(f.nome)}</td>
-              <td class="td-muted">${f.ano}</td>
+              <td class="td-muted">${esc(f.ano)}</td>
               <td>${f.media?`<span style="color:${nC(f.media)};font-weight:700">${fmt(f.media)}</span>`:'—'}</td>
-              <td class="td-muted">${dataCad}</td>
+              <td class="td-muted">${esc(dataCad)}</td>
               <td><span style="font-size:11px;font-weight:600;color:${hasAv?'var(--green)':'var(--muted)'}">${hasAv?'✅ Assistido':'⬤ Pendente'}</span></td>
             </tr>`;
           }).join('')}
@@ -2620,13 +2624,13 @@ function renderTmdbCandidates(){
   }
 
   const metaHTML=enriched
-    ?`🎬 ${enriched.categorias.join(', ')||'—'}<br>⏱️ ${enriched.duracao_str||'—'} &nbsp;|&nbsp; 🔞 ${enriched.classificacao||'—'}`
+    ?`🎬 ${esc(enriched.categorias.join(', ')||'—')}<br>⏱️ ${esc(enriched.duracao_str||'—')} &nbsp;|&nbsp; 🔞 ${esc(enriched.classificacao||'—')}`
     :'<span style="opacity:.6">Carregando detalhes...</span>';
 
   html+=`<div class="tmdb-card"${jaCadastrado?' style="opacity:.55"':''}>
     ${c.poster?`<img class="tmdb-thumb" src="${esc(c.poster)}" alt="" onerror="this.style.display='none'">`:'<div class="tmdb-thumb-empty">🎬</div>'}
     <div class="tmdb-info">
-      <div class="tmdb-title">${esc(c.titulo)}${c.ano?` (${c.ano})`:''}</div>
+      <div class="tmdb-title">${esc(c.titulo)}${c.ano?` (${esc(c.ano)})`:''}</div>
       ${jaCadastrado?'<div style="color:#f5c518;font-size:11px;font-weight:700;margin:2px 0">✓ Esse filme já consta no catálogo.</div>':''}
       <div class="tmdb-meta">${metaHTML}</div>
     </div>
@@ -3103,7 +3107,9 @@ document.addEventListener('keydown', e => {
 });
 
 // ── ONDE ASSISTIR ──
-async function openOndeAssistir(id, nome, ano){
+async function openOndeAssistir(id){
+  const f = FM[id]; if(!f) return;
+  const nome = encodeURIComponent(f.nome), ano = f.ano;   // nome codificado pra URL, como os handlers passavam antes
   document.getElementById('ondeBody').innerHTML = '<div style="text-align:center;padding:30px;color:#888"><div style="font-size:28px;margin-bottom:8px">⏳</div>Carregando...</div>';
   openBSheet('onde');
   try {
@@ -3387,7 +3393,9 @@ async function getTmdbInfo(filmId, ano, resolveTmdbId){
 }
 
 // ── MAIS INFO ──
-async function openMaisInfo(id, nome, ano){
+async function openMaisInfo(id){
+  const f = FM[id]; if(!f) return;
+  const nome = encodeURIComponent(f.nome), ano = f.ano;   // idem: fetchAndCacheOmdb() faz decodeURIComponent(nome)
   document.getElementById('maisInfoBody').innerHTML = '<div style="text-align:center;padding:30px;color:#888"><div style="font-size:28px;margin-bottom:8px">⏳</div>Carregando...</div>';
   openBSheet('maisInfo');
   try {
@@ -3425,7 +3433,7 @@ async function openMaisInfo(id, nome, ano){
     const wri = info?.writers?.length ? info.writers.join(', ') : null;
     if(dir||wri) html += '<div class="bsheet-section"><div class="bsheet-section-title">🎬 Direção e Roteiro</div>'+(dir?'<div style="margin-bottom:6px"><span style="color:#888;font-size:11px">Diretor</span><br><span style="font-size:14px;font-weight:600">'+esc(dir)+'</span></div>':'')+(wri?'<div><span style="color:#888;font-size:11px">Roteiro</span><br><span style="font-size:13px">'+esc(wri)+'</span></div>':'')+'</div>';
     const cast = info?.cast||[];
-    if(cast.length) html += '<div class="bsheet-section"><div class="bsheet-section-title">🎭 Elenco Principal</div><div style="display:flex;gap:10px;overflow-x:auto;padding-bottom:4px">'+cast.map(a=>'<div style="text-align:center;min-width:60px"><div style="width:52px;height:52px;border-radius:50%;overflow:hidden;margin:0 auto 4px;background:#2a2a2a">'+(a.profile_path?'<img src="https://image.tmdb.org/t/p/w200'+a.profile_path+'" style="width:100%;height:100%;object-fit:cover">':'<div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;font-size:18px">👤</div>')+'</div><div style="font-size:9px;font-weight:600;line-height:1.2">'+esc(a.name.split(' ').slice(0,2).join(' '))+'</div></div>').join('')+'</div></div>';
+    if(cast.length) html += '<div class="bsheet-section"><div class="bsheet-section-title">🎭 Elenco Principal</div><div style="display:flex;gap:10px;overflow-x:auto;padding-bottom:4px">'+cast.map(a=>'<div style="text-align:center;min-width:60px"><div style="width:52px;height:52px;border-radius:50%;overflow:hidden;margin:0 auto 4px;background:#2a2a2a">'+(a.profile_path?'<img src="https://image.tmdb.org/t/p/w200'+esc(a.profile_path)+'" style="width:100%;height:100%;object-fit:cover">':'<div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;font-size:18px">👤</div>')+'</div><div style="font-size:9px;font-weight:600;line-height:1.2">'+esc(a.name.split(' ').slice(0,2).join(' '))+'</div></div>').join('')+'</div></div>';
     const countryMap = {'United States of America':'Estados Unidos','United Kingdom':'Reino Unido','France':'França','Germany':'Alemanha','Italy':'Itália','Spain':'Espanha','Japan':'Japão','South Korea':'Coreia do Sul','China':'China','Brazil':'Brasil','Australia':'Austrália','Canada':'Canadá','India':'Índia','Mexico':'México','Argentina':'Argentina','New Zealand':'Nova Zelândia','Ireland':'Irlanda','Sweden':'Suécia','Denmark':'Dinamarca','Norway':'Noruega','Russia':'Rússia','South Africa':'África do Sul'};
     const countries = (info?.countries||[]).map(p=>countryMap[p]||p);
     if(countries.length) html += '<div class="bsheet-section"><div class="bsheet-section-title">🌍 País de Produção</div><div style="font-size:13px">'+esc(countries.join(', '))+'</div></div>';
@@ -3448,8 +3456,8 @@ async function loadExtRatings(filmId, nome, ano){
   const imdb = d.imdbRating!=='N/A' ? d.imdbRating : null;
   const rt = d.Ratings?.find(r=>r.Source==='Rotten Tomatoes')?.Value||null;
   let html = '';
-  if(imdb) html += '<span style="background:#f5c518;color:#000;font-size:11px;font-weight:800;padding:3px 8px;border-radius:6px;display:inline-flex;align-items:center;gap:3px">IMDb '+imdb+'</span>';
-  if(rt){ const pct=parseInt(rt); const col=pct>=75?'#46d369':pct>=60?'#f5c518':'#e05555'; html += '<span style="background:'+col+';color:#000;font-size:11px;font-weight:800;padding:3px 8px;border-radius:6px">🍅 '+rt+'</span>'; }
+  if(imdb) html += '<span style="background:#f5c518;color:#000;font-size:11px;font-weight:800;padding:3px 8px;border-radius:6px;display:inline-flex;align-items:center;gap:3px">IMDb '+esc(imdb)+'</span>';
+  if(rt){ const pct=parseInt(rt); const col=pct>=75?'#46d369':pct>=60?'#f5c518':'#e05555'; html += '<span style="background:'+col+';color:#000;font-size:11px;font-weight:800;padding:3px 8px;border-radius:6px">🍅 '+esc(rt)+'</span>'; }
   el.innerHTML = html;
 }
 
@@ -3847,8 +3855,8 @@ function cineListRecCardHTML(r){
         <div style="font-size:10px;color:var(--muted2)">${r.numAvaliaram} pessoa${r.numAvaliaram!==1?'s':''} da tropa avaliou${r.numAvaliaram!==1?'ram':''}</div>
         ${topStr?`<div style="font-size:11px;color:var(--muted)">${topStr}</div>`:''}
         <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:2px">
-          <button onclick="openRate('${f.id}')" style="font-size:10px;font-family:inherit;font-weight:700;padding:4px 10px;border-radius:12px;border:1px solid var(--border);width:fit-content;background:var(--surface2);color:var(--muted);cursor:pointer">⭐ Avaliar</button>
-          <button ${jaQuerVer?'disabled':`onclick="marcarQueroVer('${f.id}')"`} style="font-size:10px;font-family:inherit;font-weight:700;padding:4px 10px;border-radius:12px;border:1px solid var(--border);width:fit-content;background:${jaQuerVer?'rgba(70,211,105,.15)':'var(--surface2)'};color:${jaQuerVer?'var(--green)':'var(--muted)'};cursor:${jaQuerVer?'default':'pointer'}">${jaQuerVer?'✓ Quero ver':'🔖 Quero ver'}</button>
+          <button onclick="openRate(${jsArg(f.id)})" style="font-size:10px;font-family:inherit;font-weight:700;padding:4px 10px;border-radius:12px;border:1px solid var(--border);width:fit-content;background:var(--surface2);color:var(--muted);cursor:pointer">⭐ Avaliar</button>
+          <button ${jaQuerVer?'disabled':`onclick="marcarQueroVer(${jsArg(f.id)})"`} style="font-size:10px;font-family:inherit;font-weight:700;padding:4px 10px;border-radius:12px;border:1px solid var(--border);width:fit-content;background:${jaQuerVer?'rgba(70,211,105,.15)':'var(--surface2)'};color:${jaQuerVer?'var(--green)':'var(--muted)'};cursor:${jaQuerVer?'default':'pointer'}">${jaQuerVer?'✓ Quero ver':'🔖 Quero ver'}</button>
         </div>
       </div>
     </div>
@@ -3987,7 +3995,7 @@ function recCardHTML(r){
         ? `<img src="${esc(r.poster)}" alt="" loading="lazy" style="width:100%;aspect-ratio:2/3;object-fit:cover;display:block;background:var(--surface2)" onerror="this.style.display='none'">`
         : `<div style="width:100%;aspect-ratio:2/3;background:var(--surface2);display:flex;align-items:center;justify-content:center;font-size:36px;color:var(--muted)">🎬</div>`}
       <div style="padding:10px 12px 12px;display:flex;flex-direction:column;gap:5px;flex:1">
-        <div style="font-weight:700;font-size:13px;color:#fff;line-height:1.3">${esc(r.titulo)}${r.ano?` <span style="color:var(--muted);font-weight:400">(${r.ano})</span>`:''}</div>
+        <div style="font-weight:700;font-size:13px;color:#fff;line-height:1.3">${esc(r.titulo)}${r.ano?` <span style="color:var(--muted);font-weight:400">(${esc(r.ano)})</span>`:''}</div>
         <div style="font-size:10px;font-weight:700;padding:3px 8px;border-radius:12px;background:rgba(70,211,105,.15);color:var(--green);width:fit-content">${fmt(r.notaFinal)} · nota do TMDB ajustada</div>
         <div style="font-size:10px;color:var(--muted2)">${r.numAvaliaram.toLocaleString('pt-BR')} pessoa${r.numAvaliaram!==1?'s':''} avaliaram (TMDB)</div>
         ${syn?`<div style="font-size:11.5px;color:var(--muted);line-height:1.4">${esc(syn)}</div>`:''}
@@ -4629,7 +4637,7 @@ function renderConquistasHTML(uid){
     const membersHave = degrauCounts[key] || 0;
 
     const html = `
-      <div onclick="abrirDegrauModal('${t.slug}','${uid}')" style="cursor:pointer;background:var(--surface2);border:1px solid ${achieved ? color+'55' : 'var(--border)'};border-radius:12px;padding:14px;position:relative">
+      <div onclick="abrirDegrauModal(${jsArg(t.slug)},${jsArg(uid)})" style="cursor:pointer;background:var(--surface2);border:1px solid ${achieved ? color+'55' : 'var(--border)'};border-radius:12px;padding:14px;position:relative">
         <div style="position:absolute;top:10px;right:12px;font-size:10px;font-weight:800;color:${color}">${cornerLabel}</div>
         <div style="font-size:9.5px;font-weight:800;letter-spacing:.6px;text-transform:uppercase;color:var(--muted2)">${esc(t.nome)}</div>
         <div style="display:flex;justify-content:center;margin:10px 0 8px">
@@ -4678,7 +4686,7 @@ function renderConquistasHTML(uid){
           const totalNamedT = t.levels.filter(l => !l.synthetic).length;
           const color = raridadeColor(i, totalNamedT);
           return `
-            <div onclick="abrirDegrauModal('${t.slug}','${uid}')" style="cursor:pointer;background:var(--surface2);border:1px solid ${color}55;border-radius:10px;padding:10px;text-align:center">
+            <div onclick="abrirDegrauModal(${jsArg(t.slug)},${jsArg(uid)})" style="cursor:pointer;background:var(--surface2);border:1px solid ${color}55;border-radius:10px;padding:10px;text-align:center">
               <div style="font-size:22px;margin-bottom:4px">${lvl.emoji}</div>
               <div style="font-family:Georgia,'Times New Roman',serif;font-size:11.5px;font-weight:700;color:${color};line-height:1.2">${esc(lvl.nome)}</div>
               <div style="font-size:9px;color:var(--muted2);margin-top:3px">${esc(t.nome)}</div>
@@ -4868,11 +4876,11 @@ function userDetailHTML(uid, opts){
       const favF = p.favFilme ? FM[p.favFilme] : null;
       if(!favF) return '';
       return `
-      <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:14px;margin-bottom:20px;display:flex;align-items:center;gap:12px;cursor:pointer" onclick="openFilme('${favF.id}')">
+      <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:14px;margin-bottom:20px;display:flex;align-items:center;gap:12px;cursor:pointer" onclick="openFilme(${jsArg(favF.id)})">
         ${favF.poster?`<img src="${esc(posterThumb(favF.poster))}" style="width:44px;height:66px;object-fit:cover;border-radius:6px;flex-shrink:0">`:'<div style="width:44px;height:66px;background:var(--surface2);border-radius:6px;flex-shrink:0"></div>'}
         <div style="flex:1;min-width:0">
           <div style="font-size:10px;color:var(--muted2);text-transform:uppercase;letter-spacing:.3px;margin-bottom:2px">🎬 Filme favorito</div>
-          <div style="font-size:14px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(favF.nome)}${favF.ano?` (${favF.ano})`:''}</div>
+          <div style="font-size:14px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(favF.nome)}${favF.ano?` (${esc(favF.ano)})`:''}</div>
         </div>
       </div>`;
     })()}
@@ -4943,7 +4951,7 @@ function userDetailHTML(uid, opts){
               subHTML = `<div style="font-size:9.5px;color:var(--muted2);margin-top:2px;font-style:italic">ainda não dá pra comparar</div>`;
             }
 
-            return `<div onclick="openUserDetail('${a.uid}')" style="flex-shrink:0;width:110px;background:var(--surface2);border:1px solid ${isViewer?col:'var(--border)'};border-radius:10px;padding:11px 8px;text-align:center;cursor:pointer;transition:transform .15s,border-color .15s;opacity:${a.estado==='sem_dado'?'0.6':'1'}" onmouseover="this.style.transform='translateY(-2px)'" onmouseout="this.style.transform='none'">
+            return `<div onclick="openUserDetail(${jsArg(a.uid)})" style="flex-shrink:0;width:110px;background:var(--surface2);border:1px solid ${isViewer?col:'var(--border)'};border-radius:10px;padding:11px 8px;text-align:center;cursor:pointer;transition:transform .15s,border-color .15s;opacity:${a.estado==='sem_dado'?'0.6':'1'}" onmouseover="this.style.transform='translateY(-2px)'" onmouseout="this.style.transform='none'">
               ${pctHTML}
               <div style="display:flex;justify-content:center;margin-bottom:6px">${avHTML}</div>
               <div style="font-size:11px;font-weight:700;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(a.apelido)}</div>
@@ -4976,11 +4984,11 @@ function userDetailHTML(uid, opts){
       <div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:14px">
         <div style="font-size:13px;font-weight:700;margin-bottom:10px">⬆️ Top 5</div>
         ${top5.map(f=>`
-          <div onclick="openFilme('${f.id}')" style="display:flex;align-items:center;gap:8px;padding:7px 0;border-bottom:1px solid var(--border);cursor:pointer">
+          <div onclick="openFilme(${jsArg(f.id)})" style="display:flex;align-items:center;gap:8px;padding:7px 0;border-bottom:1px solid var(--border);cursor:pointer">
             ${f.poster?`<img src="${esc(posterThumb(f.poster))}" style="width:28px;height:40px;object-fit:cover;border-radius:3px;flex-shrink:0" loading="lazy" onerror="this.style.display='none'">`:``}
             <div style="flex:1;min-width:0">
               <div style="font-size:11px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(f.nome)}</div>
-              <div style="font-size:9px;color:var(--muted)">${f.ano}</div>
+              <div style="font-size:9px;color:var(--muted)">${esc(f.ano)}</div>
             </div>
             <div style="font-size:14px;font-weight:900;color:${nC(f.av.nota)};flex-shrink:0">★ ${fmt(f.av.nota)}</div>
           </div>`).join('')}
@@ -4989,11 +4997,11 @@ function userDetailHTML(uid, opts){
       <div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:14px">
         <div style="font-size:13px;font-weight:700;margin-bottom:10px">⬇️ Bot 5</div>
         ${bot5.map(f=>`
-          <div onclick="openFilme('${f.id}')" style="display:flex;align-items:center;gap:8px;padding:7px 0;border-bottom:1px solid var(--border);cursor:pointer">
+          <div onclick="openFilme(${jsArg(f.id)})" style="display:flex;align-items:center;gap:8px;padding:7px 0;border-bottom:1px solid var(--border);cursor:pointer">
             ${f.poster?`<img src="${esc(posterThumb(f.poster))}" style="width:28px;height:40px;object-fit:cover;border-radius:3px;flex-shrink:0" loading="lazy" onerror="this.style.display='none'">`:``}
             <div style="flex:1;min-width:0">
               <div style="font-size:11px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(f.nome)}</div>
-              <div style="font-size:9px;color:var(--muted)">${f.ano}</div>
+              <div style="font-size:9px;color:var(--muted)">${esc(f.ano)}</div>
             </div>
             <div style="font-size:14px;font-weight:900;color:${nC(f.av.nota)};flex-shrink:0">★ ${fmt(f.av.nota)}</div>
           </div>`).join('')}
@@ -5007,7 +5015,7 @@ function userDetailHTML(uid, opts){
         <div style="font-size:13px;font-weight:700;margin-bottom:12px">🎭 Por gênero</div>
         ${genresSorted.map(([g,n])=>`
           <div style="display:flex;align-items:center;gap:7px;margin-bottom:8px">
-            <div style="font-size:10px;color:var(--muted);min-width:72px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${g}</div>
+            <div style="font-size:10px;color:var(--muted);min-width:72px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(g)}</div>
             <div style="flex:1;height:5px;background:var(--surface2);border-radius:3px;overflow:hidden">
               <div style="height:100%;width:${Math.round(n/maxGenre*100)}%;background:linear-gradient(90deg,var(--red),var(--yellow));border-radius:3px"></div>
             </div>
@@ -5019,7 +5027,7 @@ function userDetailHTML(uid, opts){
       <div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:14px">
         <div style="font-size:13px;font-weight:700;margin-bottom:12px">📅 Por ano</div>
         ${yearsSorted.map(([y,n])=>`
-          <div onclick="openUserYearDetail('${uid}','${y}')" style="display:flex;align-items:center;gap:7px;margin-bottom:8px;cursor:pointer" title="Ver filmes de ${y}">
+          <div onclick="openUserYearDetail(${jsArg(uid)},${jsArg(y)})" style="display:flex;align-items:center;gap:7px;margin-bottom:8px;cursor:pointer" title="Ver filmes de ${y}">
             <div style="font-size:10px;color:var(--muted);min-width:34px">${y}</div>
             <div style="flex:1;height:5px;background:var(--surface2);border-radius:3px;overflow:hidden">
               <div style="height:100%;width:${Math.round(n/maxYear*100)}%;background:var(--green);border-radius:3px"></div>
@@ -5046,11 +5054,11 @@ function userDetailHTML(uid, opts){
               </div>
               <div style="display:flex;flex-direction:column;gap:2px">
                 ${filmes.map(f=>`
-                  <div onclick="openFilme('${f.id}')" style="display:flex;align-items:center;gap:10px;padding:8px 10px;background:var(--surface);border-radius:8px;cursor:pointer" onmouseover="this.style.background='var(--surface2)'" onmouseout="this.style.background='var(--surface)'">
+                  <div onclick="openFilme(${jsArg(f.id)})" style="display:flex;align-items:center;gap:10px;padding:8px 10px;background:var(--surface);border-radius:8px;cursor:pointer" onmouseover="this.style.background='var(--surface2)'" onmouseout="this.style.background='var(--surface)'">
                     ${f.poster?`<img src="${esc(posterThumb(f.poster))}" style="width:30px;height:44px;object-fit:cover;border-radius:4px;flex-shrink:0" loading="lazy" onerror="this.style.display='none'">`:``}
                     <div style="flex:1;min-width:0">
                       <div style="font-size:13px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(f.nome)}</div>
-                      <div style="font-size:10px;color:var(--muted);margin-top:1px">${(f.categorias||[]).slice(0,2).join(', ')}${f.ano?' · '+f.ano:''}</div>
+                      <div style="font-size:10px;color:var(--muted);margin-top:1px">${esc((f.categorias||[]).slice(0,2).join(', '))}${f.ano?' · '+esc(f.ano):''}</div>
                       ${f.av.comentario?`<div style="font-size:10px;color:var(--muted2);margin-top:2px;font-style:italic;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">"${esc(f.av.comentario)}"</div>`:''}
                     </div>
                     <div style="text-align:right;flex-shrink:0">
@@ -5067,7 +5075,7 @@ function userDetailHTML(uid, opts){
         <div style="font-size:11px;font-weight:700;color:var(--muted2);text-transform:uppercase;letter-spacing:.07em;margin-bottom:8px">Sem data (${semData.length})</div>
         <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(88px,1fr));gap:6px">
           ${semData.map(f=>`
-            <div onclick="openFilme('${f.id}')" style="cursor:pointer;border-radius:6px;overflow:hidden;background:var(--surface)">
+            <div onclick="openFilme(${jsArg(f.id)})" style="cursor:pointer;border-radius:6px;overflow:hidden;background:var(--surface)">
               ${f.poster?`<img src="${esc(posterThumb(f.poster,'medio'))}" style="width:100%;aspect-ratio:2/3;object-fit:cover" loading="lazy" onerror="this.style.display='none'">`:``}
               <div style="padding:4px 6px">
                 <div style="font-size:9px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(f.nome)}</div>
@@ -5085,7 +5093,7 @@ function rankGeralHTML(){
   list.sort((a,b)=>b.quant-a.quant);
   const itensHTML = list.map((s,i)=>{
     const med=i===0?'🥇':i===1?'🥈':i===2?'🥉':'';
-    return `<div class="rank-item" onclick="openUserDetail('${s.uid}')">
+    return `<div class="rank-item" onclick="openUserDetail(${jsArg(s.uid)})">
       <div class="rank-num">${med||i+1}</div>
       ${avatarHTML(s.uid)}
       <div class="rank-info">
@@ -5401,7 +5409,7 @@ function rankAnoHTML(){
         ${members.map((m,i)=>{
           const max=members[0].cnt||1;
           const med=i===0?'🥇':i===1?'🥈':i===2?'🥉':i+1+'.';
-          return `<div class="rank-item" style="margin-bottom:6px;padding:10px 14px;overflow:hidden" onclick="openUserYearDetail('${m.uid}','${rankYear}')">
+          return `<div class="rank-item" style="margin-bottom:6px;padding:10px 14px;overflow:hidden" onclick="openUserYearDetail(${jsArg(m.uid)},${jsArg(rankYear)})">
             <div style="font-size:16px;width:28px;text-align:center;flex-shrink:0">${med}</div>
             ${avatarHTML(m.uid,{size:32,fontSize:11})}
             <div style="flex:1;min-width:0;overflow:hidden">
@@ -5417,12 +5425,12 @@ function rankAnoHTML(){
       <div>
         <div style="font-size:14px;font-weight:700;margin-bottom:10px;color:#e5e5e5">🎬 Filmes avaliados em ${rankYear}</div>
         ${yearFilms.length ? yearFilms.map((f,i)=>`
-          <div class="film-rank-item" onclick="openFilme('${f.id}')">
+          <div class="film-rank-item" onclick="openFilme(${jsArg(f.id)})">
             <div class="fr-num ${i<3?'top3':''}">${i<3?['🥇','🥈','🥉'][i]:i+1}</div>
             ${f.poster?`<img class="fr-poster" src="${esc(posterThumb(f.poster))}" loading="lazy" onerror="this.style.display='none'">`:'<div class="fr-poster"></div>'}
             <div class="fr-info">
               <div class="fr-title">${esc(f.nome)}</div>
-              <div class="fr-sub">${f.categorias.slice(0,2).join(', ')} · ${f.num_avaliacoes} avals</div>
+              <div class="fr-sub">${esc(f.categorias.slice(0,2).join(', '))} · ${f.num_avaliacoes} avals</div>
             </div>
             <div class="fr-nota" style="color:${nC(f.media)}">${fmt(f.media)}</div>
           </div>`).join('') : `<div style="color:var(--muted);font-size:13px;padding:20px 0">Nenhum filme avaliado em ${rankYear}.</div>`}
@@ -5460,7 +5468,7 @@ function userYearDetailHTML(uid, year){
       </div>
     </div>
     <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(110px,1fr));gap:8px">
-      ${avList.map(f=>`<div style="cursor:pointer;border-radius:6px;overflow:hidden;background:var(--surface)" onclick="openFilme('${f.id}')">
+      ${avList.map(f=>`<div style="cursor:pointer;border-radius:6px;overflow:hidden;background:var(--surface)" onclick="openFilme(${jsArg(f.id)})">
         ${f.poster?`<img src="${esc(posterThumb(f.poster,'medio'))}" style="width:100%;aspect-ratio:2/3;object-fit:cover" loading="lazy" onerror="this.style.display='none'">`:''}
         <div style="padding:5px 7px">
           <div style="font-size:10px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(f.nome)}</div>
@@ -5485,12 +5493,12 @@ function rankFilmesHTML(){
   return `
     <div style="font-size:13px;color:var(--muted);margin-bottom:14px">Top 100 filmes mais bem avaliados pelo grupo (mín. 2 avaliações)</div>
     ${list.map((f,i)=>`
-      <div class="film-rank-item" onclick="openFilme('${f.id}')">
+      <div class="film-rank-item" onclick="openFilme(${jsArg(f.id)})">
         <div class="fr-num ${i<3?'top3':''}">${i<3?['🥇','🥈','🥉'][i]:i+1}</div>
         ${f.poster?`<img class="fr-poster" src="${esc(posterThumb(f.poster))}" loading="lazy" onerror="this.style.display='none'">`:'<div class="fr-poster"></div>'}
         <div class="fr-info">
           <div class="fr-title">${esc(f.nome)}</div>
-          <div class="fr-sub">${f.ano} · ${f.categorias.slice(0,2).join(', ')} · ${f.num_avaliacoes} avaliações</div>
+          <div class="fr-sub">${esc(f.ano)} · ${esc(f.categorias.slice(0,2).join(', '))} · ${f.num_avaliacoes} avaliações</div>
         </div>
         <div class="fr-bar">
           <div style="font-size:9px;color:var(--muted2);text-align:right;margin-bottom:3px">${fmt(f.media)}/10</div>
@@ -5523,12 +5531,12 @@ function rankGeneroHTML(){
     <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px;flex-wrap:wrap">
       <label style="font-size:13px;color:var(--muted);font-weight:600">Gênero:</label>
       <select class="genre-sel" onchange="rankGenre=this.value;renderRankTab()">
-        ${genres.map(g=>`<option value="${esc(g)}" ${g===rankGenre?'selected':''}>${g}</option>`).join('')}
+        ${genres.map(g=>`<option value="${esc(g)}" ${g===rankGenre?'selected':''}>${esc(g)}</option>`).join('')}
       </select>
     </div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px" class="rank-two-col">
       <div>
-        <div style="font-size:14px;font-weight:700;margin-bottom:10px;color:#e5e5e5">👥 Quem mais assistiu ${rankGenre}</div>
+        <div style="font-size:14px;font-weight:700;margin-bottom:10px;color:#e5e5e5">👥 Quem mais assistiu ${esc(rankGenre)}</div>
         ${genreMembers.map((m,i)=>{
           const medal=i===0?'🥇':i===1?'🥈':i===2?'🥉':i+1+'.';
           return `<div class="rank-item" style="margin-bottom:6px;padding:10px 14px;overflow:hidden">
@@ -5548,14 +5556,14 @@ function rankGeneroHTML(){
         }).join('')}
       </div>
       <div>
-        <div style="font-size:14px;font-weight:700;margin-bottom:10px;color:#e5e5e5">🎬 Top ${rankGenre}</div>
+        <div style="font-size:14px;font-weight:700;margin-bottom:10px;color:#e5e5e5">🎬 Top ${esc(rankGenre)}</div>
         ${genreFilms.map((f,i)=>`
-          <div class="film-rank-item" onclick="openFilme('${f.id}')">
+          <div class="film-rank-item" onclick="openFilme(${jsArg(f.id)})">
             <div class="fr-num ${i<3?'top3':''}">${i<3?['🥇','🥈','🥉'][i]:i+1}</div>
             ${f.poster?`<img class="fr-poster" src="${esc(posterThumb(f.poster))}" loading="lazy" onerror="this.style.display='none'">`:'<div class="fr-poster"></div>'}
             <div class="fr-info">
               <div class="fr-title">${esc(f.nome)}</div>
-              <div class="fr-sub">${f.ano} · ${f.num_avaliacoes} avals</div>
+              <div class="fr-sub">${esc(f.ano)} · ${f.num_avaliacoes} avals</div>
             </div>
             <div class="fr-nota" style="color:${nC(f.media)}">${fmt(f.media)}</div>
           </div>`).join('')}
@@ -5668,7 +5676,7 @@ function rankAfinidadesHTML(){
   allPairs.sort((a,b) => b.compat.pct - a.compat.pct);
 
   function pill(text, bg, border, color, id){
-    const ev = id ? `onclick="openFilme('${id}')" ` : '';
+    const ev = id ? `onclick="openFilme(${jsArg(id)})" ` : '';
     return `<span ${ev}style="background:${bg};border:1px solid ${border};color:${color};font-size:11px;padding:3px 8px;border-radius:20px;white-space:nowrap;display:inline-block;cursor:${id?'pointer':'default'}">${text}</span>`;
   }
   function trunc(s,n){ return s.length>n?s.slice(0,n-1)+'…':s; }
@@ -5727,7 +5735,7 @@ function rankAfinidadesHTML(){
       if(data){
         const cid = 'afin_detail_' + (cardIdx++);
         html += `<div style="text-align:center;margin-top:8px">
-          <span onclick="const d=document.getElementById('${cid}');const b=this;if(d.style.display==='none'){d.style.display='block';b.textContent='▲ Ocultar detalhes';}else{d.style.display='none';b.textContent='▼ Ver detalhes';}" style="font-size:11px;color:var(--muted);cursor:pointer;font-weight:600">▼ Ver detalhes</span>
+          <span onclick="const d=document.getElementById(${jsArg(cid)});const b=this;if(d.style.display==='none'){d.style.display='block';b.textContent='▲ Ocultar detalhes';}else{d.style.display='none';b.textContent='▼ Ver detalhes';}" style="font-size:11px;color:var(--muted);cursor:pointer;font-weight:600">▼ Ver detalhes</span>
         </div>`;
 
         // === DETALHES (ocultos por padrão) ===
@@ -5940,7 +5948,7 @@ function rankStatsHTML(){
           ${Object.entries(gs.genre_counts).sort((a,b)=>b[1]-a[1]).slice(0,8).map(([g,n])=>{
             const maxG=Object.values(gs.genre_counts).reduce((a,b)=>Math.max(a,b),1);
             return `<div class="genre-bar-row">
-              <div class="genre-bar-label">${g}</div>
+              <div class="genre-bar-label">${esc(g)}</div>
               <div class="genre-bar-track"><div class="genre-bar-fill" style="width:${Math.round(n/maxG*100)}%"></div></div>
               <div class="genre-bar-n">${n}</div>
             </div>`;
@@ -6124,7 +6132,7 @@ function feedChipsHTML(){
     {key:'adicionado',label:'Adicionados',icon:'🎬'},
     {key:'nao_quer',label:'Recusados',icon:'❌'}
   ];
-  return F.map(f=>`<button class="feed-chip ${feedFilter===f.key?'active':''}" onclick="setFeedFilter('${f.key}')">${f.icon} ${f.label}</button>`).join('');
+  return F.map(f=>`<button class="feed-chip ${feedFilter===f.key?'active':''}" onclick="setFeedFilter(${jsArg(f.key)})">${f.icon} ${f.label}</button>`).join('');
 }
 
 function rankAtividadesHTML(){
@@ -6175,11 +6183,11 @@ function rankAtividadesHTML(){
         <div class="feed-user">${esc(uName)} <span class="feed-action">${actText}</span></div>
         <div class="feed-date">${feedRelDate(ev.ordDate)}${ev.temHora?' '+feedHora(ev.ordDate):''}</div>
       </div>
-      <div class="feed-body" onclick="openFilme('${ev.filmId}')">
+      <div class="feed-body" onclick="openFilme(${jsArg(ev.filmId)})">
         ${ev.poster?`<img class="feed-poster" src="${esc(posterThumb(ev.poster))}" loading="lazy" onerror="this.style.display='none'">`:'<div class="feed-poster"></div>'}
         <div class="feed-film-info">
           <div class="feed-film-name">${actIcon} ${esc(ev.filmNome)}</div>
-          <div class="feed-film-sub">${ev.filmAno||''}${ev.type==='avaliacao'?' · '+feedFmtDate(ev.dateObj):''}</div>
+          <div class="feed-film-sub">${esc(ev.filmAno||'')}${ev.type==='avaliacao'?' · '+feedFmtDate(ev.dateObj):''}</div>
         </div>
         ${ev.nota!==null?`<div class="feed-nota" style="color:${nC(ev.nota)}">${fmt(ev.nota)}</div>`:''}
       </div>
@@ -6829,7 +6837,7 @@ function openProfile(){
   document.getElementById('pmBio').value = p.bio || '';
   const cp = document.getElementById('colorPicker');
   const cur = p.color || aC(CU);
-  cp.innerHTML = PALETTE.map(c => `<div class="color-opt ${c===cur?'selected':''}" style="background:${c}" onclick="document.querySelectorAll('.color-opt').forEach(b=>b.classList.remove('selected'));this.classList.add('selected');updateAvatarPreviewColor('${c}')"></div>`).join('');
+  cp.innerHTML = PALETTE.map(c => `<div class="color-opt ${c===cur?'selected':''}" style="background:${c}" onclick="document.querySelectorAll('.color-opt').forEach(b=>b.classList.remove('selected'));this.classList.add('selected');updateAvatarPreviewColor(${jsArg(c)})"></div>`).join('');
   document.getElementById('profileModal').classList.add('open');
   history.pushState({modal:'profile'},'','');
   setTimeout(updateAvatarPreview, 50);
@@ -6865,9 +6873,9 @@ function onFavFilmeSearchInput(){
     return;
   }
   results.innerHTML = matches.map(f => `
-    <div onclick="selectFavFilme('${f.id}')" style="display:flex;align-items:center;gap:8px;padding:8px 10px;cursor:pointer;border-bottom:1px solid #2a2a2a" onmouseover="this.style.background='#2a2a2a'" onmouseout="this.style.background='transparent'">
+    <div onclick="selectFavFilme(${jsArg(f.id)})" style="display:flex;align-items:center;gap:8px;padding:8px 10px;cursor:pointer;border-bottom:1px solid #2a2a2a" onmouseover="this.style.background='#2a2a2a'" onmouseout="this.style.background='transparent'">
       ${f.poster?`<img src="${esc(posterThumb(f.poster))}" style="width:28px;height:42px;object-fit:cover;border-radius:3px;flex-shrink:0">`:'<div style="width:28px;height:42px;background:#333;border-radius:3px;flex-shrink:0"></div>'}
-      <div style="font-size:13px;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(f.nome)}${f.ano?` (${f.ano})`:''}</div>
+      <div style="font-size:13px;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(f.nome)}${f.ano?` (${esc(f.ano)})`:''}</div>
     </div>`).join('');
   results.style.display = 'block';
 }
@@ -7204,7 +7212,7 @@ function renderAdminDuplicatas(){
     const sorted = [...grupo].sort((a,b) => new Date(a.data_cadastro||0) - new Date(b.data_cadastro||0));
     const original = sorted[0];
     html += `<div style="background:#1a1a1a;border:1px solid #2a2a2a;border-radius:10px;padding:14px;margin-bottom:12px">
-      <div style="font-size:14px;font-weight:800;color:#fff;margin-bottom:6px">🎬 ${esc(original.nome)} (${original.ano||'—'})</div>
+      <div style="font-size:14px;font-weight:800;color:#fff;margin-bottom:6px">🎬 ${esc(original.nome)} (${esc(original.ano||'—')})</div>
       <div style="font-size:11px;color:#46d369;margin-bottom:8px">✅ MANTER — id: ${original.id} · por ${esc(USERS[original.inserido_por]?.nome||original.inserido_por)}</div>`;
     sorted.slice(1).forEach(d => {
       const nAv = Object.keys(d.avaliacoes||{}).length;
@@ -7214,7 +7222,7 @@ function renderAdminDuplicatas(){
           <span style="font-size:10px;color:#888;margin-left:6px">id: ${d.id}</span>
           ${nAv ? `<span style="font-size:10px;color:#f5c518;margin-left:6px">⚠️ ${nAv} avaliação(ões)</span>` : ''}
         </div>
-        <button onclick="deleteFilmeAdmin('${d.id}',this)" style="background:#e50914;color:#fff;border:none;border-radius:6px;padding:5px 12px;cursor:pointer;font-size:12px;font-weight:700">Excluir</button>
+        <button onclick="deleteFilmeAdmin(${jsArg(d.id)},this)" style="background:#e50914;color:#fff;border:none;border-radius:6px;padding:5px 12px;cursor:pointer;font-size:12px;font-weight:700">Excluir</button>
       </div>`;
     });
     html += '</div>';
@@ -7547,9 +7555,9 @@ function renderAdminSemAvaliacao(){
     ${semNinguem.slice(0,30).map(f=>`<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid #1a1a1a">
       <div>
         <div style="font-size:13px;font-weight:600">${esc(f.nome)}</div>
-        <div style="font-size:10px;color:#888">${f.ano} · por ${esc(USERS[f.inserido_por]?.nome||f.inserido_por)}</div>
+        <div style="font-size:10px;color:#888">${esc(f.ano)} · por ${esc(USERS[f.inserido_por]?.nome||f.inserido_por)}</div>
       </div>
-      <button onclick="closeAdmin();openFilme('${f.id}')" style="background:#2a2a2a;color:#fff;border:none;border-radius:6px;padding:4px 10px;cursor:pointer;font-size:11px">Ver</button>
+      <button onclick="closeAdmin();openFilme(${jsArg(f.id)})" style="background:#2a2a2a;color:#fff;border:none;border-radius:6px;padding:4px 10px;cursor:pointer;font-size:11px">Ver</button>
     </div>`).join('')}
     ${semNinguem.length > 30 ? `<div style="color:#888;font-size:12px;text-align:center;padding:8px">...e mais ${semNinguem.length-30}</div>` : ''}
 
@@ -7559,9 +7567,9 @@ function renderAdminSemAvaliacao(){
       return `<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid #1a1a1a">
         <div>
           <div style="font-size:13px;font-weight:600">${esc(f.nome)}</div>
-          <div style="font-size:10px;color:#888">${f.ano} · avaliado por ${av?esc(USERS[av[0]]?.nome||av[0]):'?'} (${av?fmt(av[1].nota):'?'})</div>
+          <div style="font-size:10px;color:#888">${esc(f.ano)} · avaliado por ${av?esc(USERS[av[0]]?.nome||av[0]):'?'} (${av?fmt(av[1].nota):'?'})</div>
         </div>
-        <button onclick="closeAdmin();openFilme('${f.id}')" style="background:#2a2a2a;color:#fff;border:none;border-radius:6px;padding:4px 10px;cursor:pointer;font-size:11px">Ver</button>
+        <button onclick="closeAdmin();openFilme(${jsArg(f.id)})" style="background:#2a2a2a;color:#fff;border:none;border-radius:6px;padding:4px 10px;cursor:pointer;font-size:11px">Ver</button>
       </div>`;
     }).join('')}`;
 
@@ -7642,11 +7650,11 @@ function renderAdminDatas(){
         <div style="flex:1;min-width:0">
           <div style="font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(it.filmNome)}</div>
           <div style="font-size:10px;color:#888;margin-top:1px">
-            ${it.filmAno||''} · avaliado por <strong style="color:#fff">${esc(it.userName)}</strong> · nota <strong style="color:${nC(it.nota)}">${fmt(it.nota)}</strong>
-            ${foiQuemCad ? `<span style="color:var(--yellow)"> · também cadastrou (${dataCad})</span>` : `· cadastrado por ${esc(quemCad)} (${dataCad})`}
+            ${esc(it.filmAno||'')} · avaliado por <strong style="color:#fff">${esc(it.userName)}</strong> · nota <strong style="color:${nC(it.nota)}">${fmt(it.nota)}</strong>
+            ${foiQuemCad ? `<span style="color:var(--yellow)"> · também cadastrou (${esc(dataCad)})</span>` : `· cadastrado por ${esc(quemCad)} (${esc(dataCad)})`}
           </div>
         </div>
-        <button onclick="closeAdmin();openFilme('${it.filmId}')" style="background:#2a2a2a;color:#fff;border:none;border-radius:6px;padding:4px 10px;cursor:pointer;font-size:11px;flex-shrink:0">Ver</button>
+        <button onclick="closeAdmin();openFilme(${jsArg(it.filmId)})" style="background:#2a2a2a;color:#fff;border:none;border-radius:6px;padding:4px 10px;cursor:pointer;font-size:11px;flex-shrink:0">Ver</button>
       </div>`;
     });
     html += '</div>';
@@ -7675,9 +7683,9 @@ function renderAdminDatas(){
       html += `<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 12px;border-bottom:1px solid #1a1a1a;gap:8px">
         <div style="flex:1;min-width:0">
           <div style="font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(f.nome)}</div>
-          <div style="font-size:10px;color:#888;margin-top:1px">${f.ano||''} · inserido por <strong style="color:#fff">${esc(quem)}</strong> · ${f.num_avaliacoes} aval(s)</div>
+          <div style="font-size:10px;color:#888;margin-top:1px">${esc(f.ano||'')} · inserido por <strong style="color:#fff">${esc(quem)}</strong> · ${f.num_avaliacoes} aval(s)</div>
         </div>
-        <button onclick="closeAdmin();openFilme('${f.id}')" style="background:#2a2a2a;color:#fff;border:none;border-radius:6px;padding:4px 10px;cursor:pointer;font-size:11px;flex-shrink:0">Ver</button>
+        <button onclick="closeAdmin();openFilme(${jsArg(f.id)})" style="background:#2a2a2a;color:#fff;border:none;border-radius:6px;padding:4px 10px;cursor:pointer;font-size:11px;flex-shrink:0">Ver</button>
       </div>`;
     });
     html += '</div>';
@@ -8210,7 +8218,8 @@ function closeMobileFilmeModal(){
 }
 
 // ── POSTER LIGHTBOX ──
-function openPosterLightbox(url, title){
+function openPosterLightbox(id){
+  const f = FM[id]; const url = f?.poster, title = f?.nome;
   if(!url) return;
   document.getElementById('posterLightboxImg').src = url;
   document.getElementById('posterLightboxTitle').textContent = title || '';
