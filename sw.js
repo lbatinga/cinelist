@@ -26,10 +26,26 @@ messaging.onBackgroundMessage(payload => {
   });
 });
 
+// Só segue URL que seja do próprio app: mesma origem E dentro do escopo do SW (/cinelist/).
+// O endpoint de push não tem segredo, então data.url pode ser forjado — se não bater, abre a
+// home em vez de levar quem tocou pra fora. Parseia com URL (não startsWith em string), o que
+// barra .evil.com, @evil.com, // e .. de uma vez; só o origin deixaria passar outros repos
+// do mesmo github.io, por isso o pathname também é conferido.
+function urlDoApp(raw) {
+  const scope = new URL(self.registration.scope);
+  try {
+    if (typeof raw === 'string') {
+      const u = new URL(raw, scope);
+      if (u.origin === scope.origin && u.pathname.startsWith(scope.pathname)) return u.href;
+    }
+  } catch (e) {}
+  return scope.href;
+}
+
 // Ao clicar na notificação, abre o app
 self.addEventListener('notificationclick', e => {
   e.notification.close();
-  const url = e.notification.data?.url || 'https://lbatinga.github.io/cinelist/';
+  const url = urlDoApp(e.notification.data?.url);
   e.waitUntil(
     clients.matchAll({ type: 'window', includeUncontrolled: true }).then(list => {
       for (const client of list) {
