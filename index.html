@@ -6332,8 +6332,11 @@ async function onLogin(session){
       new Promise((_, rej) => setTimeout(() => rej(new Error('Timeout - verifique sua conexão')), ms))
     ]);
 
+    // Portão de membro: a linha tem que estar VINCULADA a esta conta (auth_id), não só ter o mesmo
+    // e-mail — senão quem se cadastrasse com o e-mail de uma linha travada (vinculavel=false)
+    // passaria daqui como se fosse aquele membro (as gravações falhariam no RLS, mas a tela abriria).
     const { data: usuario, error } = await fetchWithTimeout(
-      supa.from('usuarios').select('*').eq('email', email).maybeSingle(),
+      supa.from('usuarios').select('*').eq('auth_id', session.user.id).maybeSingle(),
       10000
     );
 
