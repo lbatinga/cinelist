@@ -1401,7 +1401,10 @@ function inactiveSince(s){
   const m = Math.floor(monthsSince(s.ultima_av));
   return m >= 12 ? Math.floor(m/12)+'a '+(m%12)+'m' : m+'m';
 }
-const esc = s=>s?s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'):'';
+// Falsy vira '' (como sempre); o resto passa por String() antes do replace. Sem isso, um NÚMERO
+// (ex.: f.ano do filme recém-inserido) lançava TypeError e derrubava a tela inteira — regressão
+// do e811e5f, que passou esc() em campos que nem sempre são string.
+const esc = s=>s?String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'):'';
 // Argumento string de handler inline (onclick="fn(${jsArg(x)})"): literal JS entre aspas duplas,
 // já escapado pro atributo HTML. esc() sozinho NÃO serve aqui — não trata a aspa simples, então um
 // valor com ' (ex.: "Assassin's Creed") ou um id/ano gravado via API sai da string JS.
@@ -2748,9 +2751,11 @@ async function inserirFilmeDoTmdb(td){
   const {data,error}=await supa.from('filmes').insert([filme]).select().single();
   if(error)throw error;
 
-  // Add to local data — filme já carrega data_ts correto (número, igual ao que foi
-  // inserido) via spread, sem sobrescrever com outro formato.
-  const f={...filme, id:data.id||newId, avaliacoes:{}, media:null, num_avaliacoes:0, is_recent:true};
+  // Add to local data — a partir da linha que o banco DEVOLVEU (data), não do objeto que
+  // montamos pra enviar: todo campo fica no formato do banco (ano é text lá; aqui era número e
+  // esc() lançava) e o objeto tem a mesma forma que loadFilmsFromSupabase() produz (mesmos
+  // enriquecimentos: categorias, avaliacoes, media, num_avaliacoes, is_recent).
+  const f={...data, categorias:data.categorias||[], avaliacoes:{}, media:null, num_avaliacoes:0, is_recent:true};
   FILMES.unshift(f);
   FILMES_MAP[f.id]=f;
   RAW.filmes.unshift(f);
