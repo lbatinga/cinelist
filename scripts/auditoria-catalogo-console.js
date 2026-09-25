@@ -92,7 +92,12 @@
     '5e6c9133-1270-4211-adb1-8857b75d6189': ['duracao_min'],
     'FILME-0377': ['duracao_min'],
     '753fc052': ['duracao_min'],
-    '85784427-6491-41d3-beb2-418245f368da': ['sinopse', 'classificacao']
+    '85784427-6491-41d3-beb2-418245f368da': ['sinopse', 'classificacao'],
+    // Item 41 (2026-09-24): duração conferida em fonte independente (Wikipedia/Variety/Box
+    // Office Mojo, não copiada do TMDB) e corrigida no banco — o TMDB também estava errado
+    // nesses dois, então a diferença contra o TMDB persiste de propósito.
+    'b83f514a-4c58-44b9-8394-4052ef46f786': ['duracao_min'], // O Último Refúgio (40 Acres) — banco 113, TMDB ainda mostra 152 (errado)
+    'FILME-0524': ['duracao_min'] // Karatê Kid Lendas — banco 94, TMDB ainda mostra 90 (valor pré-lançamento que circulou)
   };
 
   // Qualquer LETRA fora do script Latin — acento pt-BR passa (é letra latina), cirílico/CJK/
@@ -176,7 +181,14 @@
     const anoBancoNum = /^\d{4}$/.test(String(f.ano||'')) ? parseInt(f.ano) : null;
     const anoDiffAbs = (anoTmdbNum !== null && anoBancoNum !== null) ? Math.abs(anoTmdbNum - anoBancoNum) : null;
     const durDiffAbs = (d.runtime && f.duracao_min) ? Math.abs(d.runtime - f.duracao_min) : null;
-    if ((durDiffAbs !== null && durDiffAbs > LIMIAR_ID_SUSPEITO_DURACAO) || (anoDiffAbs !== null && anoDiffAbs >= LIMIAR_ID_SUSPEITO_ANO)) {
+    // id_suspeito é empurrado direto no array (não passa pelo push() acima, que checa
+    // ESPERADOS por campo) — bug achado em 2026-09-24: um filme com duracao_min em ESPERADOS
+    // (duração conferida e corrigida à mão, TMDB só desatualizado) continuava virando
+    // id_suspeito todo run, porque o limiar de duração não sabia da exceção. Checado aqui
+    // direto: se a duração já está marcada como esperada pra este filme, ela não conta mais
+    // pro limiar — o de ano continua valendo (nenhuma exceção de ano registrada até hoje).
+    const duracaoEhEsperada = esperado.includes('duracao_min');
+    if ((!duracaoEhEsperada && durDiffAbs !== null && durDiffAbs > LIMIAR_ID_SUSPEITO_DURACAO) || (anoDiffAbs !== null && anoDiffAbs >= LIMIAR_ID_SUSPEITO_ANO)) {
       achados.push({
         id: f.id, nome: f.nome, campo: 'tmdb_id', tipo: 'id_suspeito',
         banco: `ano ${f.ano}, duração ${f.duracao_min}min`,
