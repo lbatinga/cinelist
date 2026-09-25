@@ -3118,9 +3118,18 @@ async function openOndeAssistir(id){
   document.getElementById('ondeBody').innerHTML = '<div style="text-align:center;padding:30px;color:#888"><div style="font-size:28px;margin-bottom:8px">⏳</div>Carregando...</div>';
   openBSheet('onde');
   try {
-    const sr = await fetch('https://api.themoviedb.org/3/search/movie?api_key='+TMDB_KEY+'&language=pt-BR&query='+nome+'&year='+ano);
-    const sd = await sr.json();
-    const mid = sd.results?.[0]?.id;
+    // Com tmdb_id em mãos (1.000/1.035 filmes hoje — mesma exceção de getTmdbInfo/
+    // resolveTmdbId), pula a busca por nome/ano de vez: ela não só é desnecessária, ela pode
+    // casar o filme ERRADO (mesmo nome/ano de outro título — confirmado em 15 dos 1.000
+    // filmes testados, ver CLAUDE.md) mesmo com o catálogo íntegro, e quebraria de propósito
+    // pra qualquer filme renomeado (título gravado diferente do que o TMDB indexa, caso do
+    // filme russo sem tradução). Sem tmdb_id, cai no fallback por nome/ano de sempre.
+    let mid = f.tmdb_id || null;
+    if(!mid){
+      const sr = await fetch('https://api.themoviedb.org/3/search/movie?api_key='+TMDB_KEY+'&language=pt-BR&query='+nome+'&year='+ano);
+      const sd = await sr.json();
+      mid = sd.results?.[0]?.id;
+    }
     if(!mid) throw new Error('não encontrado');
     const wr = await fetch('https://api.themoviedb.org/3/movie/'+mid+'/watch/providers?api_key='+TMDB_KEY);
     const wd = await wr.json();
