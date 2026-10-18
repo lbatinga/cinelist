@@ -24,6 +24,19 @@
 <meta property="og:description" content="O catálogo de filmes da tropa">
 <meta property="og:image" content="https://lbatinga.github.io/cinelist/icon-512.png">
 <meta property="og:url" content="https://lbatinga.github.io/cinelist/">
+<!-- Sentry: só captura de erros (sem tracing, sem Session Replay, sem dados pessoais).
+     Primeiro script da página pra pegar erro de qualquer coisa que carregue depois. Se um
+     bloqueador de anúncio barrar o CDN, window.Sentry fica indefinido e o app segue normal. -->
+<script src="https://browser.sentry-cdn.com/11.8.0/bundle.min.js" crossorigin="anonymous"></script>
+<script>
+if (window.Sentry) {
+  Sentry.init({
+    dsn: "https://aa398c3644824ad116efae11ee949d43@o4512279478534144.ingest.us.sentry.io/4512279680122880",
+    enabled: location.hostname === 'lbatinga.github.io',
+    sendDefaultPii: false,
+  });
+}
+</script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-messaging-compat.js"></script>
@@ -6375,6 +6388,7 @@ async function onLogin(session){
 
     supaProfile = usuario;
     CU = usuario.legacy_id;
+    if(window.Sentry && CU) Sentry.setUser({ id: CU });
     if(!CU) {
       showAuthError('Perfil não configurado para ' + email + '. Fale com o administrador.');
       return;
