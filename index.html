@@ -6618,6 +6618,21 @@ function urlBase64ToUint8Array(base64String) {
 }
 
 // ===== NOTIFICAÇÕES =====
+// Envio de push pela Edge Function `enviar-push` (Supabase). Exige sessão logada de
+// membro — a função recusa qualquer outra chamada. Devolve {sent, total, removidos}
+// ou lança erro com a mensagem da função. Migração em andamento: os dois botões do
+// admin já usam esta função; filme novo e aniversário ainda usam APPS_SCRIPT_URL.
+async function enviarPush({ titulo, body, url }) {
+  const { data, error } = await supa.functions.invoke('enviar-push', { body: { titulo, body, url } });
+  if (error) {
+    let det = error.message;
+    try { const j = await error.context.json(); if (j && j.error) det = j.error; } catch(_) {}
+    throw new Error(det);
+  }
+  if (!data || !data.ok) throw new Error((data && data.error) || 'resposta inesperada');
+  return data;
+}
+
 const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbynMyP2e5nu06F5Gt5LX4MX_-8k8Yjw0K4TQuhRCwYKvNcVnWpS2VHQ9bnOVT9E4Pbv/exec';
 
 // Disparo automático ao adicionar filme (fire-and-forget)
@@ -7809,12 +7824,8 @@ async function enviarNotificacaoManual(){
 
   msg.style.color='#888'; msg.textContent='⏳ Enviando...';
   try {
-    const params = new URLSearchParams({ titulo, body, manual: '1' });
-    await fetch(APPS_SCRIPT_URL + '?' + params.toString(), {
-      method: 'GET',
-      mode: 'no-cors'
-    });
-    msg.style.color='#46d369'; msg.textContent='✅ Chamada enviada ao Apps Script (verifique se a notificação chegou no celular).';
+    const r = await enviarPush({ titulo, body });
+    msg.style.color='#46d369'; msg.textContent=`✅ Enviada para ${r.sent} de ${r.total} aparelho(s).`;
   } catch(e) {
     msg.style.color='#e05555'; msg.textContent='❌ Erro na chamada: ' + e.message;
   }
@@ -7855,16 +7866,15 @@ async function diagnosticoNotificacoes(){
   }
 
   // 5. Teste de chamada ao Apps Script
-  add('⏳', 'Testando chamada ao Apps Script...');
+  add('⏳', 'Testando envio pela função enviar-push...');
   try {
-    const params = new URLSearchParams({ titulo: 'Teste CineList', body: 'Diagnóstico de notificações', test: '1' });
-    await fetch(APPS_SCRIPT_URL + '?' + params.toString(), { method: 'GET', mode: 'no-cors' });
-    add('✅', 'Apps Script: chamada realizada (resposta opaca — verificar se notificação chegou)');
+    const r = await enviarPush({ titulo: 'Teste CineList', body: 'Diagnóstico de notificações' });
+    add('✅', `enviar-push: enviada para ${r.sent} de ${r.total} aparelho(s)` + (r.removidos ? ` (${r.removidos} token(s) morto(s) removido(s))` : ''));
   } catch(e) {
-    add('❌', 'Apps Script: erro na chamada — ' + e.message);
+    add('❌', 'enviar-push: ' + e.message);
   }
 
-  add('ℹ️', 'Se tudo está ✅ mas a notif não chega, o problema está no Apps Script (verifique o código publicado).');
+  add('ℹ️', 'Se tudo está ✅ mas a notif não chega, veja os logs da função enviar-push no Supabase.');
 }
 
 // ── ABA: BACKUP ──
