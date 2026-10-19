@@ -6620,8 +6620,8 @@ function urlBase64ToUint8Array(base64String) {
 // ===== NOTIFICAÇÕES =====
 // Envio de push pela Edge Function `enviar-push` (Supabase). Exige sessão logada de
 // membro — a função recusa qualquer outra chamada. Devolve {sent, total, removidos}
-// ou lança erro com a mensagem da função. Migração em andamento: os dois botões do
-// admin já usam esta função; filme novo e aniversário ainda usam APPS_SCRIPT_URL.
+// ou lança erro com a mensagem da função. Substituiu o Apps Script "API Filmes" em
+// 2026-10-19 — todo push do app (filme novo, aniversário, manual, diagnóstico) passa aqui.
 async function enviarPush({ titulo, body, url }) {
   const { data, error } = await supa.functions.invoke('enviar-push', { body: { titulo, body, url } });
   if (error) {
@@ -6633,8 +6633,6 @@ async function enviarPush({ titulo, body, url }) {
   return data;
 }
 
-const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbynMyP2e5nu06F5Gt5LX4MX_-8k8Yjw0K4TQuhRCwYKvNcVnWpS2VHQ9bnOVT9E4Pbv/exec';
-
 // Disparo automático ao adicionar filme (fire-and-forget)
 function enviarNotifFilme(nomeFilme, quemAdicionou, ano, filmeId) {
   try {
@@ -6643,14 +6641,8 @@ function enviarNotifFilme(nomeFilme, quemAdicionou, ano, filmeId) {
     // ser 1994 ou 2019, e a tropa tem os dois.
     const anoTxt = ano ? ` (${ano})` : '';
     const body = `${quemAdicionou} adicionou "${nomeFilme}"${anoTxt} ao catálogo`;
-    const params = new URLSearchParams({ titulo, body, auto: '1' });
-    if (filmeId) {
-      params.set('url', location.origin + location.pathname + '#/filme/' + filmeId);
-    }
-    fetch(APPS_SCRIPT_URL + '?' + params.toString(), {
-      method: 'GET',
-      mode: 'no-cors'
-    }).catch(e => console.warn('Notif auto erro:', e));
+    const url = filmeId ? location.origin + location.pathname + '#/filme/' + filmeId : undefined;
+    enviarPush({ titulo, body, url }).catch(e => console.warn('Notif auto erro:', e));
   } catch(e) {
     console.warn('Erro ao disparar notificação:', e);
   }
@@ -7195,9 +7187,8 @@ async function _enviarPushAniversario(nomes){
   try {
     const titulo = '🎂 Aniversário hoje!';
     const body = `Hoje é aniversário de ${nomes}! Manda mensagem 🎉`;
-    const params = new URLSearchParams({ titulo, body });
-    await fetch(APPS_SCRIPT_URL + '?' + params.toString(), { method: 'GET', mode: 'no-cors' });
-  } catch(e) {}
+    await enviarPush({ titulo, body });
+  } catch(e) { console.warn('Notif aniversário erro:', e); }
 }
 
 
@@ -7865,7 +7856,7 @@ async function diagnosticoNotificacoes(){
     add('❌', 'Erro ao ler tokens: ' + e.message);
   }
 
-  // 5. Teste de chamada ao Apps Script
+  // 5. Teste de envio pela função enviar-push
   add('⏳', 'Testando envio pela função enviar-push...');
   try {
     const r = await enviarPush({ titulo: 'Teste CineList', body: 'Diagnóstico de notificações' });
