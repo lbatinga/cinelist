@@ -6622,8 +6622,8 @@ function urlBase64ToUint8Array(base64String) {
 // membro — a função recusa qualquer outra chamada. Devolve {sent, total, removidos}
 // ou lança erro com a mensagem da função. Substituiu o Apps Script "API Filmes" em
 // 2026-10-19 — todo push do app (filme novo, aniversário, manual, diagnóstico) passa aqui.
-async function enviarPush({ titulo, body, url }) {
-  const { data, error } = await supa.functions.invoke('enviar-push', { body: { titulo, body, url } });
+async function enviarPush({ titulo, body, url, excluirRemetente }) {
+  const { data, error } = await supa.functions.invoke('enviar-push', { body: { titulo, body, url, excluirRemetente } });
   if (error) {
     let det = error.message;
     try { const j = await error.context.json(); if (j && j.error) det = j.error; } catch(_) {}
@@ -6642,7 +6642,8 @@ function enviarNotifFilme(nomeFilme, quemAdicionou, ano, filmeId) {
     const anoTxt = ano ? ` (${ano})` : '';
     const body = `${quemAdicionou} adicionou "${nomeFilme}"${anoTxt} ao catálogo`;
     const url = filmeId ? location.origin + location.pathname + '#/filme/' + filmeId : undefined;
-    enviarPush({ titulo, body, url }).catch(e => console.warn('Notif auto erro:', e));
+    // excluirRemetente: quem adicionou não recebe a notificação do próprio filme.
+    enviarPush({ titulo, body, url, excluirRemetente: true }).catch(e => console.warn('Notif auto erro:', e));
   } catch(e) {
     console.warn('Erro ao disparar notificação:', e);
   }
@@ -6742,8 +6743,22 @@ if (window.fbMessaging) {
     console.log('Notificação foreground:', payload);
     const title = payload.data?.title || '🎬 CineList';
     const body = payload.data?.body || '';
-    // Mostra apenas toast dentro do app (a notificação do sistema só aparece com app fechado, via Service Worker)
-    if (window.showToast) showToast('🔔 ' + title + (body ? ' — ' + body : ''));
+    const url = payload.data?.url || '';
+    // Com o app aberto o Firebase entrega aqui, não no sw.js — mostra a notificação na
+    // barra do sistema do mesmo jeito que o onBackgroundMessage do sw.js (mesmo ícone,
+    // badge e vibração; o toque cai no mesmo notificationclick do sw.js, que abre data.url).
+    // O toast que sumia sozinho fica só de reserva, se o sistema não deixar mostrar.
+    const toast = () => { if (window.showToast) showToast('🔔 ' + title + (body ? ' — ' + body : '')); };
+    if (!('serviceWorker' in navigator) || typeof Notification === 'undefined' || Notification.permission !== 'granted') { toast(); return; }
+    navigator.serviceWorker.ready
+      .then(reg => reg.showNotification(title, {
+        body,
+        icon: './icon-192.png',
+        badge: './icon-192.png',
+        data: { url: url || 'https://lbatinga.github.io/cinelist/' },
+        vibrate: [200, 100, 200]
+      }))
+      .catch(e => { console.warn('showNotification falhou:', e); toast(); });
   });
 }
 
